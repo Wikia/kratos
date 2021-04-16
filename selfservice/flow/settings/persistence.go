@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/ory/x/assertx"
+
+	"github.com/ory/kratos/ui/node"
+
 	"github.com/bxcodec/faker/v3"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
@@ -12,7 +16,7 @@ import (
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
-	"github.com/ory/kratos/selfservice/form"
+
 	"github.com/ory/kratos/x"
 )
 
@@ -21,7 +25,6 @@ type (
 		CreateSettingsFlow(context.Context, *Flow) error
 		GetSettingsFlow(ctx context.Context, id uuid.UUID) (*Flow, error)
 		UpdateSettingsFlow(context.Context, *Flow) error
-		UpdateSettingsFlowMethod(context.Context, uuid.UUID, string, *FlowMethod) error
 	}
 	FlowPersistenceProvider interface {
 		SettingsFlowPersister() FlowPersister
@@ -75,10 +78,10 @@ func TestRequestPersister(ctx context.Context, conf *config.Config, p interface 
 			actual, err := p.GetSettingsFlow(ctx, expected.ID)
 			require.NoError(t, err)
 
-			factual, _ := json.Marshal(actual.Methods[StrategyProfile].Config)
-			fexpected, _ := json.Marshal(expected.Methods[StrategyProfile].Config)
+			factual, _ := json.Marshal(actual.UI)
+			fexpected, _ := json.Marshal(expected.UI)
 
-			require.NotEmpty(t, actual.Methods[StrategyProfile].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
+			require.NotEmpty(t, actual.UI.Action)
 			assert.EqualValues(t, expected.ID, actual.ID)
 			assert.JSONEq(t, string(fexpected), string(factual))
 			x.AssertEqualTime(t, expected.IssuedAt, actual.IssuedAt)
@@ -102,61 +105,45 @@ func TestRequestPersister(ctx context.Context, conf *config.Config, p interface 
 
 		t.Run("case=should create and update a settings request", func(t *testing.T) {
 			expected := newFlow(t)
-			expected.Methods["oidc"] = &FlowMethod{
-				Method: "oidc", Config: &FlowMethodConfig{FlowMethodConfigurator: &form.HTMLForm{Fields: []form.Field{{
-					Name: "zab", Type: "bar", Pattern: "baz"}}}}}
-			expected.Methods["password"] = &FlowMethod{
-				Method: "password", Config: &FlowMethodConfig{FlowMethodConfigurator: &form.HTMLForm{Fields: []form.Field{{
-					Name: "foo", Type: "bar", Pattern: "baz"}}}}}
+			expected.UI.Nodes = node.Nodes{}
+			expected.UI.Nodes.Append(node.NewInputField("zab", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+				a.Pattern = "baz"
+			})))
+
+			expected.UI.Nodes.Append(node.NewInputField("foo", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+				a.Pattern = "baz"
+			})))
+
 			err := p.CreateSettingsFlow(ctx, expected)
 			require.NoError(t, err)
 
-			expected.Methods[StrategyProfile].Config.FlowMethodConfigurator.(*form.HTMLForm).Action = "/new-action"
-			expected.Methods["password"].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields = []form.Field{{
-				Name: "zab", Type: "zab", Pattern: "zab"}}
+			expected.UI.Action = "/new-action"
+			expected.UI.Nodes.Append(
+				node.NewInputField("zab", nil, node.DefaultGroup, "zab", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "zab"
+				})))
+
 			expected.RequestURL = "/new-request-url"
 			require.NoError(t, p.UpdateSettingsFlow(ctx, expected))
 
 			actual, err := p.GetSettingsFlow(ctx, expected.ID)
 			require.NoError(t, err)
 
-			assert.Equal(t, "/new-action", actual.Methods[StrategyProfile].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
+			assert.Equal(t, "/new-action", actual.UI.Action)
 			assert.Equal(t, "/new-request-url", actual.RequestURL)
-			assert.EqualValues(t, []form.Field{{Name: "zab", Type: "zab", Pattern: "zab"}}, actual.
-				Methods["password"].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields)
-			assert.EqualValues(t, []form.Field{{Name: "zab", Type: "bar", Pattern: "baz"}}, actual.
-				Methods["oidc"].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields)
-		})
-
-		t.Run("case=should update a settings flow method", func(t *testing.T) {
-			expected := newFlow(t)
-			delete(expected.Methods, identity.CredentialsTypeOIDC.String())
-			delete(expected.Methods, StrategyProfile)
-
-			err := p.CreateSettingsFlow(ctx, expected)
-			require.NoError(t, err)
-
-			actual, err := p.GetSettingsFlow(ctx, expected.ID)
-			require.NoError(t, err)
-			assert.Len(t, actual.Methods, 1)
-
-			require.NoError(t, p.UpdateSettingsFlowMethod(ctx, expected.ID, identity.CredentialsTypeOIDC.String(), &FlowMethod{
-				Method: identity.CredentialsTypeOIDC.String(),
-				Config: &FlowMethodConfig{FlowMethodConfigurator: form.NewHTMLForm(string(identity.CredentialsTypeOIDC))},
-			}))
-
-			require.NoError(t, p.UpdateSettingsFlowMethod(ctx, expected.ID, identity.CredentialsTypePassword.String(), &FlowMethod{
-				Method: identity.CredentialsTypePassword.String(),
-				Config: &FlowMethodConfig{FlowMethodConfigurator: form.NewHTMLForm(string(identity.CredentialsTypePassword))},
-			}))
-
-			actual, err = p.GetSettingsFlow(ctx, expected.ID)
-			require.NoError(t, err)
-			require.Len(t, actual.Methods, 2)
-			assert.EqualValues(t, identity.CredentialsTypePassword, actual.Active)
-
-			assert.Equal(t, string(identity.CredentialsTypePassword), actual.Methods[identity.CredentialsTypePassword.String()].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
-			assert.Equal(t, string(identity.CredentialsTypeOIDC), actual.Methods[identity.CredentialsTypeOIDC.String()].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
+			assertx.EqualAsJSON(t, node.Nodes{
+				// v0.5: {Name: "zab", Type: "zab", Pattern: "zab"},
+				node.NewInputField("zab", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "baz"
+				})),
+				node.NewInputField("foo", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "baz"
+				})),
+				// v0.5: {Name: "zab", Type: "bar", Pattern: "baz"},
+				node.NewInputField("zab", nil, node.DefaultGroup, "zab", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "zab"
+				})),
+			}, actual.UI.Nodes)
 		})
 	}
 }

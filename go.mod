@@ -11,9 +11,12 @@ replace github.com/ory/kratos-client-go => ./internal/httpclient
 // Use the internal name for tablename generation
 replace github.com/ory/kratos/corp => ./corp
 
+replace github.com/ory/cli => github.com/ory/cli v0.0.45-0.20210312151016-84cf0bd14396
+
 replace go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.4.6
 
 require (
+	github.com/HdrHistogram/hdrhistogram-go v1.1.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.0.0
 	github.com/arbovm/levenshtein v0.0.0-20160628152529-48b4e1c0c4d0
 	github.com/bwmarrin/discordgo v0.23.0
@@ -31,7 +34,6 @@ require (
 	github.com/gobuffalo/fizz v1.13.1-0.20201104174146-3416f0e6618f
 	github.com/gobuffalo/httptest v1.0.2
 	github.com/gobuffalo/pop/v5 v5.3.3
-	github.com/gobuffalo/uuid v2.0.5+incompatible
 	github.com/gofrs/uuid v3.2.0+incompatible
 	github.com/golang/gddo v0.0.0-20190904175337-72a348e765d2
 	github.com/golang/mock v1.5.0
@@ -50,10 +52,11 @@ require (
 	github.com/knadh/koanf v0.14.1-0.20201201075439-e0853799f9ec
 	github.com/luna-duclos/instrumentedsql v1.1.3
 	github.com/luna-duclos/instrumentedsql/opentracing v0.0.0-20201103091713-40d03108b6f4
-	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mattn/goveralls v0.0.7
 	github.com/mikefarah/yq v1.15.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
+	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe
+	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7 // indirect
 	github.com/ory/analytics-go/v4 v4.0.0
 	github.com/ory/cli v0.0.41
 	github.com/ory/dockertest/v3 v3.6.3
@@ -62,32 +65,30 @@ require (
 	github.com/ory/graceful v0.1.1
 	github.com/ory/herodot v0.9.5
 	github.com/ory/jsonschema/v3 v3.0.3
-	github.com/ory/kratos-client-go v0.5.4-alpha.1
+	github.com/ory/kratos-client-go v0.5.4-alpha.1.0.20210308170950-06c2c1c071a8
 	github.com/ory/kratos/corp v0.0.0-00010101000000-000000000000
 	github.com/ory/mail/v3 v3.0.0
 	github.com/ory/nosurf v1.2.4
-	github.com/ory/x v0.0.210
-	github.com/pelletier/go-toml v1.9.0 // indirect
+	github.com/ory/x v0.0.215
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pkg/errors v0.9.1
+	github.com/pkg/profile v1.5.0 // indirect
 	github.com/prometheus/client_golang v1.4.0
 	github.com/prometheus/common v0.9.1
 	github.com/rs/cors v1.6.0
 	github.com/shurcooL/go v0.0.0-20180423040247-9e1955d9fb6e
 	github.com/sirupsen/logrus v1.8.1
 	github.com/slack-go/slack v0.7.4
-	github.com/spf13/afero v1.6.0 // indirect
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/pflag v1.0.5
 	github.com/sqs/goreturns v0.0.0-20181028201513-538ac6014518
 	github.com/stretchr/testify v1.7.0
 	github.com/tidwall/gjson v1.7.1
 	github.com/tidwall/sjson v1.1.5
+	github.com/uber/jaeger-lib v2.4.0+incompatible // indirect
 	github.com/urfave/negroni v1.0.0
 	golang.org/x/crypto v0.0.0-20201124201722-c8d3bf9c5392
-	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
-	golang.org/x/sys v0.0.0-20210403161142-5e06dd20ab57 // indirect
-	golang.org/x/text v0.3.6 // indirect
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/tools v0.1.0
 )

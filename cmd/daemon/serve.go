@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ory/kratos/selfservice/flow/recovery"
+
 	"github.com/ory/x/reqlog"
 
 	"github.com/ory/kratos/cmd/courier"
@@ -35,8 +37,6 @@ import (
 	"github.com/ory/kratos/selfservice/flow/verification"
 	"github.com/ory/kratos/selfservice/strategy/link"
 	"github.com/ory/kratos/selfservice/strategy/oidc"
-	"github.com/ory/kratos/selfservice/strategy/password"
-	"github.com/ory/kratos/selfservice/strategy/profile"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/x"
 )
@@ -167,21 +167,19 @@ func sqa(cmd *cobra.Command, d driver.Registry) *metricsx.Service {
 				healthx.ReadyCheckPath,
 				healthx.VersionPath,
 
-				password.RouteRegistration,
-				password.RouteLogin,
-				password.RouteSettings,
-
 				oidc.RouteBase,
 
 				login.RouteInitBrowserFlow,
 				login.RouteInitAPIFlow,
 				login.RouteGetFlow,
+				login.RouteSubmitFlow,
 
 				logout.RouteBrowser,
 
 				registration.RouteInitBrowserFlow,
 				registration.RouteInitAPIFlow,
 				registration.RouteGetFlow,
+				registration.RouteSubmitFlow,
 
 				session.RouteWhoami,
 				identity.RouteBase,
@@ -189,16 +187,19 @@ func sqa(cmd *cobra.Command, d driver.Registry) *metricsx.Service {
 				settings.RouteInitBrowserFlow,
 				settings.RouteInitAPIFlow,
 				settings.RouteGetFlow,
+				settings.RouteSubmitFlow,
 
 				verification.RouteInitAPIFlow,
 				verification.RouteInitBrowserFlow,
 				verification.RouteGetFlow,
+				verification.RouteSubmitFlow,
 
-				profile.RouteSettings,
+				recovery.RouteInitAPIFlow,
+				recovery.RouteInitBrowserFlow,
+				recovery.RouteGetFlow,
+				recovery.RouteSubmitFlow,
 
 				link.RouteAdminCreateRecoveryLink,
-				link.RouteRecovery,
-				link.RouteVerification,
 
 				errorx.RouteGet,
 				prometheus.MetricsPrometheusPath,

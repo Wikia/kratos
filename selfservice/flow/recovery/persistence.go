@@ -2,8 +2,10 @@ package recovery
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
+
+	"github.com/ory/kratos/ui/node"
+	"github.com/ory/x/assertx"
 
 	"github.com/bxcodec/faker/v3"
 	"github.com/gofrs/uuid"
@@ -12,8 +14,7 @@ import (
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
-	"github.com/ory/kratos/selfservice/form"
-	"github.com/ory/kratos/text"
+
 	"github.com/ory/kratos/x"
 )
 
@@ -71,47 +72,54 @@ func TestFlowPersister(ctx context.Context, conf *config.Config, p interface {
 			actual, err := p.GetRecoveryFlow(ctx, expected.ID)
 			require.NoError(t, err)
 
-			fexpected, _ := json.Marshal(expected.Methods[StrategyRecoveryLinkName].Config)
-			factual, _ := json.Marshal(actual.Methods[StrategyRecoveryLinkName].Config)
-
-			require.NotEmpty(t, actual.Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
 			assert.EqualValues(t, expected.ID, actual.ID)
-			assert.JSONEq(t, string(fexpected), string(factual))
 			x.AssertEqualTime(t, expected.IssuedAt, actual.IssuedAt)
 			x.AssertEqualTime(t, expected.ExpiresAt, actual.ExpiresAt)
 			assert.EqualValues(t, expected.RequestURL, actual.RequestURL)
+			assertx.EqualAsJSON(t, expected.UI, actual.UI, "expected:\t%s\nactual:\t%s", expected.UI, actual.UI)
 		})
 
 		t.Run("case=should create and update a recovery request", func(t *testing.T) {
 			expected := newFlow(t)
-			expected.Methods[StrategyRecoveryLinkName] = &FlowMethod{
-				Method: StrategyRecoveryLinkName, Config: &FlowMethodConfig{FlowMethodConfigurator: &form.HTMLForm{Fields: []form.Field{{
-					Name: "zab", Type: "bar", Pattern: "baz"}}}}}
-			expected.Methods["password"] = &FlowMethod{
-				Method: "password", Config: &FlowMethodConfig{FlowMethodConfigurator: &form.HTMLForm{Fields: []form.Field{{
-					Name: "foo", Type: "bar", Pattern: "baz"}}}}}
+			expected.UI.Nodes = node.Nodes{}
+			expected.UI.Nodes.Append(node.NewInputField("zab", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+				a.Pattern = "baz"
+			})))
+
+			expected.UI.Nodes.Append(node.NewInputField("foo", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+				a.Pattern = "baz"
+			})))
+
 			err := p.CreateRecoveryFlow(ctx, expected)
 			require.NoError(t, err)
 
-			expected.Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Action = "/new-action"
-			expected.Methods["password"].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields = []form.Field{{
-				Name: "zab", Type: "zab", Pattern: "zab"}}
+			expected.UI.Action = "/new-action"
+			expected.UI.Nodes.Append(
+				node.NewInputField("zab", nil, node.DefaultGroup, "zab", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "zab"
+				})))
+
 			expected.RequestURL = "/new-request-url"
-			expected.Active = StrategyRecoveryLinkName
-			expected.Messages.Add(text.NewRecoveryEmailSent())
 			require.NoError(t, p.UpdateRecoveryFlow(ctx, expected))
 
 			actual, err := p.GetRecoveryFlow(ctx, expected.ID)
 			require.NoError(t, err)
 
-			assert.Equal(t, "/new-action", actual.Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Action)
+			assert.Equal(t, "/new-action", actual.UI.Action)
 			assert.Equal(t, "/new-request-url", actual.RequestURL)
-			assert.Equal(t, StrategyRecoveryLinkName, actual.Active.String())
-			assert.Equal(t, expected.Messages, actual.Messages)
-			assert.EqualValues(t, []form.Field{{Name: "zab", Type: "zab", Pattern: "zab"}}, actual.
-				Methods["password"].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields)
-			assert.EqualValues(t, []form.Field{{Name: "zab", Type: "bar", Pattern: "baz"}}, actual.
-				Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Fields)
+			assertx.EqualAsJSON(t, node.Nodes{
+				// v0.5: {Name: "zab", Type: "zab", Pattern: "zab"},
+				node.NewInputField("zab", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "baz"
+				})),
+				node.NewInputField("foo", nil, node.DefaultGroup, "bar", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "baz"
+				})),
+				// v0.5: {Name: "zab", Type: "bar", Pattern: "baz"},
+				node.NewInputField("zab", nil, node.DefaultGroup, "zab", node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Pattern = "zab"
+				})),
+			}, actual.UI.Nodes)
 		})
 
 		t.Run("case=should not cause data loss when updating a request without changes", func(t *testing.T) {
@@ -121,17 +129,12 @@ func TestFlowPersister(ctx context.Context, conf *config.Config, p interface {
 
 			actual, err := p.GetRecoveryFlow(ctx, expected.ID)
 			require.NoError(t, err)
-			assert.Len(t, actual.Methods, 1)
 
 			require.NoError(t, p.UpdateRecoveryFlow(ctx, actual))
 
 			actual, err = p.GetRecoveryFlow(ctx, expected.ID)
 			require.NoError(t, err)
-			require.Len(t, actual.Methods, 1)
-
-			js, _ := json.Marshal(actual.Methods)
-			assert.Equal(t, expected.Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Action,
-				actual.Methods[StrategyRecoveryLinkName].Config.FlowMethodConfigurator.(*form.HTMLForm).Action, "%s", js)
+			assertx.EqualAsJSON(t, expected.UI, actual.UI)
 		})
 	}
 }

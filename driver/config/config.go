@@ -137,7 +137,7 @@ type (
 	}
 	BcryptAES struct {
 		Cost uint32 `json:"cost"`
-		Key string `json:"key"`
+		Key  string `json:"key"`
 	}
 	SelfServiceHook struct {
 		Name   string          `json:"hook"`
@@ -313,7 +313,7 @@ func (p *Config) HasherBcryptAES() *BcryptAES {
 
 	return &BcryptAES{
 		Cost: cost,
-		Key: p.p.String(ViperKeyHasherBcryptAESKey),
+		Key:  p.p.String(ViperKeyHasherBcryptAESKey),
 	}
 }
 

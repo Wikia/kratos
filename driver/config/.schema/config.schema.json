@@ -1798,7 +1798,8 @@
               "algorithm": {
                 "const": "bcryptaes"
               }
-            }
+            },
+            "required": [ "algorithm" ]
           }
         }
       },

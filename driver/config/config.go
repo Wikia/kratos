@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/inhies/go-bytesize"
 
 	"github.com/ory/x/dbal"
 
@@ -22,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/inhies/go-bytesize"
 	kjson "github.com/knadh/koanf/parsers/json"
 	"github.com/pkg/errors"
 	"github.com/rs/cors"
@@ -35,90 +35,94 @@ import (
 )
 
 const (
-	DefaultIdentityTraitsSchemaID                                   = "default"
-	DefaultBrowserReturnURL                                         = "default_browser_return_url"
-	DefaultSQLiteMemoryDSN                                          = dbal.SQLiteInMemory
-	DefaultPasswordHashingAlgorithm                                 = "argon2"
-	UnknownVersion                                                  = "unknown version"
-	ViperKeyDSN                                                     = "dsn"
-	ViperKeyCourierSMTPURL                                          = "courier.smtp.connection_uri"
-	ViperKeyCourierTemplatesPath                                    = "courier.template_override_path"
-	ViperKeyCourierSMTPFrom                                         = "courier.smtp.from_address"
-	ViperKeyCourierSMTPFromName                                     = "courier.smtp.from_name"
-	ViperKeySecretsDefault                                          = "secrets.default"
-	ViperKeySecretsCookie                                           = "secrets.cookie"
-	ViperKeyPublicBaseURL                                           = "serve.public.base_url"
-	ViperKeyPublicDomainAliases                                     = "serve.public.domain_aliases"
-	ViperKeyPublicPort                                              = "serve.public.port"
-	ViperKeyPublicHost                                              = "serve.public.host"
-	ViperKeyPublicSocketOwner                                       = "serve.public.socket.owner"
-	ViperKeyPublicSocketGroup                                       = "serve.public.socket.group"
-	ViperKeyPublicSocketMode                                        = "serve.public.socket.mode"
-	ViperKeyAdminBaseURL                                            = "serve.admin.base_url"
-	ViperKeyAdminPort                                               = "serve.admin.port"
-	ViperKeyAdminHost                                               = "serve.admin.host"
-	ViperKeyAdminSocketOwner                                        = "serve.admin.socket.owner"
-	ViperKeyAdminSocketGroup                                        = "serve.admin.socket.group"
-	ViperKeyAdminSocketMode                                         = "serve.admin.socket.mode"
-	ViperKeySessionLifespan                                         = "session.lifespan"
-	ViperKeySessionSameSite                                         = "session.cookie.same_site"
-	ViperKeySessionDomain                                           = "session.cookie.domain"
-	ViperKeySessionName                                             = "session.cookie.name"
-	ViperKeySessionPath                                             = "session.cookie.path"
-	ViperKeySessionPersistentCookie                                 = "session.cookie.persistent"
-	ViperKeySelfServiceStrategyConfig                               = "selfservice.methods"
-	ViperKeySelfServiceBrowserDefaultReturnTo                       = "selfservice." + DefaultBrowserReturnURL
-	ViperKeyURLsWhitelistedReturnToDomains                          = "selfservice.whitelisted_return_urls"
-	ViperKeySelfServiceRegistrationUI                               = "selfservice.flows.registration.ui_url"
-	ViperKeySelfServiceRegistrationRequestLifespan                  = "selfservice.flows.registration.lifespan"
-	ViperKeySelfServiceRegistrationAfter                            = "selfservice.flows.registration.after"
-	ViperKeySelfServiceRegistrationBeforeHooks                      = "selfservice.flows.registration.before.hooks"
-	ViperKeySelfServiceLoginUI                                      = "selfservice.flows.login.ui_url"
-	ViperKeySelfServiceLoginRequestLifespan                         = "selfservice.flows.login.lifespan"
-	ViperKeySelfServiceLoginAfter                                   = "selfservice.flows.login.after"
-	ViperKeySelfServiceLoginBeforeHooks                             = "selfservice.flows.login.before.hooks"
-	ViperKeySelfServiceErrorUI                                      = "selfservice.flows.error.ui_url"
-	ViperKeySelfServiceLogoutBrowserDefaultReturnTo                 = "selfservice.flows.logout.after." + DefaultBrowserReturnURL
-	ViperKeySelfServiceSettingsURL                                  = "selfservice.flows.settings.ui_url"
-	ViperKeySelfServiceSettingsAfter                                = "selfservice.flows.settings.after"
-	ViperKeySelfServiceSettingsRequestLifespan                      = "selfservice.flows.settings.lifespan"
-	ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter        = "selfservice.flows.settings.privileged_session_max_age"
-	ViperKeySelfServiceRecoveryAfter                                = "selfservice.flows.recovery.after"
-	ViperKeySelfServiceRecoveryEnabled                              = "selfservice.flows.recovery.enabled"
-	ViperKeySelfServiceRecoveryUI                                   = "selfservice.flows.recovery.ui_url"
-	ViperKeySelfServiceRecoveryRequestLifespan                      = "selfservice.flows.recovery.lifespan"
-	ViperKeySelfServiceRecoveryBrowserDefaultReturnTo               = "selfservice.flows.recovery.after." + DefaultBrowserReturnURL
-	ViperKeySelfServiceVerificationEnabled                          = "selfservice.flows.verification.enabled"
-	ViperKeySelfServiceVerificationUI                               = "selfservice.flows.verification.ui_url"
-	ViperKeySelfServiceVerificationRequestLifespan                  = "selfservice.flows.verification.lifespan"
-	ViperKeySelfServiceVerificationBrowserDefaultReturnTo           = "selfservice.flows.verification.after." + DefaultBrowserReturnURL
-	ViperKeySelfServiceVerificationAfter                            = "selfservice.flows.verification.after"
-	ViperKeyDefaultIdentitySchemaURL                                = "identity.default_schema_url"
-	ViperKeyIdentitySchemas                                         = "identity.schemas"
-	ViperKeyHasherAlgorithm                                         = "hashers.algorithm"
-	ViperKeyHasherArgon2ConfigMemory                                = "hashers.argon2.memory"
-	ViperKeyHasherArgon2ConfigIterations                            = "hashers.argon2.iterations"
-	ViperKeyHasherArgon2ConfigParallelism                           = "hashers.argon2.parallelism"
-	ViperKeyHasherArgon2ConfigSaltLength                            = "hashers.argon2.salt_length"
-	ViperKeyHasherArgon2ConfigKeyLength                             = "hashers.argon2.key_length"
-	ViperKeyHasherArgon2ConfigExpectedDuration                      = "hashers.argon2.expected_duration"
-	ViperKeyHasherArgon2ConfigExpectedDeviation                     = "hashers.argon2.expected_deviation"
-	ViperKeyHasherArgon2ConfigDedicatedMemory                       = "hashers.argon2.dedicated_memory"
-	ViperKeyHasherBcryptCost                                        = "hashers.bcrypt.cost"
-	ViperKeyPasswordHaveIBeenPwnedHost                              = "selfservice.methods.password.config.haveibeenpwned_host"
-	ViperKeyHasherBcryptAESCost                                     = "hashers.bcryptaes.cost"
-	ViperKeyHasherBcryptAESKey                                      = "hashers.bcryptaes.key"
-	ViperKeyPasswordMaxBreaches                                     = "selfservice.methods.password.config.max_breaches"
-	ViperKeyIgnoreNetworkErrors                                     = "selfservice.methods.password.config.ignore_network_errors"
-	ViperKeyVersion                                                 = "version"
-	Argon2DefaultMemory                                             = 128 * bytesize.MB
-	Argon2DefaultIterations                                  uint32 = 1
-	Argon2DefaultSaltLength                                  uint32 = 16
-	Argon2DefaultKeyLength                                   uint32 = 32
-	Argon2DefaultDuration                                           = 500 * time.Millisecond
-	Argon2DefaultDeviation                                          = 500 * time.Millisecond
-	Argon2DefaultDedicatedMemory                                    = 1 * bytesize.GB
-	BcryptDefaultCost                                        uint32 = 12
+	DefaultIdentityTraitsSchemaID                            = "default"
+	DefaultBrowserReturnURL                                  = "default_browser_return_url"
+	DefaultSQLiteMemoryDSN                                   = dbal.SQLiteInMemory
+	DefaultPasswordHashingAlgorithm                          = "argon2"
+	UnknownVersion                                           = "unknown version"
+	ViperKeyDSN                                              = "dsn"
+	ViperKeyCourierSMTPURL                                   = "courier.smtp.connection_uri"
+	ViperKeyCourierTemplatesPath                             = "courier.template_override_path"
+	ViperKeyCourierSMTPFrom                                  = "courier.smtp.from_address"
+	ViperKeyCourierSMTPFromName                              = "courier.smtp.from_name"
+	ViperKeySecretsDefault                                   = "secrets.default"
+	ViperKeySecretsCookie                                    = "secrets.cookie"
+	ViperKeyPublicBaseURL                                    = "serve.public.base_url"
+	ViperKeyPublicDomainAliases                              = "serve.public.domain_aliases"
+	ViperKeyPublicPort                                       = "serve.public.port"
+	ViperKeyPublicHost                                       = "serve.public.host"
+	ViperKeyPublicSocketOwner                                = "serve.public.socket.owner"
+	ViperKeyPublicSocketGroup                                = "serve.public.socket.group"
+	ViperKeyPublicSocketMode                                 = "serve.public.socket.mode"
+	ViperKeyAdminBaseURL                                     = "serve.admin.base_url"
+	ViperKeyAdminPort                                        = "serve.admin.port"
+	ViperKeyAdminHost                                        = "serve.admin.host"
+	ViperKeyAdminSocketOwner                                 = "serve.admin.socket.owner"
+	ViperKeyAdminSocketGroup                                 = "serve.admin.socket.group"
+	ViperKeyAdminSocketMode                                  = "serve.admin.socket.mode"
+	ViperKeySessionLifespan                                  = "session.lifespan"
+	ViperKeySessionSameSite                                  = "session.cookie.same_site"
+	ViperKeySessionDomain                                    = "session.cookie.domain"
+	ViperKeySessionName                                      = "session.cookie.name"
+	ViperKeySessionPath                                      = "session.cookie.path"
+	ViperKeySessionPersistentCookie                          = "session.cookie.persistent"
+	ViperKeySelfServiceStrategyConfig                        = "selfservice.methods"
+	ViperKeySelfServiceBrowserDefaultReturnTo                = "selfservice." + DefaultBrowserReturnURL
+	ViperKeyURLsWhitelistedReturnToDomains                   = "selfservice.whitelisted_return_urls"
+	ViperKeySelfServiceRegistrationUI                        = "selfservice.flows.registration.ui_url"
+	ViperKeySelfServiceRegistrationRequestLifespan           = "selfservice.flows.registration.lifespan"
+	ViperKeySelfServiceRegistrationAfter                     = "selfservice.flows.registration.after"
+	ViperKeySelfServiceRegistrationBeforeHooks               = "selfservice.flows.registration.before.hooks"
+	ViperKeySelfServiceLoginUI                               = "selfservice.flows.login.ui_url"
+	ViperKeySelfServiceLoginRequestLifespan                  = "selfservice.flows.login.lifespan"
+	ViperKeySelfServiceLoginAfter                            = "selfservice.flows.login.after"
+	ViperKeySelfServiceLoginBeforeHooks                      = "selfservice.flows.login.before.hooks"
+	ViperKeySelfServiceErrorUI                               = "selfservice.flows.error.ui_url"
+	ViperKeySelfServiceLogoutBrowserDefaultReturnTo          = "selfservice.flows.logout.after." + DefaultBrowserReturnURL
+	ViperKeySelfServiceSettingsURL                           = "selfservice.flows.settings.ui_url"
+	ViperKeySelfServiceSettingsAfter                         = "selfservice.flows.settings.after"
+	ViperKeySelfServiceSettingsRequestLifespan               = "selfservice.flows.settings.lifespan"
+	ViperKeySelfServiceSettingsPrivilegedAuthenticationAfter = "selfservice.flows.settings.privileged_session_max_age"
+	ViperKeySelfServiceRecoveryAfter                         = "selfservice.flows.recovery.after"
+	ViperKeySelfServiceRecoveryEnabled                       = "selfservice.flows.recovery.enabled"
+	ViperKeySelfServiceRecoveryUI                            = "selfservice.flows.recovery.ui_url"
+	ViperKeySelfServiceRecoveryRequestLifespan               = "selfservice.flows.recovery.lifespan"
+	ViperKeySelfServiceRecoveryBrowserDefaultReturnTo        = "selfservice.flows.recovery.after." + DefaultBrowserReturnURL
+	ViperKeySelfServiceVerificationEnabled                   = "selfservice.flows.verification.enabled"
+	ViperKeySelfServiceVerificationUI                        = "selfservice.flows.verification.ui_url"
+	ViperKeySelfServiceVerificationRequestLifespan           = "selfservice.flows.verification.lifespan"
+	ViperKeySelfServiceVerificationBrowserDefaultReturnTo    = "selfservice.flows.verification.after." + DefaultBrowserReturnURL
+	ViperKeySelfServiceVerificationAfter                     = "selfservice.flows.verification.after"
+	ViperKeyDefaultIdentitySchemaURL                         = "identity.default_schema_url"
+	ViperKeyIdentitySchemas                                  = "identity.schemas"
+	ViperKeyHasherAlgorithm                                  = "hashers.algorithm"
+	ViperKeyHasherArgon2ConfigMemory                         = "hashers.argon2.memory"
+	ViperKeyHasherArgon2ConfigIterations                     = "hashers.argon2.iterations"
+	ViperKeyHasherArgon2ConfigParallelism                    = "hashers.argon2.parallelism"
+	ViperKeyHasherArgon2ConfigSaltLength                     = "hashers.argon2.salt_length"
+	ViperKeyHasherArgon2ConfigKeyLength                      = "hashers.argon2.key_length"
+	ViperKeyHasherArgon2ConfigExpectedDuration               = "hashers.argon2.expected_duration"
+	ViperKeyHasherArgon2ConfigExpectedDeviation              = "hashers.argon2.expected_deviation"
+	ViperKeyHasherArgon2ConfigDedicatedMemory                = "hashers.argon2.dedicated_memory"
+	ViperKeyHasherBcryptCost                                 = "hashers.bcrypt.cost"
+	ViperKeyPasswordHaveIBeenPwnedHost                       = "selfservice.methods.password.config.haveibeenpwned_host"
+	ViperKeyHasherBcryptAESCost                              = "hashers.bcryptaes.cost"
+	ViperKeyHasherBcryptAESKey                               = "hashers.bcryptaes.key"
+	//fandom-start
+	ViperKeyHasherLegacyFandomCost   = "hashers.legacyfandom.cost"
+	ViperKeyHasherLegacyFandomAESKey = "hashers.legacyfandom.key"
+	//fandom-end
+	ViperKeyPasswordMaxBreaches         = "selfservice.methods.password.config.max_breaches"
+	ViperKeyIgnoreNetworkErrors         = "selfservice.methods.password.config.ignore_network_errors"
+	ViperKeyVersion                     = "version"
+	Argon2DefaultMemory                 = 128 * bytesize.MB
+	Argon2DefaultIterations      uint32 = 1
+	Argon2DefaultSaltLength      uint32 = 16
+	Argon2DefaultKeyLength       uint32 = 32
+	Argon2DefaultDuration               = 500 * time.Millisecond
+	Argon2DefaultDeviation              = 500 * time.Millisecond
+	Argon2DefaultDedicatedMemory        = 1 * bytesize.GB
+	BcryptDefaultCost            uint32 = 12
 )
 
 // DefaultSessionCookieName returns the default cookie name for the kratos session.
@@ -142,6 +146,12 @@ type (
 		Cost uint32     `json:"cost"`
 		Key  [][32]byte `json:"key"`
 	}
+	//fandom-start
+	LegacyFandom struct {
+		Cost uint32     `json:"cost"`
+		Key  [][32]byte `json:"key"`
+	}
+	//fandom-end
 	SelfServiceHook struct {
 		Name   string          `json:"hook"`
 		Config json.RawMessage `json:"config"`
@@ -332,6 +342,29 @@ func (p *Config) HasherBcryptAES() *BcryptAES {
 		Key:  result,
 	}
 }
+
+//fandom-start
+func (p *Config) HasherLegacyFandom() *LegacyFandom {
+	// warn about usage of default values and point to the docs
+	// warning will require https://github.com/ory/viper/issues/19
+	cost := uint32(p.p.IntF(ViperKeyHasherLegacyFandomCost, int(BcryptDefaultCost)))
+	if !p.IsInsecureDevMode() && cost < BcryptDefaultCost {
+		cost = BcryptDefaultCost
+	}
+
+	keys := p.p.Strings(ViperKeyHasherLegacyFandomAESKey)
+	result := make([][32]byte, len(keys))
+	for k, v := range keys {
+		copy(result[k][:], v)
+	}
+
+	return &LegacyFandom{
+		Cost: cost,
+		Key:  result,
+	}
+}
+
+//fandom-end
 
 func (p *Config) listenOn(key string) string {
 	fb := 4433

@@ -38,6 +38,9 @@ hashers:
     key:
       - R3w7Hk5!47$$EqD*3!r5*kEfG97BHvAJ
       - b3Dx@jtl1yKau0X3$L!5PJQTgjAOH%cJ
+  legacyfandom:
+    key:
+      - QWERTYUIOPASDFGHQWERTYUIOPASDFGH
 
 secrets:
   cookie:

@@ -18,7 +18,7 @@ type LegacyFandomCrypt struct {
 	c LegacyFandomCryptConfiguration
 }
 
-type LegacyFandomCryptConfiguration struct {
+type LegacyFandomCryptConfiguration interface {
 	config.Provider
 }
 
@@ -39,6 +39,7 @@ func (h *LegacyFandomCrypt) Generate(ctx context.Context, password []byte) ([]by
 		return nil, errors.WithStack(err)
 	}
 
+	bcryptPassword = append([]byte(":bcrypt:"), bcryptPassword...)
 	hash, err := aes256Encrypt(bcryptPassword, &cfg.Key[0])
 	if err != nil {
 		return nil, errors.WithStack(err)

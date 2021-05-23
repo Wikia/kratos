@@ -70,18 +70,28 @@ func TestLegacyFandomCompare(t *testing.T) {
 	p := config.MustNew(t, logrusx.New("", ""),
 		configx.WithConfigFiles("../internal/.kratos.yaml"))
 
-	// test bcrypt-aes hash
-	assert.Nil(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5fe")))
-	assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, []byte("test"), []byte("$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5fe")))
-	assert.Error(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5ff")))
-
-	// test type A wrapped hash
-	assert.Nil(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414b")))
-	assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, []byte("test"), []byte("$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414b")))
-	assert.Error(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414c")))
-
-	// test type B wrapped hash
-	assert.Nil(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1901")))
-	assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, []byte("test"), []byte("$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1901")))
-	assert.Error(t, hash.Compare(context.Background(), p, []byte("test"), []byte("$legacyfandom$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1902")))
+	for _, testData := range [][3][]byte{
+		// test bcrypt-aes hash
+		{
+			[]byte("$legacyfandom$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5fe"),
+			[]byte("$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5fe"),
+			[]byte("$legacyfandom$49628e249027aefdd8be744defa08f87a0076dafb696257a2e3bc6b58c6dad643848a01434f0ef71113a56f2878fcaf9d144f057b41d135dd35313b20dd23efc3d539c575cfd76cc6e62936d48812a962a3b792dbddc8ebe1c8255dde3fdd5ff"),
+		},
+		// test type A wrapped hash
+		{
+			[]byte("$legacyfandom$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414b"),
+			[]byte("$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414b"),
+			[]byte("$legacyfandom$197c91daa8ab5c7b5d693cde3e92347d1e73bbec63c19a5877614e0fe31dab8829ded35c7fe483a38b1aa00b2059056e8b15137845ce88d0604e394b1d371cfd114564828c2c8f3a8445b87575c556b7503d91246a2b34695b5aaa69b6e902c810414c"),
+		},
+		// test type B wrapped hash
+		{
+			[]byte("$legacyfandom$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1901"),
+			[]byte("$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1901"),
+			[]byte("$legacyfandom$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1902"),
+		},
+	} {
+		assert.Nil(t, hash.Compare(context.Background(), p, []byte("test"), testData[0]))
+		assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, []byte("test"), testData[1]))
+		assert.Error(t, hash.Compare(context.Background(), p, []byte("test"), testData[2]))
+	}
 }

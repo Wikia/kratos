@@ -364,6 +364,8 @@ func (m *RegistryDefault) Hasher() hash.Hasher {
 			m.passwordHasher = hash.NewHasherBcrypt(m)
 		case "bcryptaes":
 			m.passwordHasher = hash.NewHasherBcryptAES(m)
+		case "legacyfandom":
+			m.passwordHasher = hash.NewHasherLegacyFandom(m)
 		default:
 			m.passwordHasher = hash.NewHasherArgon2(m)
 		}

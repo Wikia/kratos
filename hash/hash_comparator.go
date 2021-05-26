@@ -40,8 +40,6 @@ func Compare(ctx context.Context, cfg *config.Config, password []byte, hash []by
 		return CompareArgon2id(ctx, cfg, password, realHash)
 	case bytes.Equal(algorithm, BcryptAlgorithmId):
 		return CompareBcrypt(ctx, cfg, password, realHash)
-	case bytes.Equal(algorithm, BcryptAESAlgorithmId):
-		return CompareBcryptAes(ctx, cfg, password, realHash)
 	//fandom-start
 	case bytes.Equal(algorithm, LegacyFandomHasherId):
 		return CompareLegacyFandom(ctx, cfg, password, realHash)
@@ -87,9 +85,6 @@ func ParsePasswordHash(input []byte) (algorithm, hash []byte, err error) {
 	case bytes.Equal(hashParts[1], BcryptAlgorithmId):
 		algorithm = BcryptAlgorithmId
 		return
-	case bytes.Equal(hashParts[1], BcryptAESAlgorithmId):
-		algorithm = BcryptAESAlgorithmId
-		return
 	//fandom-start
 	case bytes.Equal(hashParts[1], LegacyFandomHasherId):
 		algorithm = LegacyFandomHasherId
@@ -124,44 +119,6 @@ func aes256Decrypt(ciphertext []byte, key *[32]byte) (plaintext []byte, err erro
 		ciphertext[gcm.NonceSize():],
 		nil,
 	)
-}
-
-func CompareBcryptAes(_ context.Context, cfg *config.Config, password, hash []byte) error {
-	if len(hash) == 0 {
-		return errors.WithStack(ErrEmptyHashCompare)
-	}
-	if len(password) == 0 {
-		return errors.WithStack(ErrEmptyPasswordCompare)
-	}
-
-	decoded := make([]byte, hex.DecodedLen(len(hash[1:])))
-	_, err := hex.Decode(decoded, hash[1:])
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	var lastError error
-	var aesDecrypted []byte
-	hasherCfg := cfg.HasherBcryptAES()
-	for i := range hasherCfg.Key {
-		aesDecrypted, lastError = aes256Decrypt(decoded[:], &hasherCfg.Key[i])
-		if lastError == nil {
-			break
-		}
-	}
-
-	if lastError != nil {
-		return errors.WithStack(lastError)
-	}
-
-	sh := sha3.New512()
-	sh.Write(password)
-	err = bcrypt.CompareHashAndPassword(aesDecrypted, sh.Sum(nil))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	return nil
 }
 
 func CompareArgon2id(_ context.Context, _ *config.Config, password, hashPart []byte) error {
@@ -248,7 +205,10 @@ func CompareLegacyFandom(_ context.Context, cfg *config.Config, password, hash [
 
 	var lastError error
 	var aesDecrypted []byte
-	hasherCfg := cfg.HasherLegacyFandom()
+	hasherCfg, err := cfg.HasherLegacyFandom()
+	if err != nil {
+		return errors.WithStack(err)
+	}
 	for i := range hasherCfg.Key {
 		aesDecrypted, lastError = aes256Decrypt(decoded[:], &hasherCfg.Key[i])
 		if lastError == nil {

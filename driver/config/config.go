@@ -320,7 +320,7 @@ func (p *Config) HasherBcrypt() *Bcrypt {
 }
 
 //fandom-start
-func (p *Config) HasherLegacyFandom() *LegacyFandom {
+func (p *Config) HasherLegacyFandom() (*LegacyFandom, error) {
 	// warn about usage of default values and point to the docs
 	// warning will require https://github.com/ory/viper/issues/19
 	cost := uint32(p.p.IntF(ViperKeyHasherLegacyFandomCost, int(BcryptDefaultCost)))
@@ -334,10 +334,14 @@ func (p *Config) HasherLegacyFandom() *LegacyFandom {
 		copy(result[k][:], v)
 	}
 
+	if len(result) == 0 {
+		return nil, errors.New("no AES key provided")
+	}
+
 	return &LegacyFandom{
 		Cost: cost,
 		Key:  result,
-	}
+	}, nil
 }
 
 //fandom-end

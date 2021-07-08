@@ -48,6 +48,9 @@ selfservice:
   whitelisted_return_urls:
     - http://return-to-1-test.ory.sh/
     - http://return-to-2-test.ory.sh/
+    - http://*.wildcards.ory.sh
+    - http://*.sh
+    - http://*
   methods:
     password:
       enabled: true

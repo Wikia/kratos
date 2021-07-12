@@ -15,16 +15,6 @@ type ValidationError struct {
 	Messages text.Messages
 }
 
-func NewValidationHookError(instancePtr, message string, details text.Messages) error {
-	return errors.WithStack(&ValidationError{
-		ValidationError: &jsonschema.ValidationError{
-			Message:     message,
-			InstancePtr: instancePtr,
-		},
-		Messages: details,
-	})
-}
-
 func NewMinLengthError(instancePtr string, expected, actual int) error {
 	return errors.WithStack(&ValidationError{
 		ValidationError: &jsonschema.ValidationError{
@@ -182,4 +172,44 @@ func NewNoVerificationStrategyResponsible() error {
 		},
 		Messages: new(text.Messages).Add(text.NewErrorValidationVerificationNoStrategyFound()),
 	})
+}
+
+func NewHookValidationError(instancePtr, message string, messages text.Messages) *ValidationError {
+	return &ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     message,
+			InstancePtr: instancePtr,
+		},
+		Messages: messages,
+	}
+}
+
+type ValidationListError struct {
+	Validations []*ValidationError
+}
+
+func (e ValidationListError) Error() string {
+	return fmt.Sprintf("%d validation errors occurred", len(e.Validations))
+}
+
+func (e *ValidationListError) Add(v *ValidationError) {
+	e.Validations = append(e.Validations, v)
+}
+
+func (e ValidationListError) Empty() bool {
+	return len(e.Validations) == 0
+}
+
+func (e *ValidationListError) WithError(instancePtr, message string, details text.Messages) {
+	e.Validations = append(e.Validations, &ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     message,
+			InstancePtr: instancePtr,
+		},
+		Messages: details,
+	})
+}
+
+func NewValidationListError() *ValidationListError {
+	return &ValidationListError{Validations:  []*ValidationError{}}
 }

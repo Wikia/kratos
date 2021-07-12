@@ -65,7 +65,7 @@ type (
 	}
 
 	templateContext struct {
-		Flow           flow.Flow             `json:"flow"`
+		Flow           flow.Flow              `json:"flow"`
 		RequestHeaders http.Header           `json:"request_headers"`
 		RequestMethod  string                `json:"request_method"`
 		RequestUrl     string                `json:"request_url"`
@@ -85,10 +85,14 @@ type (
 		Context json.RawMessage `json:"context,omitempty"`
 	}
 
-	rawHookResponse struct {
+	errorMessage struct {
 		InstancePtr      string
 		Message          string
 		DetailedMessages []detailedMessage
+	}
+
+	rawHookResponse struct {
+		Messages []errorMessage
 	}
 )
 
@@ -302,7 +306,7 @@ func (e *WebHook) execute(data *templateContext) error {
 
 	err = doHttpCall(conf.method, conf.url, conf.auth, conf.interrupt, body)
 	if err != nil {
-		return fmt.Errorf("failed to call web hook %w", err)
+		return errors.Wrap(err, "failed to call web hook")
 	}
 
 	return nil
@@ -348,7 +352,7 @@ func doHttpCall(method string, url string, as AuthStrategy, interrupt bool, body
 		return err
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		if interrupt {
-			if err = parseResponse(resp); err != nil {
+			if err := parseResponse(resp); err != nil {
 				return err
 			}
 		}
@@ -371,23 +375,31 @@ func parseResponse(resp *http.Response) error {
 		_ = Body.Close()
 	}(resp.Body)
 
-	hookResponse := rawHookResponse{
-		DetailedMessages: []detailedMessage{},
+	hookResponse := &rawHookResponse{
+		Messages: []errorMessage{},
 	}
 
 	if err = json.Unmarshal(body, &hookResponse); err != nil {
 		return errors.Wrap(err, "hook response could not be unmarshalled properly")
 	}
 
-	detailedMessages := text.Messages{}
-	for _, msg := range hookResponse.DetailedMessages {
-		detailedMessages.Add(&text.Message{
-			ID:      text.ID(msg.ID),
-			Text:    msg.Text,
-			Type:    text.Type(msg.Type),
-			Context: msg.Context,
-		})
+	validationErr := schema.NewValidationListError()
+	for _, msg := range hookResponse.Messages {
+		messages := text.Messages{}
+		for _, detail := range msg.DetailedMessages {
+			messages.Add(&text.Message{
+				ID:      text.ID(detail.ID),
+				Text:    detail.Text,
+				Type:    text.Type(detail.Type),
+				Context: detail.Context,
+			})
+		}
+		validationErr.Add(schema.NewHookValidationError(msg.InstancePtr, msg.Message, messages))
 	}
 
-	return schema.NewValidationHookError(hookResponse.InstancePtr, hookResponse.Message, detailedMessages)
+	if validationErr.Empty() {
+		return errors.New("error while parsing hook response: got no validation errors")
+	}
+
+	return errors.WithStack(validationErr)
 }

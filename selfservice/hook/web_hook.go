@@ -362,7 +362,7 @@ func doHttpCall(method string, url string, as AuthStrategy, interrupt bool, body
 	return nil
 }
 
-func parseResponse(resp *http.Response) error {
+func parseResponse(resp *http.Response) (err error) {
 	if resp == nil {
 		return fmt.Errorf("empty response provided from the webhook")
 	}
@@ -372,7 +372,7 @@ func parseResponse(resp *http.Response) error {
 		return errors.Wrap(err, "could not read response body")
 	}
 	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
+		err = Body.Close()
 	}(resp.Body)
 
 	hookResponse := &rawHookResponse{

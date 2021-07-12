@@ -57,8 +57,8 @@ func SecureRedirectOverrideDefaultReturnTo(defaultReturnTo *url.URL) SecureRedir
 
 // SecureRedirectToIsWhitelisted validates if the redirect_to param is allowed for a given wildcard
 func SecureRedirectToIsWhiteListedHost(returnTo *url.URL, allowed url.URL) bool {
-	if allowed.Host == "" && allowed.Host[:1] == "*" {
-		strings.HasSuffix(returnTo.Host, allowed.Host[1:])
+	if allowed.Host != "" && allowed.Host[:1] == "*" {
+		return strings.HasSuffix(returnTo.Host, allowed.Host[1:])
 	}
 	return strings.EqualFold(allowed.Host, returnTo.Host)
 }

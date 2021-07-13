@@ -363,8 +363,8 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Post Settings Hook",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
-			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session, ct identity.CredentialsType) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, ct)
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentity(req, f, s)

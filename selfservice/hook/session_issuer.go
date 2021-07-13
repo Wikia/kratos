@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ory/kratos/identity"
 	"github.com/pkg/errors"
+
+	"github.com/ory/kratos/identity"
 
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/registration"

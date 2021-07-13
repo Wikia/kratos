@@ -211,5 +211,5 @@ func (e *ValidationListError) WithError(instancePtr, message string, details tex
 }
 
 func NewValidationListError() *ValidationListError {
-	return &ValidationListError{Validations:  []*ValidationError{}}
+	return &ValidationListError{Validations: []*ValidationError{}}
 }

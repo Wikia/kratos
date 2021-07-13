@@ -7,10 +7,11 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/pkg/errors"
+
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/text"
-	"github.com/pkg/errors"
 
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow/settings"
@@ -31,6 +32,7 @@ var _ registration.PostHookPostPersistExecutor = new(WebHook)
 var _ registration.PostHookPrePersistExecutor = new(WebHook)
 var _ verification.PostHookExecutor = new(WebHook)
 var _ recovery.PostHookExecutor = new(WebHook)
+var _ settings.PostHookPostPersistExecutor = new(WebHook)
 
 type (
 	AuthStrategy interface {
@@ -65,7 +67,7 @@ type (
 	}
 
 	templateContext struct {
-		Flow           flow.Flow              `json:"flow"`
+		Flow           flow.Flow             `json:"flow"`
 		RequestHeaders http.Header           `json:"request_headers"`
 		RequestMethod  string                `json:"request_method"`
 		RequestUrl     string                `json:"request_url"`
@@ -274,15 +276,13 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, ct identity.CredentialsType) error {
-	credentials, _ := id.GetCredentials(ct)
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity) error {
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
-		Credentials:    credentials,
 	})
 }
 

@@ -372,7 +372,9 @@ func parseResponse(resp *http.Response) (err error) {
 		return errors.Wrap(err, "could not read response body")
 	}
 	defer func(Body io.ReadCloser) {
-		err = Body.Close()
+		if closeErr := Body.Close(); closeErr != nil {
+			err = closeErr
+		}
 	}(resp.Body)
 
 	hookResponse := &rawHookResponse{

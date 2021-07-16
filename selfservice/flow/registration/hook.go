@@ -129,7 +129,11 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 		WithField("identity_id", i.ID).
 		Info("A new identity has registered using self-service registration.")
 
-	s := session.NewActiveSession(i, e.d.Config(r.Context()), time.Now().UTC())
+	s, err := session.NewActiveSession(i, e.d.Config(r.Context()), time.Now().UTC())
+	if err != nil {
+		return err
+	}
+
 	e.d.Logger().
 		WithRequest(r).
 		WithField("identity_id", i.ID).
@@ -166,7 +170,7 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 		WithField("identity_id", i.ID).
 		Debug("Post registration execution hooks completed successfully.")
 
-	if a.Type == flow.TypeAPI {
+	if a.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 		e.d.Writer().Write(w, r, &APIFlowResponse{Identity: i})
 		return nil
 	}

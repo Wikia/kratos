@@ -146,16 +146,16 @@ func TestStrategy(t *testing.T) {
 	var assertSystemError = func(t *testing.T, res *http.Response, body []byte, code int, reason string) {
 		require.Contains(t, res.Request.URL.String(), errTS.URL, "%s", body)
 
-		assert.Equal(t, int64(code), gjson.GetBytes(body, "0.code").Int(), "%s", body)
-		assert.Contains(t, gjson.GetBytes(body, "0.reason").String(), reason, "%s", body)
+		assert.Equal(t, int64(code), gjson.GetBytes(body, "code").Int(), "%s", body)
+		assert.Contains(t, gjson.GetBytes(body, "reason").String(), reason, "%s", body)
 	}
 
 	// assert system error (redirect to error endpoint)
 	var asem = func(t *testing.T, res *http.Response, body []byte, code int, reason string) {
 		require.Contains(t, res.Request.URL.String(), errTS.URL, "%s", body)
 
-		assert.Equal(t, int64(code), gjson.GetBytes(body, "0.code").Int(), "%s", body)
-		assert.Contains(t, gjson.GetBytes(body, "0.message").String(), reason, "%s", body)
+		assert.Equal(t, int64(code), gjson.GetBytes(body, "code").Int(), "%s", body)
+		assert.Contains(t, gjson.GetBytes(body, "message").String(), reason, "%s", body)
 	}
 
 	// assert ui error (redirect to login/registration ui endpoint)
@@ -450,7 +450,7 @@ func TestStrategy(t *testing.T) {
         "required": true,
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {}
     },
     {
@@ -462,7 +462,7 @@ func TestStrategy(t *testing.T) {
         "value": "valid",
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {
         "label": {
           "id": 1040002,
@@ -483,7 +483,7 @@ func TestStrategy(t *testing.T) {
         "value": "invalid-issuer",
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {
         "label": {
           "id": 1040002,
@@ -519,7 +519,7 @@ func TestStrategy(t *testing.T) {
         "required": true,
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {}
     },
     {
@@ -531,7 +531,7 @@ func TestStrategy(t *testing.T) {
         "value": "valid",
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {
         "label": {
           "id": 1010002,
@@ -552,7 +552,7 @@ func TestStrategy(t *testing.T) {
         "value": "invalid-issuer",
         "disabled": false
       },
-      "messages": null,
+      "messages": [],
       "meta": {
         "label": {
           "id": 1010002,

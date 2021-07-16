@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ory/kratos/x/xsql"
+
 	"github.com/go-errors/errors"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
@@ -119,9 +121,9 @@ func createCleanDatabases(t *testing.T) map[string]*driver.RegistryDefault {
 		p := reg.Persister().(*sql.Persister)
 
 		_ = os.Remove("migrations/schema.sql")
-		testhelpers.CleanSQL(t, p.Connection(context.Background()))
+		xsql.CleanSQL(t, p.Connection(context.Background()))
 		t.Cleanup(func() {
-			testhelpers.CleanSQL(t, p.Connection(context.Background()))
+			xsql.CleanSQL(t, p.Connection(context.Background()))
 			_ = os.Remove("migrations/schema.sql")
 		})
 
@@ -217,6 +219,7 @@ func TestPersister_Transaction(t *testing.T) {
 	t.Run("case=should not create identity because callback returned error", func(t *testing.T) {
 		i := &ri.Identity{
 			ID:     x.NewUUID(),
+			State:  ri.StateActive,
 			Traits: ri.Traits(`{}`),
 		}
 		errMessage := "failing because why not"

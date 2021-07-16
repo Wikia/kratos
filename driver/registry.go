@@ -3,7 +3,7 @@ package driver
 import (
 	"context"
 
-	"github.com/ory/kratos/metrics/prometheus"
+	prometheus "github.com/ory/x/prometheusx"
 	"github.com/ory/x/tracing"
 
 	"github.com/gorilla/sessions"
@@ -41,7 +41,7 @@ import (
 type Registry interface {
 	dbal.Driver
 
-	Init(ctx context.Context) error
+	Init(ctx context.Context, opts ...RegistryOption) error
 
 	WithLogger(l *logrusx.Logger) Registry
 
@@ -144,4 +144,22 @@ func NewRegistryFromDSN(c *config.Config, l *logrusx.Logger) (Registry, error) {
 	}
 
 	return registry.WithLogger(l).WithConfig(c), nil
+}
+
+type options struct {
+	skipNetworkInit bool
+}
+
+type RegistryOption func(*options)
+
+func SkipNetworkInit(o *options) {
+	o.skipNetworkInit = true
+}
+
+func newOptions(os []RegistryOption) *options {
+	o := new(options)
+	for _, f := range os {
+		f(o)
+	}
+	return o
 }

@@ -46,7 +46,7 @@ func TestSettingsExecutor(t *testing.T) {
 				handleErr := testhelpers.SelfServiceHookSettingsErrorHandler
 				router.GET("/settings/post", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 					i := testhelpers.SelfServiceHookCreateFakeIdentity(t, reg)
-					sess := session.NewActiveSession(i, conf, time.Now().UTC())
+					sess, _ := session.NewActiveSession(i, conf, time.Now().UTC())
 
 					a := settings.NewFlow(conf, time.Minute, r, sess.Identity, ft)
 					a.RequestURL = x.RequestURL(r).String()
@@ -146,6 +146,14 @@ func TestSettingsExecutor(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
 					viperSetPost(strategy, nil)
 					res, body := makeRequestPost(t, newServer(t, flow.TypeAPI), true, url.Values{})
+					assert.EqualValues(t, http.StatusOK, res.StatusCode)
+					assert.NotEmpty(t, gjson.Get(body, "identity.id"))
+				})
+
+				t.Run("case=pass without hooks for browser flow with application/json", func(t *testing.T) {
+					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
+
+					res, body := makeRequestPost(t, newServer(t, flow.TypeBrowser), true, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
 					assert.NotEmpty(t, gjson.Get(body, "identity.id"))
 				})

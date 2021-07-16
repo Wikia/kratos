@@ -12,7 +12,7 @@ import (
 
 	"github.com/ory/kratos/corp"
 
-	"github.com/ory/kratos/metrics/prometheus"
+	prometheus "github.com/ory/x/prometheusx"
 
 	"github.com/gobuffalo/pop/v5"
 
@@ -137,6 +137,7 @@ func (m *RegistryDefault) RegisterPublicRoutes(ctx context.Context, router *x.Ro
 	m.RegistrationHandler().RegisterPublicRoutes(router)
 	m.LogoutHandler().RegisterPublicRoutes(router)
 	m.SettingsHandler().RegisterPublicRoutes(router)
+	m.IdentityHandler().RegisterPublicRoutes(router)
 	m.AllLoginStrategies().RegisterPublicRoutes(router)
 	m.AllSettingsStrategies().RegisterPublicRoutes(router)
 	m.AllRegistrationStrategies().RegisterPublicRoutes(router)
@@ -156,10 +157,10 @@ func (m *RegistryDefault) RegisterPublicRoutes(ctx context.Context, router *x.Ro
 func (m *RegistryDefault) RegisterAdminRoutes(ctx context.Context, router *x.RouterAdmin) {
 	m.RegistrationHandler().RegisterAdminRoutes(router)
 	m.LoginHandler().RegisterAdminRoutes(router)
+	m.LogoutHandler().RegisterAdminRoutes(router)
 	m.SchemaHandler().RegisterAdminRoutes(router)
 	m.SettingsHandler().RegisterAdminRoutes(router)
 	m.IdentityHandler().RegisterAdminRoutes(router)
-	m.SessionHandler().RegisterAdminRoutes(router)
 	m.SelfServiceErrorHandler().RegisterAdminRoutes(router)
 
 	m.RecoveryHandler().RegisterAdminRoutes(router)
@@ -460,11 +461,17 @@ func (m *RegistryDefault) CanHandle(dsn string) bool {
 		strings.HasPrefix(dsn, "crdb")
 }
 
-func (m *RegistryDefault) Init(ctx context.Context) error {
+func (m *RegistryDefault) Init(ctx context.Context, opts ...RegistryOption) error {
 	if m.persister != nil {
 		// The DSN connection can not be hot-reloaded!
 		panic("RegistryDefault.Init() must not be called more than once.")
 	}
+
+	if corp.GetContextualizer() == nil {
+		panic("Contextualizer has not been set yet.")
+	}
+
+	o := newOptions(opts)
 
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = time.Minute * 5
@@ -479,16 +486,20 @@ func (m *RegistryDefault) Init(ctx context.Context) error {
 				}
 			}
 
-			pool, idlePool, connMaxLifetime, cleanedDSN := sqlcon.ParseConnectionOptions(m.l, m.Config(ctx).DSN())
+			// Use maxIdleConnTime - see comment below for https://github.com/gobuffalo/pop/pull/637
+			pool, idlePool, connMaxLifetime, _, cleanedDSN := sqlcon.ParseConnectionOptions(m.l, m.Config(ctx).DSN())
 			m.Logger().
 				WithField("pool", pool).
 				WithField("idlePool", idlePool).
 				WithField("connMaxLifetime", connMaxLifetime).
 				Debug("Connecting to SQL Database")
 			c, err := pop.NewConnection(&pop.ConnectionDetails{
-				URL:                       sqlcon.FinalizeDSN(m.l, cleanedDSN),
-				IdlePool:                  idlePool,
-				ConnMaxLifetime:           connMaxLifetime,
+				URL:             sqlcon.FinalizeDSN(m.l, cleanedDSN),
+				IdlePool:        idlePool,
+				ConnMaxLifetime: connMaxLifetime,
+				// This has been released with pop 5.3.4 but kratos needs https://github.com/gobuffalo/pop/pull/637
+				// to be merged first
+				// ConnMaxIdleTime:           connMaxIdleTime,
 				Pool:                      pool,
 				UseInstrumentedDriver:     m.Tracer(ctx).IsLoaded(),
 				InstrumentedDriverOptions: opts,
@@ -512,12 +523,6 @@ func (m *RegistryDefault) Init(ctx context.Context) error {
 				return err
 			}
 
-			net, err := p.DetermineNetwork(ctx)
-			if err != nil {
-				m.Logger().WithError(err).Warnf("Unable to determine network, retrying.")
-				return err
-			}
-
 			// if dsn is memory we have to run the migrations on every start
 			if dbal.IsMemorySQLite(m.Config(ctx).DSN()) || m.Config(ctx).DSN() == dbal.SQLiteInMemory || m.Config(ctx).DSN() == dbal.SQLiteSharedInMemory || m.Config(ctx).DSN() == "memory" {
 				m.Logger().Infoln("Ory Kratos is running migrations on every startup as DSN is memory. This means your data is lost when Kratos terminates.")
@@ -527,10 +532,25 @@ func (m *RegistryDefault) Init(ctx context.Context) error {
 				}
 			}
 
+			if o.skipNetworkInit {
+				m.persister = p
+				return nil
+			}
+
+			net, err := p.DetermineNetwork(ctx)
+			if err != nil {
+				m.Logger().WithError(err).Warnf("Unable to determine network, retrying.")
+				return err
+			}
+
 			m.persister = p.WithNetworkID(net.ID)
 			return nil
 		}, bc),
 	)
+}
+
+func (m *RegistryDefault) SetPersister(p persistence.Persister) {
+	m.persister = p
 }
 
 func (m *RegistryDefault) Courier(ctx context.Context) *courier.Courier {
@@ -622,7 +642,7 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	m.rwl.Lock()
 	defer m.rwl.Unlock()
 	if m.pmm == nil {
-		m.pmm = prometheus.NewMetricsManager(m.buildVersion, m.buildHash, m.buildDate)
+		m.pmm = prometheus.NewMetricsManager("kratos", m.buildVersion, m.buildHash, m.buildDate)
 	}
 	return m.pmm
 }

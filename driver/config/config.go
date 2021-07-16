@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ory/x/tlsx"
 
 	"github.com/google/uuid"
 	"github.com/inhies/go-bytesize"
@@ -55,18 +58,29 @@ const (
 	ViperKeyPublicSocketOwner                                = "serve.public.socket.owner"
 	ViperKeyPublicSocketGroup                                = "serve.public.socket.group"
 	ViperKeyPublicSocketMode                                 = "serve.public.socket.mode"
+	ViperKeyPublicTLSCertBase64                                     = "serve.public.tls.cert.base64"
+	ViperKeyPublicTLSKeyBase64                                      = "serve.public.tls.key.base64"
+	ViperKeyPublicTLSCertPath                                       = "serve.public.tls.cert.path"
+	ViperKeyPublicTLSKeyPath                                        = "serve.public.tls.key.path"
 	ViperKeyAdminBaseURL                                     = "serve.admin.base_url"
 	ViperKeyAdminPort                                        = "serve.admin.port"
 	ViperKeyAdminHost                                        = "serve.admin.host"
 	ViperKeyAdminSocketOwner                                 = "serve.admin.socket.owner"
 	ViperKeyAdminSocketGroup                                 = "serve.admin.socket.group"
 	ViperKeyAdminSocketMode                                  = "serve.admin.socket.mode"
+	ViperKeyAdminTLSCertBase64                                      = "serve.admin.tls.cert.base64"
+	ViperKeyAdminTLSKeyBase64                                       = "serve.admin.tls.key.base64"
+	ViperKeyAdminTLSCertPath                                        = "serve.admin.tls.cert.path"
+	ViperKeyAdminTLSKeyPath                                         = "serve.admin.tls.key.path"
 	ViperKeySessionLifespan                                  = "session.lifespan"
 	ViperKeySessionSameSite                                  = "session.cookie.same_site"
 	ViperKeySessionDomain                                    = "session.cookie.domain"
 	ViperKeySessionName                                      = "session.cookie.name"
 	ViperKeySessionPath                                      = "session.cookie.path"
 	ViperKeySessionPersistentCookie                          = "session.cookie.persistent"
+	ViperKeyCookieSameSite                                          = "cookies.same_site"
+	ViperKeyCookieDomain                                            = "cookies.domain"
+	ViperKeyCookiePath                                              = "cookies.path"
 	ViperKeySelfServiceStrategyConfig                        = "selfservice.methods"
 	ViperKeySelfServiceBrowserDefaultReturnTo                = "selfservice." + DefaultBrowserReturnURL
 	ViperKeyURLsWhitelistedReturnToDomains                   = "selfservice.whitelisted_return_urls"
@@ -106,11 +120,13 @@ const (
 	ViperKeyHasherArgon2ConfigExpectedDeviation              = "hashers.argon2.expected_deviation"
 	ViperKeyHasherArgon2ConfigDedicatedMemory                = "hashers.argon2.dedicated_memory"
 	ViperKeyHasherBcryptCost                                 = "hashers.bcrypt.cost"
+	ViperKeyLinkLifespan                                            = "selfservice.methods.link.config.lifespan"
 	//fandom-start
 	ViperKeyHasherLegacyFandomCost   = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey = "hashers.legacyfandom.key"
 	//fandom-end
 	ViperKeyPasswordHaveIBeenPwnedHost        = "selfservice.methods.password.config.haveibeenpwned_host"
+	ViperKeyPasswordHaveIBeenPwnedEnabled                           = "selfservice.methods.password.config.haveibeenpwned_enabled"
 	ViperKeyPasswordMaxBreaches               = "selfservice.methods.password.config.max_breaches"
 	ViperKeyIgnoreNetworkErrors               = "selfservice.methods.password.config.ignore_network_errors"
 	ViperKeyVersion                           = "version"
@@ -160,9 +176,10 @@ type (
 		URL string `json:"url"`
 	}
 	PasswordPolicy struct {
-		HaveIBeenPwnedHost  string `json:"haveibeenpwned_host"`
-		MaxBreaches         uint   `json:"max_breaches"`
-		IgnoreNetworkErrors bool   `json:"ignore_network_errors"`
+		HaveIBeenPwnedHost    string `json:"haveibeenpwned_host"`
+		HaveIBeenPwnedEnabled bool   `json:"haveibeenpwned_enabled"`
+		MaxBreaches           uint   `json:"max_breaches"`
+		IgnoreNetworkErrors   bool   `json:"ignore_network_errors"`
 	}
 	Schemas []Schema
 	Config  struct {
@@ -280,16 +297,8 @@ func (p *Config) MustSet(key string, value interface{}) {
 	}
 }
 
-func (p *Config) SessionDomain() string {
-	return p.p.String(ViperKeySessionDomain)
-}
-
 func (p *Config) SessionName() string {
 	return stringsx.Coalesce(p.p.String(ViperKeySessionName), DefaultSessionCookieName)
-}
-
-func (p *Config) SessionPath() string {
-	return p.p.String(ViperKeySessionPath)
 }
 
 func (p *Config) HasherArgon2() *Argon2 {
@@ -824,6 +833,10 @@ func (p *Config) SelfServiceFlowRecoveryRequestLifespan() time.Duration {
 	return p.p.DurationF(ViperKeySelfServiceRecoveryRequestLifespan, time.Hour)
 }
 
+func (p *Config) SelfServiceLinkMethodLifespan() time.Duration {
+	return p.p.DurationF(ViperKeyLinkLifespan, time.Hour)
+}
+
 func (p *Config) SelfServiceFlowRecoveryAfterHooks(strategy string) []SelfServiceHook {
 	return p.selfServiceHooks(HookStrategyKey(ViperKeySelfServiceRecoveryAfter, strategy))
 }
@@ -833,6 +846,10 @@ func (p *Config) SelfServiceFlowSettingsPrivilegedSessionMaxAge() time.Duration 
 }
 
 func (p *Config) SessionSameSiteMode() http.SameSite {
+	if !p.p.Exists(ViperKeySessionSameSite) {
+		return p.CookieSameSiteMode()
+	}
+
 	switch p.p.StringF(ViperKeySessionSameSite, "Lax") {
 	case "Lax":
 		return http.SameSiteLaxMode
@@ -842,6 +859,40 @@ func (p *Config) SessionSameSiteMode() http.SameSite {
 		return http.SameSiteNoneMode
 	}
 	return http.SameSiteDefaultMode
+}
+
+func (p *Config) SessionDomain() string {
+	if !p.p.Exists(ViperKeySessionDomain) {
+		return p.CookieDomain()
+	}
+	return p.p.String(ViperKeySessionDomain)
+}
+
+func (p *Config) CookieDomain() string {
+	return p.p.String(ViperKeyCookieDomain)
+}
+
+func (p *Config) CookieSameSiteMode() http.SameSite {
+	switch p.p.StringF(ViperKeyCookieSameSite, "Lax") {
+	case "Lax":
+		return http.SameSiteLaxMode
+	case "Strict":
+		return http.SameSiteStrictMode
+	case "None":
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteDefaultMode
+}
+
+func (p *Config) SessionPath() string {
+	if !p.p.Exists(ViperKeySessionPath) {
+		return p.CookiePath()
+	}
+	return p.p.String(ViperKeySessionPath)
+}
+
+func (p *Config) CookiePath() string {
+	return p.p.String(ViperKeyCookiePath)
 }
 
 func (p *Config) SelfServiceFlowLoginReturnTo(strategy string) *url.URL {
@@ -876,9 +927,10 @@ func (p *Config) ConfigVersion() string {
 
 func (p *Config) PasswordPolicyConfig() *PasswordPolicy {
 	return &PasswordPolicy{
-		HaveIBeenPwnedHost:  p.p.StringF(ViperKeyPasswordHaveIBeenPwnedHost, "api.pwnedpasswords.com"),
-		MaxBreaches:         uint(p.p.Int(ViperKeyPasswordMaxBreaches)),
-		IgnoreNetworkErrors: p.p.BoolF(ViperKeyIgnoreNetworkErrors, true),
+		HaveIBeenPwnedHost:    p.p.StringF(ViperKeyPasswordHaveIBeenPwnedHost, "api.pwnedpasswords.com"),
+		HaveIBeenPwnedEnabled: p.p.BoolF(ViperKeyPasswordHaveIBeenPwnedEnabled, true),
+		MaxBreaches:           uint(p.p.Int(ViperKeyPasswordMaxBreaches)),
+		IgnoreNetworkErrors:   p.p.BoolF(ViperKeyIgnoreNetworkErrors, true),
 	}
 }
 
@@ -892,4 +944,38 @@ func (p *Config) HasherPasswordHashingAlgorithm() string {
 	default:
 		return configValue
 	}
+}
+
+func (p *Config) GetTSLCertificatesForPublic() []tls.Certificate {
+	return p.getTSLCertificates(
+		"public",
+		p.p.String(ViperKeyPublicTLSCertBase64),
+		p.p.String(ViperKeyPublicTLSKeyBase64),
+		p.p.String(ViperKeyPublicTLSCertPath),
+		p.p.String(ViperKeyPublicTLSKeyPath),
+	)
+}
+
+func (p *Config) GetTSLCertificatesForAdmin() []tls.Certificate {
+	return p.getTSLCertificates(
+		"admin",
+		p.p.String(ViperKeyAdminTLSCertBase64),
+		p.p.String(ViperKeyAdminTLSKeyBase64),
+		p.p.String(ViperKeyAdminTLSCertPath),
+		p.p.String(ViperKeyAdminTLSKeyPath),
+	)
+}
+
+func (p *Config) getTSLCertificates(daemon, certBase64, keyBase64, certPath, keyPath string) []tls.Certificate {
+	cert, err := tlsx.Certificate(certBase64, keyBase64, certPath, keyPath)
+
+	if err == nil {
+		p.l.Infof("Setting up HTTPS for %s", daemon)
+		return cert
+	} else if !errors.Is(err, tlsx.ErrNoCertificatesConfigured) {
+		p.l.WithError(err).Fatalf("Unable to load HTTPS TLS Certificate")
+	}
+
+	p.l.Infof("TLS has not been configured for %s, skipping", daemon)
+	return nil
 }

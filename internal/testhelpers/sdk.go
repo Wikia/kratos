@@ -12,7 +12,7 @@ import (
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/pointerx"
 
-	"github.com/ory/kratos-client-go"
+	kratos "github.com/ory/kratos-client-go"
 )
 
 func NewSDKClient(ts *httptest.Server) *kratos.APIClient {
@@ -40,20 +40,20 @@ func SDKFormFieldsToURLValues(ff []kratos.UiNode) url.Values {
 			continue
 		}
 
-		val := attr.Value.GetActualInstance()
+		val := attr.Value
 		if val == nil {
 			continue
 		}
 
 		switch v := val.(type) {
-		case *bool:
-			values.Set(attr.Name, fmt.Sprintf("%v", *v))
-		case *string:
-			values.Set(attr.Name, fmt.Sprintf("%v", *v))
-		case *float32:
-			values.Set(attr.Name, fmt.Sprintf("%v", *v))
-		case *float64:
-			values.Set(attr.Name, fmt.Sprintf("%v", *v))
+		case bool:
+			values.Set(attr.Name, fmt.Sprintf("%v", v))
+		case string:
+			values.Set(attr.Name, fmt.Sprintf("%v", v))
+		case float32:
+			values.Set(attr.Name, fmt.Sprintf("%v", v))
+		case float64:
+			values.Set(attr.Name, fmt.Sprintf("%v", v))
 		}
 	}
 	return values

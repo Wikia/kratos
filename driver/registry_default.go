@@ -201,18 +201,20 @@ func (m *RegistryDefault) HealthHandler(_ context.Context) *healthx.Handler {
 				"database": func(_ *http.Request) error {
 					return m.Ping()
 				},
-				"migrations": func(r *http.Request) error {
-					status, err := m.Persister().MigrationStatus(r.Context())
-					if err != nil {
-						return err
-					}
-
-					if status.HasPending() {
-						return errors.Errorf("migrations have not yet been fully applied")
-					}
-
-					return nil
-				},
+				// fandom-start: disable migrations check which fails on non-local DBs
+				//"migrations": func(r *http.Request) error {
+				//	status, err := m.Persister().MigrationStatus(r.Context())
+				//	if err != nil {
+				//		return err
+				//	}
+				//
+				//	if status.HasPending() {
+				//		return errors.Errorf("migrations have not yet been fully applied")
+				//	}
+				//
+				//	return nil
+				//},
+				// fandom-end
 			})
 	}
 

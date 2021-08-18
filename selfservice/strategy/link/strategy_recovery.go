@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
+	"github.com/tidwall/gjson"
 
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
@@ -163,12 +164,19 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 
+	// fandom-start
+	var address identity.RecoveryAddress
 	if len(id.RecoveryAddresses) == 0 {
-		s.d.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("The identity does not have any recovery addresses set.")))
-		return
+		var verificationEmail = gjson.GetBytes(id.Traits, "email").String() // this assumes trait present and named as `email`
+		if len(verificationEmail) == 0 {
+			s.d.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("The identity does not have any recovery addresses set.")))
+			return
+		}
+		address = *identity.NewRecoveryEmailAddress( verificationEmail, id.ID )
+	} else {
+		address = id.RecoveryAddresses[0]
 	}
-
-	address := id.RecoveryAddresses[0]
+	// fandom-end
 	token := NewRecoveryToken(&address, expiresIn)
 	if err := s.d.RecoveryTokenPersister().CreateRecoveryToken(r.Context(), token); err != nil {
 		s.d.Writer().WriteError(w, r, err)

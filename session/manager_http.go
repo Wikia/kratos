@@ -52,6 +52,14 @@ func (s *ManagerHTTP) CreateAndIssueCookie(ctx context.Context, w http.ResponseW
 }
 
 func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error {
+	return s.issueCookiesAndCSRF(ctx, w, r, session, true)
+}
+
+func (s *ManagerHTTP) IssueCookieWithoutCSRF(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error {
+	return s.issueCookiesAndCSRF(ctx, w, r, session, false)
+}
+
+func (s *ManagerHTTP) issueCookiesAndCSRF(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session, generateCSRF bool) error {
 	cookie, _ := s.r.CookieManager(r.Context()).Get(r, s.cookieName(ctx))
 
 	if s.r.Config(ctx).SessionPath() != "" {
@@ -68,13 +76,8 @@ func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r 
 		cookie.Options.Path = alias.Path
 	}
 
-	old, err := s.FetchFromRequest(ctx, r)
-	if err != nil {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
-	} else if old.Identity.ID != session.Identity.ID {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
+	if generateCSRF == true {
+		s.regenerateCSRFToken(ctx, w, r, session)
 	}
 
 	if s.r.Config(ctx).SessionSameSiteMode() != 0 {
@@ -91,6 +94,17 @@ func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r 
 		return errors.WithStack(err)
 	}
 	return nil
+}
+
+func (s *ManagerHTTP) regenerateCSRFToken(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) {
+	old, err := s.FetchFromRequest(ctx, r)
+	if err != nil {
+		// No session was set prior -> regenerate anti-csrf token
+		_ = s.r.CSRFHandler().RegenerateToken(w, r)
+	} else if old.Identity.ID != session.Identity.ID {
+		// No session was set prior -> regenerate anti-csrf token
+		_ = s.r.CSRFHandler().RegenerateToken(w, r)
+	}
 }
 
 func (s *ManagerHTTP) extractToken(r *http.Request) string {

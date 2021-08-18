@@ -91,6 +91,7 @@ Class | Method | HTTP request | Description
 *V0alpha1Api* | [**AdminCreateSelfServiceRecoveryLink**](docs/V0alpha1Api.md#admincreateselfservicerecoverylink) | **Post** /recovery/link | Create a Recovery Link
 *V0alpha1Api* | [**AdminDeleteIdentity**](docs/V0alpha1Api.md#admindeleteidentity) | **Delete** /identities/{id} | Delete an Identity
 *V0alpha1Api* | [**AdminGetIdentity**](docs/V0alpha1Api.md#admingetidentity) | **Get** /identities/{id} | Get an Identity
+*V0alpha1Api* | [**AdminIdentitySession**](docs/V0alpha1Api.md#adminidentitysession) | **Get** /sessions/identity/{id} | Calling this endpoint issues a session for a given identity.
 *V0alpha1Api* | [**AdminListIdentities**](docs/V0alpha1Api.md#adminlistidentities) | **Get** /identities | List Identities
 *V0alpha1Api* | [**AdminLogoutIdentity**](docs/V0alpha1Api.md#adminlogoutidentity) | **Delete** /sessions/identity/{id} | Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.
 *V0alpha1Api* | [**AdminUpdateIdentity**](docs/V0alpha1Api.md#adminupdateidentity) | **Put** /identities/{id} | Update an Identity
@@ -193,6 +194,7 @@ Class | Method | HTTP request | Description
  - [SubmitSelfServiceSettingsFlowWithProfileMethodBody](docs/SubmitSelfServiceSettingsFlowWithProfileMethodBody.md)
  - [SubmitSelfServiceVerificationFlowBody](docs/SubmitSelfServiceVerificationFlowBody.md)
  - [SubmitSelfServiceVerificationFlowWithLinkMethodBody](docs/SubmitSelfServiceVerificationFlowWithLinkMethodBody.md)
+ - [SuccessfulAdminIdentitySession](docs/SuccessfulAdminIdentitySession.md)
  - [SuccessfulSelfServiceLoginWithoutBrowser](docs/SuccessfulSelfServiceLoginWithoutBrowser.md)
  - [SuccessfulSelfServiceRegistrationWithoutBrowser](docs/SuccessfulSelfServiceRegistrationWithoutBrowser.md)
  - [SuccessfulSelfServiceSettingsWithoutBrowser](docs/SuccessfulSelfServiceSettingsWithoutBrowser.md)

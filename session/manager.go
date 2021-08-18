@@ -24,6 +24,11 @@ type Manager interface {
 	// Also regenerates CSRF tokens due to assumed principal change.
 	IssueCookie(context.Context, http.ResponseWriter, *http.Request, *Session) error
 
+	// IssueCookieWithoutCSRF it does the same logic as IssueCookie but without regenerating CSRF.
+	//
+	// Used to issue session cookie from admin endpoints where do not have CSRF handler
+	IssueCookieWithoutCSRF(context.Context, http.ResponseWriter, *http.Request, *Session) error
+
 	// FetchFromRequest creates an HTTP session using cookies.
 	FetchFromRequest(context.Context, *http.Request) (*Session, error)
 

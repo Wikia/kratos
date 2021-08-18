@@ -2,6 +2,7 @@ package session
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -13,11 +14,13 @@ import (
 	"github.com/ory/herodot"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/x"
 )
 
 type (
 	handlerDependencies interface {
+		identity.PoolProvider
 		ManagementProvider
 		PersistenceProvider
 		x.WriterProvider
@@ -44,10 +47,10 @@ func NewHandler(
 }
 
 const (
-	RouteCollection = "/sessions"
-	RouteWhoami     = RouteCollection + "/whoami"
-	RouteIdentity   = RouteCollection + "/identity"
-	RouteLogout     = RouteIdentity + "/:id"
+	RouteCollection         = "/sessions"
+	RouteWhoami             = RouteCollection + "/whoami"
+	RouteIdentity           = RouteCollection + "/identity"
+	RouteIdentityManagement = RouteIdentity + "/:id"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -57,7 +60,8 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 
-	admin.DELETE(RouteLogout, h.logout)
+	admin.GET(RouteIdentityManagement, h.session)
+	admin.DELETE(RouteIdentityManagement, h.logout)
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
@@ -67,7 +71,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
 		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
-		public.Handle(m, RouteLogout, x.RedirectToAdminRoute(h.r))
+		public.Handle(m, RouteIdentityManagement, x.RedirectToAdminRoute(h.r))
 	}
 }
 
@@ -192,6 +196,89 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// swagger:parameters adminIdentitySession
+// nolint:deadcode,unused
+type adminIdentitySession struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:model successfulAdminIdentitySession
+// nolint:deadcode,unused
+type AdminIdentitySessionResponse struct {
+	// The Session Token
+	//
+	// This field is only set when the session hook is configured as a post-registration hook.
+	//
+	// A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
+	// Header:
+	//
+	// 		Authorization: bearer ${session-token}
+	//
+	// The session token is only issued for API flows, not for Browser flows!
+	Token string `json:"session_token"`
+
+	// The Session
+	//
+	// The session contains information about the user, the session device, and so on.
+	//
+	// required: true
+	Session *Session `json:"session"`
+
+	// The Identity
+	//
+	// The identity that just signed up.
+	//
+	// required: true
+	Identity *identity.Identity `json:"identity"`
+}
+
+// swagger:route GET /sessions/identity/{id} v0alpha1 adminIdentitySession
+//
+// Calling this endpoint issues a session for a given identity.
+//
+// This endpoint is useful for:
+//
+// - Issuing session or session token for a given identity without authenticating
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: successfulAdminIdentitySession
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC())
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := h.r.SessionPersister().CreateSession(r.Context(), s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := h.r.SessionManager().IssueCookieWithoutCSRF(r.Context(), w, r, s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
 
 func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated httprouter.Handle) httprouter.Handle {

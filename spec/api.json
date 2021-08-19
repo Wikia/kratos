@@ -1816,6 +1816,25 @@
         ],
         "type": "object"
       },
+      "successfulAdminIdentitySession": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/identity"
+          },
+          "session": {
+            "$ref": "#/components/schemas/session"
+          },
+          "session_token": {
+            "description": "The Session Token\n\nThis field is only set when the session hook is configured as a post-registration hook.\n\nA session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization\nHeader:\n\nAuthorization: bearer ${session-token}\n\nThe session token is only issued for API flows, not for Browser flows!",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session",
+          "identity"
+        ],
+        "type": "object"
+      },
       "successfulSelfServiceLoginWithoutBrowser": {
         "description": "The Response for Login Flows via API",
         "properties": {
@@ -4172,6 +4191,62 @@
           }
         ],
         "summary": "Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.",
+        "tags": [
+          "v0alpha1"
+        ]
+      },
+      "get": {
+        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
+        "operationId": "adminIdentitySession",
+        "parameters": [
+          {
+            "description": "ID is the identity's ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/successfulAdminIdentitySession"
+                }
+              }
+            },
+            "description": "successfulAdminIdentitySession"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "summary": "Calling this endpoint issues a session for a given identity.",
         "tags": [
           "v0alpha1"
         ]

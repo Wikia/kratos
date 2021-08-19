@@ -1689,6 +1689,52 @@
       }
     },
     "/sessions/identity/{id}": {
+      "get": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "v0alpha1"
+        ],
+        "summary": "Calling this endpoint issues a session for a given identity.",
+        "operationId": "adminIdentitySession",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the identity's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successfulAdminIdentitySession",
+            "schema": {
+              "$ref": "#/definitions/successfulAdminIdentitySession"
+            }
+          },
+          "404": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          },
+          "500": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          }
+        }
+      },
       "delete": {
         "security": [
           {
@@ -3520,6 +3566,25 @@
         },
         "method": {
           "description": "Method supports `link` only right now.",
+          "type": "string"
+        }
+      }
+    },
+    "successfulAdminIdentitySession": {
+      "type": "object",
+      "required": [
+        "session",
+        "identity"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "#/definitions/identity"
+        },
+        "session": {
+          "$ref": "#/definitions/session"
+        },
+        "session_token": {
+          "description": "The Session Token\n\nThis field is only set when the session hook is configured as a post-registration hook.\n\nA session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization\nHeader:\n\nAuthorization: bearer ${session-token}\n\nThe session token is only issued for API flows, not for Browser flows!",
           "type": "string"
         }
       }

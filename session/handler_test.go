@@ -2,16 +2,18 @@ package session_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/ory/kratos/corpx"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/x/sqlcon"
-	"github.com/pkg/errors"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
@@ -251,6 +253,57 @@ func TestSessionLogout(t *testing.T) {
 				logout(t, ts, "/sessions/identity/"+i.ID.String(), http.StatusAccepted)
 				_, err := reg.SessionPersister().GetSession(context.Background(), s.ID)
 				require.True(t, errors.Is(err, sqlcon.ErrNoRows))
+			})
+		}
+	})
+}
+
+func TestSessionRequest(t *testing.T) {
+	conf, reg := internal.NewFastRegistryWithMocks(t)
+
+	// Start kratos server
+	publicTS, adminTS := testhelpers.NewKratosServerWithCSRF(t, reg)
+
+	mockServerURL := urlx.ParseOrPanic(publicTS.URL)
+
+	conf.MustSet(config.ViperKeyAdminBaseURL, adminTS.URL)
+	testhelpers.SetDefaultIdentitySchema(t, conf, "file://./stub/identity.schema.json")
+	testhelpers.SetIdentitySchemas(t, conf, map[string]string{
+		"customer": "file://./stub/handler/customer.schema.json",
+		"employee": "file://./stub/handler/employee.schema.json",
+	})
+	conf.MustSet(config.ViperKeyPublicBaseURL, mockServerURL.String())
+
+	session := func(t *testing.T, base *httptest.Server, href string, expectCode int) AdminIdentitySessionResponse {
+		req, err := http.NewRequest("GET", base.URL+href, nil)
+		require.NoError(t, err)
+
+		res, err := base.Client().Do(req)
+		require.NoError(t, err)
+
+		require.EqualValues(t, expectCode, res.StatusCode)
+		defer res.Body.Close()
+
+		var apiRes AdminIdentitySessionResponse
+		err = json.NewDecoder(res.Body).Decode(&apiRes)
+		require.NoError(t, err)
+		require.Contains(t, res.Header.Get("set-cookie"), config.DefaultSessionCookieName)
+
+		return apiRes
+	}
+
+	t.Run("case=should return 200 after successful session creation and return valid session and token", func(t *testing.T) {
+		for name, ts := range map[string]*httptest.Server{"public": publicTS, "admin": adminTS} {
+			t.Run("endpoint="+name, func(t *testing.T) {
+				i := identity.NewIdentity("")
+				require.NoError(t, reg.IdentityManager().Create(context.Background(), i))
+
+				res := session(t, ts, "/sessions/identity/"+i.ID.String(), http.StatusOK)
+				s, err := reg.SessionPersister().GetSession(context.Background(), res.Session.ID)
+				require.Empty(t, err)
+				require.Equal(t, i.ID.String(), s.Identity.ID.String())
+				require.Equal(t, s.Token, res.Token)
+				require.True(t, s.Active)
 			})
 		}
 	})

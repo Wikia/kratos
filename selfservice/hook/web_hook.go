@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/ory/x/httpx"
 	"github.com/pkg/errors"
 
 	"github.com/ory/kratos/schema"
@@ -78,6 +80,7 @@ type (
 	WebHook struct {
 		r webHookDependencies
 		c json.RawMessage
+		h *retryablehttp.Client
 	}
 
 	detailedMessage struct {
@@ -201,7 +204,7 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 }
 
 func NewWebHook(r webHookDependencies, c json.RawMessage) *WebHook {
-	return &WebHook{r: r, c: c}
+	return &WebHook{r: r, c: c, h: httpx.NewResilientClient()}
 }
 
 func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow) error {
@@ -304,7 +307,7 @@ func (e *WebHook) execute(data *templateContext) error {
 		}
 	}
 
-	err = doHttpCall(conf.method, conf.url, conf.auth, conf.interrupt, body)
+	err = doHttpCall(e.h, conf.method, conf.url, conf.auth, conf.interrupt, body)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
 	}
@@ -337,16 +340,16 @@ func createBody(templatePath string, data *templateContext) (io.Reader, error) {
 	}
 }
 
-func doHttpCall(method string, url string, as AuthStrategy, interrupt bool, body io.Reader) error {
-	req, err := http.NewRequest(method, url, body)
+func doHttpCall(client *retryablehttp.Client, method string, url string, as AuthStrategy, interrupt bool, body io.Reader) error {
+	req, err := retryablehttp.NewRequest(method, url, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	as.apply(req)
+	as.apply(req.Request)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 
 	if err != nil {
 		return err

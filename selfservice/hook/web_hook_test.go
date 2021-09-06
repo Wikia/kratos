@@ -12,10 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/flow/registration"
 	"github.com/ory/kratos/selfservice/flow/settings"
 	"github.com/ory/kratos/selfservice/flow/verification"
+	"github.com/ory/x/logrusx"
 
 	"github.com/ory/kratos/selfservice/flow"
 
@@ -32,6 +34,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+type resilientClientProvider struct {}
+func (r *resilientClientProvider) GetResilientClient() *retryablehttp.Client {
+	return retryablehttp.NewClient()
+}
+
+func (r *resilientClientProvider) Logger() *logrusx.Logger {
+	return nil
+}
+
+func (r *resilientClientProvider) Audit() *logrusx.Logger {
+	return nil
+}
 
 func TestNoopAuthStrategy(t *testing.T) {
 	req := http.Request{Header: map[string][]string{}}
@@ -448,7 +463,7 @@ func TestWebHooks(t *testing.T) {
 								"body": "%s",
 								"auth": %s
 							}`, ts.URL+path, method, "./stub/test_body.jsonnet", auth.createAuthConfig()))
-							wh := NewWebHook(nil, conf)
+							wh := NewWebHook(&resilientClientProvider{}, conf)
 
 							err := tc.callWebHook(wh, req, f, s, identity.CredentialsTypePassword)
 							if method == "GARBAGE" {
@@ -494,7 +509,7 @@ func TestWebHooks(t *testing.T) {
 					"url": "/foo",
 					"method": "BAR"
 				`)) // closing } is missing
-		wh := NewWebHook(nil, conf)
+		wh := NewWebHook(&resilientClientProvider{}, conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -513,7 +528,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/bad_template.jsonnet"))
-		wh := NewWebHook(nil, conf)
+		wh := NewWebHook(&resilientClientProvider{}, conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -553,7 +568,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/test_body.jsonnet"))
-			wh := NewWebHook(nil, conf)
+			wh := NewWebHook(&resilientClientProvider{}, conf)
 
 			err := wh.ExecuteLoginPreHook(nil, req, f)
 			if tc.mustSuccess {

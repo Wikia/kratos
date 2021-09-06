@@ -7,8 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
 	"github.com/luna-duclos/instrumentedsql/opentracing"
+	"github.com/ory/x/httpx"
 
 	"github.com/ory/kratos/corp"
 
@@ -60,6 +62,7 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
+	rc  *retryablehttp.Client
 
 	injectedSelfserviceHooks map[string]func(config.SelfServiceHook) interface{}
 
@@ -646,4 +649,11 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 		m.pmm = prometheus.NewMetricsManager("kratos", m.buildVersion, m.buildHash, m.buildDate)
 	}
 	return m.pmm
+}
+
+func (m *RegistryDefault) GetResilientClient() *retryablehttp.Client {
+	if m.rc == nil {
+		m.rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
+	}
+	return m.rc
 }

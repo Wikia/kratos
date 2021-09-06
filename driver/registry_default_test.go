@@ -65,7 +65,7 @@ func TestDriverDefault_Hooks(t *testing.T) {
 
 				expectedExecutors := tc.expect(reg)
 				require.Len(t, h, len(expectedExecutors))
-				assert.Equal(t, expectedExecutors, h)
+				assert.EqualValues(t, expectedExecutors, h)
 			})
 		}
 	})

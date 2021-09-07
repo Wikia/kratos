@@ -130,6 +130,8 @@ type Registry interface {
 	recovery.StrategyProvider
 
 	x.CSRFTokenGeneratorProvider
+
+	x.ResilientClientProvider
 }
 
 func NewRegistryFromDSN(c *config.Config, l *logrusx.Logger) (Registry, error) {

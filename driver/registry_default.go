@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
 	"github.com/luna-duclos/instrumentedsql/opentracing"
 
@@ -127,6 +128,7 @@ type RegistryDefault struct {
 	buildDate    string
 
 	csrfTokenGenerator x.CSRFToken
+	httpClientProvider x.HttpClientProvider
 }
 
 func (m *RegistryDefault) Audit() *logrusx.Logger {
@@ -238,6 +240,13 @@ func (m *RegistryDefault) CSRFHandler() x.CSRFHandler {
 		panic("csrf handler is not set")
 	}
 	return m.nosurf
+}
+
+func (m *RegistryDefault) HttpClient() *retryablehttp.Client {
+	if m.httpClientProvider == nil {
+		m.httpClientProvider = x.NewResilientHttpClient(m.Logger())
+	}
+	return m.httpClientProvider.HttpClient()
 }
 
 func (m *RegistryDefault) Config(ctx context.Context) *config.Config {

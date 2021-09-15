@@ -57,6 +57,7 @@ type dependencies interface {
 
 	x.LoggingProvider
 	x.CookieProvider
+	x.CSRFProvider
 	x.CSRFTokenGeneratorProvider
 	x.WriterProvider
 
@@ -139,6 +140,12 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 	wrappedHandleCallback := strategy.IsDisabled(s.d, s.ID().String(), s.handleCallback)
 	if handle, _, _ := r.Lookup("GET", RouteCallback); handle == nil {
 		r.GET(RouteCallback, wrappedHandleCallback)
+	}
+
+	// Apple uses POST, maybe other providers as well
+	if handle, _, _ := r.Lookup("POST", RouteCallback); handle == nil {
+		r.POST(RouteCallback, wrappedHandleCallback)
+		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
 	}
 }
 

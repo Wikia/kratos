@@ -208,6 +208,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		e.d.Writer().Write(w, r, &APIFlowResponse{Flow: updatedFlow, Identity: i})
 		return nil
 	}
+	e.d.Logger().Debug("This is not an api flow")
 
 	return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
 		x.SecureRedirectOverrideDefaultReturnTo(

@@ -214,6 +214,13 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 		state = r.URL.Query().Get("state")
 	)
 
+	if r.Method == http.MethodPost {
+		if err := r.ParseForm(); err == nil {
+			code = r.Form.Get("code")
+			state = r.Form.Get( "state ")
+		}
+	}
+
 	if state == "" {
 		return nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the state query parameter.`))
 	}

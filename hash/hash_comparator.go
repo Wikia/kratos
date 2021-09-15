@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"github.com/gofrs/uuid"
 	"github.com/hashicorp/go-retryablehttp"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -295,7 +294,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 	// Allow to override service path for local setup
 	serviceUrl, isConfigured := os.LookupEnv("IDENTITY_MAPPER_URL")
 	if !isConfigured {
-		serviceUrl = "http://identity-mapper"
+		return "", fmt.Errorf("identity-mapper url is not configured")
 	}
 	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/appId/community_platform/" + identityId.String(), []byte(""))
 	if err != nil {
@@ -316,19 +315,10 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 		return "", fmt.Errorf("empty response provided from identity-mapper")
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.Wrap(err, "could not read response body from identity-mapper")
-	}
-	defer func(Body io.ReadCloser) {
-		if closeErr := Body.Close(); closeErr != nil {
-			err = closeErr
-		}
-	}(resp.Body)
-
 	mapping := new(SingleMapping)
-	if err = json.Unmarshal(body, &mapping); err != nil {
-		return "", errors.Wrap(err, "identity-mapper response could not be unmarshalled properly")
+	err = json.NewDecoder(resp.Body).Decode(&mapping)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to decode identity-mapper response")
 	}
 	return *mapping.UserId, nil
 }

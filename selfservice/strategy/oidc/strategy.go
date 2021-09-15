@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"github.com/ory/kratos/text"
@@ -148,8 +149,12 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
 
 		r.POST(RouteCallback, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+			publicUrl := s.d.Config(r.Context()).SelfPublicURL(r)
+			dest := r.URL
+			dest.Host = publicUrl.Host
+			dest.Scheme = publicUrl.Scheme
 			if err := r.ParseForm(); err == nil {
-				q := r.URL.Query()
+				q := dest.Query()
 				for key, values := range r.Form {   // range over map
 					for _, value := range values {    // range over []string
 						q.Add(key, value)
@@ -157,7 +162,9 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 				}
 				r.URL.RawQuery = q.Encode()
 			}
-			http.Redirect(w, r , r.URL.String(), http.StatusFound)
+			dest.Path = filepath.Join(publicUrl.Path + dest.Path)
+
+			http.Redirect(w, r , dest.String(), http.StatusFound)
 		})
 	}
 }

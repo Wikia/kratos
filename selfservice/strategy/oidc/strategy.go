@@ -209,10 +209,9 @@ func (s *Strategy) validateFlow(ctx context.Context, r *http.Request, rid uuid.U
 }
 
 func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flow.Flow, *authCodeContainer, error) {
-	var (
-		code  = r.URL.Query().Get("code")
-		state = r.URL.Query().Get("state")
-	)
+	code  := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+
 	s.d.Logger().Infof("Got the callback to %s, method %s", r.URL.Path, r.Method)
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err == nil {
@@ -224,6 +223,7 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 			s.d.Logger().Error("Could not parse the form")
 		}
 	}
+	s.d.Logger().Infof("After the condition state is %s", state)
 
 	if state == "" {
 		return nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the state query parameter.`))

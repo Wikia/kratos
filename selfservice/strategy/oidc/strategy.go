@@ -213,11 +213,15 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 		code  = r.URL.Query().Get("code")
 		state = r.URL.Query().Get("state")
 	)
-
+	s.d.Logger().Infof("Got the callback to %s, method %s", r.URL.Path, r.Method)
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err == nil {
+			s.d.Logger().Info("Form parsed")
 			code = r.Form.Get("code")
 			state = r.Form.Get( "state ")
+			s.d.Logger().Infof("form values: code %s, state %s", code, state)
+		} else {
+			s.d.Logger().Error("Could not parse the form")
 		}
 	}
 

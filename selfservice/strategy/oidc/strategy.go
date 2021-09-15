@@ -144,8 +144,21 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 
 	// Apple uses POST, maybe other providers as well
 	if handle, _, _ := r.Lookup("POST", RouteCallback); handle == nil {
-		r.POST(RouteCallback, wrappedHandleCallback)
-		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
+		//r.POST(RouteCallback, wrappedHandleCallback)
+		//s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
+
+		r.POST(RouteCallback, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+			if err := r.ParseForm(); err == nil {
+				q := r.URL.Query()
+				for key, values := range r.Form {   // range over map
+					for _, value := range values {    // range over []string
+						q.Add(key, value)
+					}
+				}
+				r.URL.RawQuery = q.Encode()
+			}
+			http.Redirect(w, r , r.URL.String(), http.StatusFound)
+		})
 	}
 }
 
@@ -240,11 +253,13 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 		return nil, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the query state parameter does not match the state parameter from the session cookie.`))
 	}
 
+
 	req, err := s.validateFlow(r.Context(), r, x.ParseUUID(cntnr.FlowID))
 	if err != nil {
 		return nil, &cntnr, err
 	}
 
+	// TBD - fix, this can be a POST request
 	if r.URL.Query().Get("error") != "" {
 		return req, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider returned error "%s": %s`, r.URL.Query().Get("error"), r.URL.Query().Get("error_description")))
 	}

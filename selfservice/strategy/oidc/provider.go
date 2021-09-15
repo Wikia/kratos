@@ -27,7 +27,7 @@ type Claims struct {
 	Picture             string `json:"picture,omitempty"`
 	Website             string `json:"website,omitempty"`
 	Email               string `json:"email,omitempty"`
-	EmailVerified       bool   `json:"email_verified,omitempty"`
+	EmailVerified       bool   `json:"email_verified,string,omitempty"`
 	Gender              string `json:"gender,omitempty"`
 	Birthdate           string `json:"birthdate,omitempty"`
 	Zoneinfo            string `json:"zoneinfo,omitempty"`

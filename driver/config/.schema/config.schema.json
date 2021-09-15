@@ -276,7 +276,8 @@
             "facebook",
             "auth0",
             "vk",
-            "yandex"
+            "yandex",
+            "apple"
           ],
           "examples": [
             "google"

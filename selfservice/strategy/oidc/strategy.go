@@ -145,7 +145,7 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 	// Apple uses POST, maybe other providers as well
 	if handle, _, _ := r.Lookup("POST", RouteCallback); handle == nil {
 		//r.POST(RouteCallback, wrappedHandleCallback)
-		//s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
+		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
 
 		r.POST(RouteCallback, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			if err := r.ParseForm(); err == nil {

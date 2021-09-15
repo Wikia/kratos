@@ -1,6 +1,10 @@
 package oidc
 
-import "net/url"
+import (
+	"net/url"
+
+	"golang.org/x/oauth2"
+)
 
 type ProviderApple struct {
 	*ProviderGenericOIDC

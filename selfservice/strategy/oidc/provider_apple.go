@@ -35,7 +35,7 @@ func (g *ProviderApple) AuthCodeURLOptions(r ider) []oauth2.AuthCodeOption {
 	}
 
 	// todo - add this only when email or name is requested
-	//options = append(options, oauth2.SetAuthURLParam("response_mode", "form_post"))
+	options = append(options, oauth2.SetAuthURLParam("response_mode", "form_post"))
 
 	return options
 }

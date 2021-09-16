@@ -408,6 +408,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	var rand, _ = uuid.DefaultGenerator.NewV1()
 	h.d.Logger().WithRequest(r).Debug("Weird things happening here ", rand)
 	if err != nil {
+		h.d.Logger().WithRequest(r).Debug("1")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, nil, nil, err)
 		return
 	}
@@ -415,9 +416,11 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	h.d.Logger().WithRequest(r).Debug("save settings ", rand)
 	f, err := h.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), rid)
 	if errors.Is(err, sqlcon.ErrNoRows) {
+		h.d.Logger().WithRequest(r).Debug("2")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, nil, nil, errors.WithStack(herodot.ErrNotFound.WithReasonf("The settings request could not be found. Please restart the flow.")))
 		return
 	} else if err != nil {
+		h.d.Logger().WithRequest(r).Debug("3")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, nil, nil, err)
 		return
 	}
@@ -430,12 +433,14 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 			return
 		}
 
+		h.d.Logger().WithRequest(r).Debug("4")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, nil, err)
 		return
 	}
 
 	h.d.Logger().WithRequest(r).Debug("check if flow valid ", rand)
 	if err := f.Valid(ss); err != nil {
+		h.d.Logger().WithRequest(r).Debug("5")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
 	}
@@ -453,6 +458,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 		} else if errors.Is(err, flow.ErrCompletedByStrategy) {
 			return
 		} else if err != nil {
+			h.d.Logger().WithRequest(r).Debug("6")
 			h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, strat.NodeGroup(), f, ss.Identity, err)
 			return
 		}
@@ -465,6 +471,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	h.d.Logger().WithRequest(r).Debug("check context for update ", rand)
 	if updateContext == nil {
 		c := &UpdateContext{Session: ss, Flow: f}
+		h.d.Logger().WithRequest(r).Debug("7")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, c.GetIdentityToUpdate(), errors.WithStack(schema.NewNoSettingsStrategyResponsible()))
 		return
 	}
@@ -472,6 +479,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 1 ", rand)
 	defer h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2 ", rand)
 	if err := h.d.SettingsHookExecutor().PostSettingsHook(w, r, s, updateContext, updateContext.GetIdentityToUpdate()); err != nil {
+		h.d.Logger().WithRequest(r).Debug("8")
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
 	}

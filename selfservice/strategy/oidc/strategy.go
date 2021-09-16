@@ -145,9 +145,11 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 
 	// Apple uses POST, maybe other providers as well
 	if handle, _, _ := r.Lookup("POST", RouteCallback); handle == nil {
-		//r.POST(RouteCallback, wrappedHandleCallback)
 		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
 
+
+		//r.POST(RouteCallback, wrappedHandleCallback)
+		// handler won't work with POST due missing cookies, adding a POST->GET redirect
 		r.POST(RouteCallback, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			publicUrl := s.d.Config(r.Context()).SelfPublicURL(r)
 			dest := r.URL
@@ -234,19 +236,6 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 		state = r.URL.Query().Get("state")
 	)
 
-	s.d.Logger().Infof("Got the callback to %s, method %s", r.URL.Path, r.Method)
-	if r.Method == http.MethodPost {
-		if err := r.ParseForm(); err == nil {
-			s.d.Logger().Info("Form parsed")
-			code = r.Form.Get("code")
-			state = r.Form.Get( "state")
-			s.d.Logger().Infof("form values: code %s, state %s", code, state)
-		} else {
-			s.d.Logger().Error("Could not parse the form")
-		}
-	}
-	s.d.Logger().Infof("After the condition state is %s", state)
-
 	if state == "" {
 		return nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the state query parameter.`))
 	}
@@ -266,7 +255,6 @@ func (s *Strategy) validateCallback(w http.ResponseWriter, r *http.Request) (flo
 		return nil, &cntnr, err
 	}
 
-	// TBD - fix, this can be a POST request
 	if r.URL.Query().Get("error") != "" {
 		return req, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider returned error "%s": %s`, r.URL.Query().Get("error"), r.URL.Query().Get("error_description")))
 	}

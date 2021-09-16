@@ -97,11 +97,12 @@ func WithCallback(cb func(ctxUpdate *UpdateContext) error) func(o *postSettingsH
 }
 
 func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, settingsType string, ctxUpdate *UpdateContext, i *identity.Identity, opts ...PostSettingsHookOption) error {
+	var rand, _ = uuid.DefaultGenerator.NewV1()
 	e.d.Logger().
 		WithRequest(r).
 		WithField("identity_id", i.ID).
 		WithField("flow_method", settingsType).
-		Debug("Running PostSettingsPrePersistHooks.")
+		Debug("Running PostSettingsPrePersistHooks. ", rand)
 
 	config := new(postSettingsHookOptions)
 	for _, f := range opts {
@@ -126,7 +127,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			return err
 		}
 
-		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully.")
+		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully. ", rand)
 	}
 
 	options := []identity.ManagerOption{identity.ManagerExposeValidationErrorsForInternalTypeAssertion}
@@ -148,7 +149,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	e.d.Audit().
 		WithRequest(r).
 		WithField("identity_id", i.ID).
-		Debug("An identity's settings have been updated.")
+		Debug("An identity's settings have been updated. ", rand)
 
 	ctxUpdate.UpdateIdentity(i)
 	ctxUpdate.Flow.State = StateSuccess
@@ -177,7 +178,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			WithField("executors", PostHookPostPersistExecutorNames(e.d.PostSettingsPostPersistHooks(r.Context(), settingsType))).
 			WithField("identity_id", i.ID).
 			WithField("flow_method", settingsType).
-			Debug("Eggzecutor run")
+			Debug("Eggzecutor run ", rand)
 		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().
@@ -199,15 +200,15 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			WithField("executors", PostHookPostPersistExecutorNames(e.d.PostSettingsPostPersistHooks(r.Context(), settingsType))).
 			WithField("identity_id", i.ID).
 			WithField("flow_method", settingsType).
-			Debug("ExecuteSettingsPostPersistHook completed successfully.")
+			Debug("ExecuteSettingsPostPersistHook completed successfully. ", rand)
 	}
 
 	e.d.Logger().
 		WithRequest(r).
 		WithField("identity_id", i.ID).
 		WithField("flow_method", settingsType).
-		Debug("Completed all PostSettingsPrePersistHooks and PostSettingsPostPersistHooks.")
-	e.d.Logger().Debug("Let's check the flow type")
+		Debug("Completed all PostSettingsPrePersistHooks and PostSettingsPostPersistHooks. ", rand)
+	e.d.Logger().Debug("Let's check the flow type ", rand)
 	if ctxUpdate.Flow.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 		updatedFlow, err := e.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), ctxUpdate.Flow.ID)
 		if err != nil {
@@ -217,7 +218,6 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		e.d.Writer().Write(w, r, &APIFlowResponse{Flow: updatedFlow, Identity: i})
 		return nil
 	}
-	var rand, _ = uuid.DefaultGenerator.NewV1()
 	e.d.Logger().Debug("This is not an api flow", rand)
 	time.Sleep(time.Second)
 	defer e.d.Logger().Debug("finished returning", rand)

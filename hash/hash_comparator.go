@@ -296,7 +296,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 	if !isConfigured {
 		return "", fmt.Errorf("identity-mapper url is not configured")
 	}
-	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/appId/community_platform/" + identityId.String(), nil)
+	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/mapping/app/community_platform/identity/" + identityId.String(), nil)
 	if err != nil {
 		return "", err
 	}

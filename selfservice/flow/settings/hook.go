@@ -124,6 +124,8 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
 				return nil
 			}
+			e.d.Logger().WithRequest(r).WithFields(logFields).
+				Error("Hook error: ", err)
 			return err
 		}
 

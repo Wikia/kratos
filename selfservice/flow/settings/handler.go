@@ -404,13 +404,15 @@ type submitSelfServiceSettingsFlowBody struct{}
 //       500: jsonError
 func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	rid, err := GetFlowID(r)
-	h.d.Logger().WithRequest(r).Debug("Weird things happening here")
+
+	var rand, _ = uuid.DefaultGenerator.NewV1()
+	h.d.Logger().WithRequest(r).Debug("Weird things happening here ", rand)
 	if err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, nil, nil, err)
 		return
 	}
 
-	h.d.Logger().WithRequest(r).Debug("save settings")
+	h.d.Logger().WithRequest(r).Debug("save settings ", rand)
 	f, err := h.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), rid)
 	if errors.Is(err, sqlcon.ErrNoRows) {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, nil, nil, errors.WithStack(herodot.ErrNotFound.WithReasonf("The settings request could not be found. Please restart the flow.")))
@@ -420,7 +422,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 		return
 	}
 
-	h.d.Logger().WithRequest(r).Debug("get session")
+	h.d.Logger().WithRequest(r).Debug("get session ", rand)
 	ss, err := h.d.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
 		if f.Type == flow.TypeBrowser && !x.IsJSONRequest(r) {
@@ -432,7 +434,7 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 		return
 	}
 
-	h.d.Logger().WithRequest(r).Debug("check if flow valid")
+	h.d.Logger().WithRequest(r).Debug("check if flow valid ", rand)
 	if err := f.Valid(ss); err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
@@ -441,11 +443,11 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	var s string
 	var updateContext *UpdateContext
 
-	h.d.Logger().WithRequest(r).Debug("get context")
+	h.d.Logger().WithRequest(r).Debug("get context ", rand)
 	for _, strat := range h.d.AllSettingsStrategies() {
 		uc, err := strat.Settings(w, r, f, ss)
 
-		h.d.Logger().WithRequest(r).Debug("some strategy %v", strat.SettingsStrategyID())
+		h.d.Logger().WithRequest(r).Debug("some strategy %v %v ", rand, strat.SettingsStrategyID())
 		if errors.Is(err, flow.ErrStrategyNotResponsible) {
 			continue
 		} else if errors.Is(err, flow.ErrCompletedByStrategy) {
@@ -460,19 +462,18 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 		break
 	}
 
-	h.d.Logger().WithRequest(r).Debug("check context for update")
+	h.d.Logger().WithRequest(r).Debug("check context for update ", rand)
 	if updateContext == nil {
 		c := &UpdateContext{Session: ss, Flow: f}
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, c.GetIdentityToUpdate(), errors.WithStack(schema.NewNoSettingsStrategyResponsible()))
 		return
 	}
-	var rand, _ = uuid.DefaultGenerator.NewV1()
 
-	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 1", rand)
-
+	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 1 ", rand)
+	defer h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2 ", rand)
 	if err := h.d.SettingsHookExecutor().PostSettingsHook(w, r, s, updateContext, updateContext.GetIdentityToUpdate()); err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
 	}
-	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2", rand)
+
 }

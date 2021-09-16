@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gofrs/uuid"
+
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
 
@@ -169,6 +171,13 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	}
 
 	for k, executor := range e.d.PostSettingsPostPersistHooks(r.Context(), settingsType) {
+		e.d.Logger().WithRequest(r).
+			WithField("executor", fmt.Sprintf("%T", executor)).
+			WithField("executor_position", k).
+			WithField("executors", PostHookPostPersistExecutorNames(e.d.PostSettingsPostPersistHooks(r.Context(), settingsType))).
+			WithField("identity_id", i.ID).
+			WithField("flow_method", settingsType).
+			Debug("Eggzecutor run")
 		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().
@@ -208,8 +217,10 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		e.d.Writer().Write(w, r, &APIFlowResponse{Flow: updatedFlow, Identity: i})
 		return nil
 	}
-	e.d.Logger().Debug("This is not an api flow")
-
+	var rand, _ = uuid.DefaultGenerator.NewV1()
+	e.d.Logger().Debug("This is not an api flow", rand)
+	time.Sleep(time.Second)
+	defer e.d.Logger().Debug("finished returning", rand)
 	return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
 		x.SecureRedirectOverrideDefaultReturnTo(
 			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,

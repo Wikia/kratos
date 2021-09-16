@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gofrs/uuid"
+
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/x/sqlcon"
 
@@ -464,11 +466,13 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, c.GetIdentityToUpdate(), errors.WithStack(schema.NewNoSettingsStrategyResponsible()))
 		return
 	}
+	var rand, _ = uuid.DefaultGenerator.NewV1()
 
-	h.d.Logger().WithRequest(r).Debug("Weird things happening here")
+	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 1", rand)
 
 	if err := h.d.SettingsHookExecutor().PostSettingsHook(w, r, s, updateContext, updateContext.GetIdentityToUpdate()); err != nil {
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
 	}
+	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2", rand)
 }

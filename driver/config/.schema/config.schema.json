@@ -347,6 +347,30 @@
             "contoso.onmicrosoft.com"
           ]
         },
+        "team_id": {
+          "title": "Apple Developer Team ID",
+          "description": "Apple Developer Team ID needed for generating a JWT token for client secret",
+          "type": "string",
+          "examples": [
+            "KP76DQS54M"
+          ]
+        },
+        "private_key_id": {
+          "title": "Apple Private Key Identifier",
+          "description": "Sign In with Apple Private Key Identifier needed for generating a JWT token for client secret",
+          "type": "string",
+          "examples": [
+            "UX56C66723"
+          ]
+        },
+        "private_key": {
+          "title": "Apple Private Key",
+          "description": "Sign In with Apple Private Key needed for generating a JWT token for client secret",
+          "type": "string",
+          "examples": [
+            "-----BEGIN PRIVATE KEY-----\n........\n-----END PRIVATE KEY-----"
+          ]
+        },
         "requested_claims": {
           "$ref": "#/definitions/OIDCClaims"
         }

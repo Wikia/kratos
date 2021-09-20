@@ -96,7 +96,7 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 
 	r.RegisterPublicRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
-	n.Use(&ChaosMiddleware{})
+	n.Use(&ChaosMiddleware{l: r.Logger()})
 	n.Use(reqlog.NewMiddlewareFromLogger(l, "public#"+c.SelfPublicURL(nil).String()))
 	n.Use(sqa(ctx, cmd, r))
 	n.Use(r.PrometheusManager())

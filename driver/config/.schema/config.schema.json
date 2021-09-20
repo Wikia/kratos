@@ -380,6 +380,7 @@
         "id",
         "provider",
         "client_id",
+        "client_secret",
         "mapper_url"
       ],
       "if": {
@@ -406,36 +407,6 @@
             "tenant"
           ]
         }
-      },
-      "if": {
-        "properties": {
-          "provider": {
-            "const": "apple"
-          }
-        },
-        "required": [
-          "provider"
-        ]
-      },
-      "then": {
-        "not": {
-          "properties": {
-            "client_secret": {}
-          },
-          "required": [
-            "client_secret"
-          ]
-        },
-        "required": [
-          "private_key_id",
-          "private_key",
-          "team_id"
-        ]
-      },
-      "else": {
-        "required": [
-          "client_secret"
-        ]
       }
     },
     "selfServiceHooks": {

@@ -148,6 +148,6 @@ func SecureContentNegotiationRedirection(
 		log.Default().Printf("try to redirect")
 		http.Redirect(w, r, ret.String(), http.StatusFound)
 	}
-
+	log.Default().Printf("say woot?")
 	return nil
 }

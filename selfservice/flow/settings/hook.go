@@ -222,7 +222,11 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	}
 	e.d.Logger().Debug("This is not an api flow", rand)
 	time.Sleep(time.Second)
-	defer e.d.Logger().Debug("finished returning", rand)
+	defer func() {
+		e.d.Logger().Debug("finished returning", rand)
+		time.Sleep(time.Second)
+		e.d.Logger().Debug("finished returning2", rand)
+	}()
 	return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
 		x.SecureRedirectOverrideDefaultReturnTo(
 			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,

@@ -477,9 +477,12 @@ func (h *Handler) submitSettingsFlow(w http.ResponseWriter, r *http.Request, ps 
 	}
 
 	h.d.Logger().WithRequest(r).Debug("Weird things happening here < 1 ", rand)
-	defer h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2 ", rand)
+	defer func() {
+		time.Sleep(time.Second)
+		h.d.Logger().WithRequest(r).Debug("Weird things happening here < 2 ", rand)
+	}()
 	if err := h.d.SettingsHookExecutor().PostSettingsHook(w, r, s, updateContext, updateContext.GetIdentityToUpdate()); err != nil {
-		h.d.Logger().WithRequest(r).Debug("8")
+		h.d.Logger().WithRequest(r).Debug("So much fail ", rand)
 		h.d.SettingsFlowErrorHandler().WriteFlowError(w, r, node.DefaultGroup, f, ss.Identity, err)
 		return
 	}

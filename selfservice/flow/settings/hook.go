@@ -137,6 +137,10 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	if ctxUpdate.Session.AuthenticatedAt.Add(ttl).After(time.Now()) {
 		options = append(options, identity.ManagerAllowWriteProtectedTraits)
 	}
+	e.d.Audit().
+		WithRequest(r).
+		WithField("identity_id", i.ID).
+		Debug("Starting update. ", rand)
 
 	if err := e.d.IdentityManager().Update(r.Context(), i, options...); err != nil {
 		if errors.Is(err, identity.ErrProtectedFieldModified) {
@@ -161,18 +165,35 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 
+	e.d.Audit().
+		WithRequest(r).
+		WithField("identity_id", i.ID).
+		Debug("New settings flow ", rand)
 	newFlow, err := e.d.SettingsHandler().NewFlow(w, r, i, ctxUpdate.Flow.Type)
 	if err != nil {
 		return err
 	}
 
+	e.d.Audit().
+		WithRequest(r).
+		WithField("identity_id", i.ID).
+		Debug("New settings flow fin", rand)
 	ctxUpdate.Flow.UI = newFlow.UI
 	ctxUpdate.Flow.UI.ResetMessages()
 	ctxUpdate.Flow.UI.AddMessage(node.DefaultGroup, text.NewInfoSelfServiceSettingsUpdateSuccess())
+
+	e.d.Audit().
+		WithRequest(r).
+		WithField("identity_id", i.ID).
+		Debug("Update settings flow ", rand)
 	if err := e.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
 		return err
 	}
 
+	e.d.Audit().
+		WithRequest(r).
+		WithField("identity_id", i.ID).
+		Debug("Update settings flow fin, start hooks ", rand)
 	for k, executor := range e.d.PostSettingsPostPersistHooks(r.Context(), settingsType) {
 		e.d.Logger().WithRequest(r).
 			WithField("executor", fmt.Sprintf("%T", executor)).

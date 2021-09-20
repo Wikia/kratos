@@ -2,8 +2,11 @@ package daemon
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 	"sync"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/ory/kratos/selfservice/flow/recovery"
 
@@ -92,6 +95,7 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 
 	r.RegisterPublicRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
+	n.Use(&ChaosMiddleware{})
 	n.Use(reqlog.NewMiddlewareFromLogger(l, "public#"+c.SelfPublicURL(nil).String()))
 	n.Use(sqa(ctx, cmd, r))
 	n.Use(r.PrometheusManager())
@@ -145,6 +149,7 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 	router := x.NewRouterAdmin()
 	r.RegisterAdminRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
+	n.Use(&ChaosMiddleware{})
 	n.Use(reqlog.NewMiddlewareFromLogger(l, "admin#"+c.SelfPublicURL(nil).String()))
 	n.Use(sqa(ctx, cmd, r))
 	n.Use(r.PrometheusManager())
@@ -176,6 +181,16 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 		l.Fatalf("Failed to gracefully shutdown admin httpd: %s", err)
 	}
 	l.Println("Admin httpd was shutdown gracefully")
+}
+
+type ChaosMiddleware struct {
+}
+
+func (m *ChaosMiddleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	var rand, _ = uuid.DefaultGenerator.NewV1()
+	log.Default().Printf("let's start %v", rand)
+	defer log.Default().Printf("let's finish %v", rand)
+	next(rw, r)
 }
 
 func sqa(ctx stdctx.Context, cmd *cobra.Command, d driver.Registry) *metricsx.Service {

@@ -1,7 +1,6 @@
 package x
 
 import (
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -118,21 +117,18 @@ func SecureContentNegotiationRedirection(
 	requestURL string, writer herodot.Writer, c *config.Config,
 	opts ...SecureRedirectOption,
 ) error {
-	log.Default().Printf("Let's switch")
+
 	switch httputil.NegotiateContentType(r, []string{
 		"text/html",
 		"application/json",
 	}, "text/html") {
 	case "application/json":
-		log.Default().Printf("json")
 		writer.Write(w, r, out)
 	case "text/html":
 
-		log.Default().Printf("html")
 		fallthrough
 	default:
 
-		log.Default().Printf("Let's redirect")
 		ret, err := SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
 			append([]SecureRedirectOption{
 				SecureRedirectUseSourceURL(requestURL),
@@ -141,13 +137,10 @@ func SecureContentNegotiationRedirection(
 			}, opts...)...,
 		)
 
-		log.Default().Printf("Let's redirect to %v %v", ret, err)
 		if err != nil {
 			return err
 		}
-		log.Default().Printf("try to redirect")
 		http.Redirect(w, r, ret.String(), http.StatusFound)
 	}
-	log.Default().Printf("say woot?")
 	return nil
 }

@@ -2,9 +2,10 @@ package daemon
 
 import (
 	"crypto/tls"
-	"log"
 	"net/http"
 	"sync"
+
+	"github.com/ory/x/logrusx"
 
 	"github.com/gofrs/uuid"
 
@@ -149,7 +150,7 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 	router := x.NewRouterAdmin()
 	r.RegisterAdminRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
-	n.Use(&ChaosMiddleware{})
+	n.Use(&ChaosMiddleware{l: r.Logger()})
 	n.Use(reqlog.NewMiddlewareFromLogger(l, "admin#"+c.SelfPublicURL(nil).String()))
 	n.Use(sqa(ctx, cmd, r))
 	n.Use(r.PrometheusManager())
@@ -184,12 +185,13 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 }
 
 type ChaosMiddleware struct {
+	l *logrusx.Logger
 }
 
 func (m *ChaosMiddleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	var rand, _ = uuid.DefaultGenerator.NewV1()
-	log.Default().Printf("let's start %v", rand)
-	defer log.Default().Printf("let's finish %v", rand)
+	m.l.Printf("let's start %v", rand)
+	defer m.l.Printf("let's finish %v", rand)
 	next(rw, r)
 }
 

@@ -69,11 +69,15 @@ func (a *ProviderApple) newClientSecret() (string, error) {
 
 func (a *ProviderApple) oauth2() (*oauth2.Config, error) {
 	// Apple requires a JWT token that acts as a client secret
-	secret, err := a.newClientSecret()
-	if err != nil {
-		return nil, err
+	// This token is short lived so it is recommended to provide private key details and team id
+	// in apple provider config so the JWT token can be generated on the fly
+	if a.config.PrivateKeyId != "" {
+		secret, err := a.newClientSecret()
+		if err != nil {
+			return nil, err
+		}
+		a.config.ClientSecret = secret
 	}
-	a.config.ClientSecret = secret
 
 	endpoint := oauth2.Endpoint{
 		AuthURL:  a.config.IssuerURL + "/auth/authorize",

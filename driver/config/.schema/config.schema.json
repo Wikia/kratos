@@ -407,6 +407,26 @@
             "tenant"
           ]
         }
+      },
+      "if": {
+        "properties": {
+          "provider": {
+            "const": "apple"
+          }
+        },
+        "required": [
+          "provider"
+        ]
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "client_secret": {}
+          },
+          "required": [
+            "client_secret"
+          ]
+        }
       }
     },
     "selfServiceHooks": {

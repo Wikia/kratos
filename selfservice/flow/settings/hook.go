@@ -14,13 +14,11 @@ import (
 	"github.com/ory/kratos/schema"
 	"github.com/ory/x/sqlcon"
 
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
-
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/x"
+	"github.com/pkg/errors"
 )
 
 type (
@@ -109,29 +107,6 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		f(config)
 	}
 
-	for k, executor := range e.d.PostSettingsPrePersistHooks(r.Context(), settingsType) {
-		logFields := logrus.Fields{
-			"executor":          fmt.Sprintf("%T", executor),
-			"executor_position": k,
-			"executors":         PostHookPrePersistExecutorNames(e.d.PostSettingsPrePersistHooks(r.Context(), settingsType)),
-			"identity_id":       i.ID,
-			"flow_method":       settingsType,
-		}
-
-		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i); err != nil {
-			if errors.Is(err, ErrHookAbortRequest) {
-				e.d.Logger().WithRequest(r).WithFields(logFields).
-					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
-				return nil
-			}
-			e.d.Logger().WithRequest(r).WithFields(logFields).
-				Error("Hook error: ", err)
-			return err
-		}
-
-		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully. ", rand)
-	}
-
 	options := []identity.ManagerOption{identity.ManagerExposeValidationErrorsForInternalTypeAssertion}
 	ttl := e.d.Config(r.Context()).SelfServiceFlowSettingsPrivilegedSessionMaxAge()
 	if ctxUpdate.Session.AuthenticatedAt.Add(ttl).After(time.Now()) {
@@ -184,6 +159,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 
 	e.d.Audit().
 		WithRequest(r).
+		WithField("identity_id", i.ID).
 		WithField("identity_id", i.ID).
 		Debug("Update settings flow ", rand)
 	if err := e.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {

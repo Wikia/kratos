@@ -9,7 +9,13 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"github.com/gofrs/uuid"
+	"github.com/hashicorp/go-retryablehttp"
+	"log"
+	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
@@ -28,8 +34,9 @@ var ErrEmptyPasswordCompare = fmt.Errorf("empty password provided")
 
 var hashSeparator = []byte("$")
 var bcryptLegacyPrefix = regexp.MustCompile(`^2[abzy]?$`)
-
-func Compare(ctx context.Context, cfg *config.Config, password []byte, hash []byte) error {
+//fandom-start - add param: identityId uuid.UUID
+func Compare(ctx context.Context, cfg *config.Config, identityId uuid.UUID, password []byte, hash []byte) error {
+//fandom-end
 	algorithm, realHash, err := ParsePasswordHash(hash)
 	if err != nil {
 		return errors.WithStack(err)
@@ -42,7 +49,7 @@ func Compare(ctx context.Context, cfg *config.Config, password []byte, hash []by
 		return CompareBcrypt(ctx, cfg, password, realHash)
 	//fandom-start
 	case bytes.Equal(algorithm, LegacyFandomHasherId):
-		return CompareLegacyFandom(ctx, cfg, password, realHash)
+		return CompareLegacyFandom(ctx, cfg, identityId, password, realHash)
 	//fandom-end
 	default:
 		return ErrUnknownHashAlgorithm
@@ -182,14 +189,13 @@ func decodeArgon2idHash(encodedHash []byte) (p *config.Argon2, salt, hash []byte
 var ErrLegacyFandomUnknownSubType = fmt.Errorf("unknown fandom hash subtype")
 var ErrLegacyFandomBadHashFormat = fmt.Errorf("unknown fandom hash format")
 var ErrLegacyFandomWrongHash = fmt.Errorf("bad fandom hash")
-var ErrLegacyFandomUnsupportedHash = fmt.Errorf("unsupported md5 hash")
 var legacyFandomOldPrefixWithSalt = []byte("B")
 var legacyFandomOldPrefixWithoutSalt = []byte("A")
 var legacyFandomHashTypeBcrypt = []byte("bcrypt")
 var legacyFandomHashTypeWrapped = []byte("wrapped")
 
 //CompareLegacyFandom will try to compare password against Fandom's legacy password hash
-func CompareLegacyFandom(_ context.Context, cfg *config.Config, password, hash []byte) error {
+func CompareLegacyFandom(_ context.Context, cfg *config.Config, identityId uuid.UUID, password, hash []byte) error {
 	if len(hash) == 0 {
 		return errors.WithStack(ErrEmptyHashCompare)
 	}
@@ -232,7 +238,7 @@ func CompareLegacyFandom(_ context.Context, cfg *config.Config, password, hash [
 		}
 		return nil
 	case bytes.Equal(splited[1], legacyFandomHashTypeWrapped):
-		hash, oldHash, err := prepareHashToCompare(splited[2:], password)
+		hash, oldHash, err := prepareHashToCompare(splited[2:], identityId, password)
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -256,7 +262,7 @@ func fandomCompareBcrypt(password, hash []byte) error {
 	return bcrypt.CompareHashAndPassword(hash, sha512)
 }
 
-func prepareHashToCompare(splitHash [][]byte, password []byte) (part, salted []byte, err error) {
+func prepareHashToCompare(splitHash [][]byte, identityId uuid.UUID, password []byte) (part, salted []byte, err error) {
 	// 3 types of old hash
 	if bytes.Equal(splitHash[0], legacyFandomOldPrefixWithSalt) { // Type B
 		if len(splitHash) < 3 {
@@ -271,12 +277,51 @@ func prepareHashToCompare(splitHash [][]byte, password []byte) (part, salted []b
 		return splitHash[1], md5HashPassword(password), nil
 	}
 
-	return nil, nil, ErrLegacyFandomUnsupportedHash
-	// this one we cannot easily support since we don't know Fandom User ID
-	//
-	// salt := strconv.FormatInt(userID, 10)
-	// return splitHash[0], md5HashPasswordWithSalt(password, salt)
+	userId, err := getCommunityPlatformUserId(identityId)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Default().Printf("Generating legacy hash for identity: %s", identityId.String())
+	return splitHash[0], md5HashPasswordWithSalt(password, []byte(userId)), nil
+}
 
+type SingleMapping struct {
+	IdentityId *string `json:"identityId,omitempty"`
+	UserId *string `json:"userId,omitempty"`
+}
+
+func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error) {
+	// Allow to override service path for local setup
+	serviceUrl, isConfigured := os.LookupEnv("IDENTITY_MAPPER_URL")
+	if !isConfigured {
+		log.Default().Printf("identity-mapper url is not configured")
+		return "", fmt.Errorf("identity-mapper url is not configured")
+	}
+	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/appId/community_platform/" + identityId.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Wikia-Internal-Request", "1")
+
+	client := retryablehttp.NewClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("identity-mapper call failed with response code %v", resp.StatusCode)
+	}
+	if resp == nil {
+		return "", fmt.Errorf("empty response provided from identity-mapper")
+	}
+
+	mapping := new(SingleMapping)
+	err = json.NewDecoder(resp.Body).Decode(&mapping)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to decode identity-mapper response")
+	}
+	return *mapping.UserId, nil
 }
 
 func md5HashPasswordWithSalt(password, salt []byte) []byte {

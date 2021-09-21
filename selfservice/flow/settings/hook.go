@@ -249,8 +249,9 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		time.Sleep(time.Second)
 		e.d.Logger().Debug("finished returning2", rand)
 	}()
-	return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
-		x.SecureRedirectOverrideDefaultReturnTo(
-			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,
-				ctxUpdate.Flow.AppendTo(e.d.Config(r.Context()).SelfServiceFlowSettingsUI()))))
+	return nil
+	//return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
+	//	x.SecureRedirectOverrideDefaultReturnTo(
+	//		e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,
+	//			ctxUpdate.Flow.AppendTo(e.d.Config(r.Context()).SelfServiceFlowSettingsUI()))))
 }

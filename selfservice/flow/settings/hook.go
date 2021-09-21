@@ -117,6 +117,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			"identity_id":       i.ID,
 			"flow_method":       settingsType,
 		}
+		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook started. ", rand)
 
 		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {

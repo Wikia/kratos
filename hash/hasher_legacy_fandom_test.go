@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/x/configx"
@@ -36,7 +37,8 @@ func TestComparatorLegacyFandomSuccess(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, hash.LegacyFandomHasherId, algorithm)
 
-			err = hash.CompareLegacyFandom(context.Background(), reg.Config(context.Background()), pw, realHash)
+			identityId, _ := uuid.NewV4()
+			err = hash.CompareLegacyFandom(context.Background(), reg.Config(context.Background()), identityId, pw, realHash)
 			assert.Nil(t, err, "hash validation fails")
 		})
 	}
@@ -60,7 +62,8 @@ func TestComparatorLegacyFandomFail(t *testing.T) {
 			copy(mod, pw)
 			mod[len(pw)-1] = ^mod[len(pw)-1]
 
-			err := hash.CompareLegacyFandom(context.Background(), p, pw, mod)
+			identityId, _ := uuid.NewV4()
+			err := hash.CompareLegacyFandom(context.Background(), p, identityId, pw, mod)
 			assert.Error(t, err)
 		})
 	}
@@ -90,8 +93,9 @@ func TestLegacyFandomCompare(t *testing.T) {
 			[]byte("$legacyfandom$8eebdbf2e66c2e4c7935b5244907c1b25e87b3a9247c678e88d2c484ddf2ead10e4b32c5a84aad8bfe87e72a85c65db0e00fd34df27352ea578903533ed422c663ca61f139c8aa647b2ca12a4b2a274835262539f1b5e7166bf615ee61be9ec177c6f6caf0ce3369adeb1902"),
 		},
 	} {
-		assert.Nil(t, hash.Compare(context.Background(), p, []byte("test"), testData[0]))
-		assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, []byte("test"), testData[1]))
-		assert.Error(t, hash.Compare(context.Background(), p, []byte("test"), testData[2]))
+		identityId, _ := uuid.NewV4()
+		assert.Nil(t, hash.Compare(context.Background(), p, identityId, []byte("test"), testData[0]))
+		assert.Nil(t, hash.CompareLegacyFandom(context.Background(), p, identityId, []byte("test"), testData[1]))
+		assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), testData[2]))
 	}
 }

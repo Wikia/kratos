@@ -1,0 +1,26 @@
+language: go
+cache:
+  directories:
+    - $HOME/.cache/go-build
+    - $HOME/gopath/pkg/mod
+matrix:
+  include:
+    - go: "1.16"
+services: docker
+before_install:
+  - ./ci/get_gotestsum.sh -b $(go env GOPATH)/bin v1.6.4
+  # pull rate limit workaround
+  - tmpdaemon=$(mktemp)
+  - sudo jq '."registry-mirrors" += ["https://mirror.gcr.io"]' /etc/docker/daemon.json > $tmpdaemon
+  - sudo mv $tmpdaemon /etc/docker/daemon.json
+  - sudo systemctl daemon-reload
+  - sudo systemctl restart docker
+  - docker system info
+install:
+  - go mod download
+script:
+  - gotestsum -- -p 1 -tags sqlite -count=1 ./...
+os:
+  - linux
+notifications:
+  email: false

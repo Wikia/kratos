@@ -36,6 +36,7 @@ services:
       - '4434:4434' # admin
     restart: unless-stopped
     environment:
+      - IDENTITY_MAPPER_URL=http://dev.poz-dev.k8s.wikia.net/identity-mapper
       - DSN=sqlite:///var/lib/sqlite/db.sqlite?_fk=true
       - LOG_LEVEL=trace
     command: serve -c /etc/config/kratos/kratos.yml --dev --watch-courier

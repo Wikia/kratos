@@ -63,8 +63,9 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow) 
 	if err := d.Decode(&o); err != nil {
 		return nil, herodot.ErrInternalServerError.WithReason("The password credentials could not be decoded properly").WithDebug(err.Error()).WithWrap(err)
 	}
-
-	if err := hash.Compare(r.Context(), s.d.Config(r.Context()), []byte(p.Password), []byte(o.HashedPassword)); err != nil {
+	//fandom-start - pass additional param: (identityId) i.ID
+	if err := hash.Compare(r.Context(), s.d.Config(r.Context()), i.ID, []byte(p.Password), []byte(o.HashedPassword)); err != nil {
+	//fandom-end
 		return nil, s.handleLoginError(w, r, f, &p, errors.WithStack(schema.NewInvalidCredentialsError()))
 	}
 

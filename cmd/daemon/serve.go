@@ -4,6 +4,10 @@ import (
 	"crypto/tls"
 	"net/http"
 	"sync"
+	"time"
+
+	"github.com/gofrs/uuid"
+	"github.com/ory/x/logrusx"
 
 	"github.com/ory/kratos/selfservice/flow/recovery"
 
@@ -79,6 +83,7 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 	c := r.Config(cmd.Context())
 	l := r.Logger()
 	n := negroni.New()
+	n.Use(&ChaosMiddleware{l})
 	n.Use(reqlog.NewMiddlewareFromLogger(l, "public#"+c.SelfPublicURL(nil).String()))
 	for _, mw := range modifiers.mwf {
 		n.UseFunc(mw)
@@ -176,6 +181,20 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 		l.Fatalf("Failed to gracefully shutdown admin httpd: %s", err)
 	}
 	l.Println("Admin httpd was shutdown gracefully")
+}
+
+type ChaosMiddleware struct {
+	l *logrusx.Logger
+}
+
+func (m *ChaosMiddleware) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	var rand, _ = uuid.DefaultGenerator.NewV1()
+	m.l.Printf("let's start %v", rand)
+	defer func() {
+		time.Sleep(2 * time.Second)
+		m.l.Printf("let's finish %v", rand)
+	}()
+	next(rw, r)
 }
 
 func sqa(ctx stdctx.Context, cmd *cobra.Command, d driver.Registry) *metricsx.Service {

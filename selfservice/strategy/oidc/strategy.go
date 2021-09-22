@@ -143,16 +143,22 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 		r.GET(RouteCallback, wrappedHandleCallback)
 	}
 
+	// ideally providers should expose information about the POST requests
+	// and we should check the config here to see if the code below is needed.
+	// also exempt path could be created based on provider id.
+	// passing ctx to setRoutes should allow us to read the
+	// configuration
+
 	// Apple uses POST, maybe other providers as well
 	if handle, _, _ := r.Lookup("POST", RouteCallback); handle == nil {
+		// hardcoded path forces the provider id to be "apple"
+		// also csrf exempt is for both GET and POST requests but only POST is needed
 		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
 
-
-		//r.POST(RouteCallback, wrappedHandleCallback)
 		// handler won't work with POST due missing cookies, adding a POST->GET redirect
 		r.POST(RouteCallback, func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			publicUrl := s.d.Config(r.Context()).SelfPublicURL(r)
-			dest := r.URL
+			dest := *r.URL
 			dest.Host = publicUrl.Host
 			dest.Scheme = publicUrl.Scheme
 			if err := r.ParseForm(); err == nil {

@@ -294,6 +294,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 	// Allow to override service path for local setup
 	serviceUrl, isConfigured := os.LookupEnv("IDENTITY_MAPPER_URL")
 	if !isConfigured {
+		log.Default().Printf("identity-mapper url is not configured")
 		return "", fmt.Errorf("identity-mapper url is not configured")
 	}
 	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/mapping/app/community_platform/identity/" + identityId.String(), nil)

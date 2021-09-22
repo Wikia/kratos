@@ -96,8 +96,14 @@ func (a *ProviderApple) AuthCodeURLOptions(r ider) []oauth2.AuthCodeOption {
 		options = append(options, oauth2.SetAuthURLParam("claims", string(a.config.RequestedClaims)))
 	}
 
-	// todo - add this only when email or name is requested
-	options = append(options, oauth2.SetAuthURLParam("response_mode", "form_post"))
+	// When requesting email or name, Apple requires the form_post response mode.
+	// This also means the return url will be called by Apple using POST method.
+	for _, scope := range a.config.Scope {
+		if scope == "email" || scope == "name" {
+			options = append(options, oauth2.SetAuthURLParam("response_mode", "form_post"))
+			break
+		}
+	}
 
 	return options
 }

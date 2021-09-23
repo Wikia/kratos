@@ -3,6 +3,7 @@ package oidc
 import (
 	"context"
 	"fmt"
+	"github.com/ory/kratos/x"
 	"net/url"
 
 	"github.com/bwmarrin/discordgo"
@@ -85,7 +86,7 @@ func (d *ProviderDiscord) Claims(ctx context.Context, exchange *oauth2.Token) (*
 		PreferredUsername: user.Username,
 		Picture:           user.AvatarURL(""),
 		Email:             user.Email,
-		EmailVerified:     user.Verified,
+		EmailVerified:     x.ConvertibleBoolean(user.Verified),
 		Locale:            user.Locale,
 	}
 

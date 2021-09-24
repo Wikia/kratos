@@ -69,6 +69,7 @@ type selfServiceLogoutUrl struct {
 	// LogoutURL can be opened in a browser to
 	//
 	// format: uri
+	// required: true
 	LogoutURL string `json:"logout_url"`
 }
 
@@ -248,7 +249,7 @@ func (h *Handler) submitLogout(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
-	if err := h.d.SessionPersister().RevokeSessionByToken(r.Context(), sess.Token); err != nil {
+	if err := h.d.SessionManager().PurgeFromRequest(r.Context(), w, r); err != nil {
 		h.d.SelfServiceErrorManager().Forward(r.Context(), w, r, err)
 		return
 	}

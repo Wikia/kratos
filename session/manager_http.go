@@ -60,7 +60,11 @@ func (s *ManagerHTTP) IssueCookieWithoutCSRF(ctx context.Context, w http.Respons
 }
 
 func (s *ManagerHTTP) issueCookiesAndCSRF(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session, generateCSRF bool) error {
-	cookie, _ := s.r.CookieManager(r.Context()).Get(r, s.cookieName(ctx))
+	cookie, err := s.r.CookieManager(r.Context()).Get(r, s.cookieName(ctx))
+	// Fix for https://github.com/ory/kratos/issues/1695
+	if err != nil && cookie == nil {
+		return errors.WithStack(err)
+	}
 
 	if s.r.Config(ctx).SessionPath() != "" {
 		cookie.Options.Path = s.r.Config(ctx).SessionPath()

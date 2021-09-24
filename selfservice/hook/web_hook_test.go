@@ -37,17 +37,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type resilientClientProvider struct {}
+type resilientClientProvider struct {
+	log *logrusx.Logger
+}
+func newResilientClient() *resilientClientProvider {
+	return &resilientClientProvider{
+		log: logrusx.New("kratos", "test"),
+	}
+}
 func (r *resilientClientProvider) GetResilientClient() *retryablehttp.Client {
 	return retryablehttp.NewClient()
 }
 
 func (r *resilientClientProvider) Logger() *logrusx.Logger {
-	return nil
+	return r.log
 }
 
 func (r *resilientClientProvider) Audit() *logrusx.Logger {
-	return nil
+	return r.log
 }
 
 func TestNoopAuthStrategy(t *testing.T) {
@@ -507,7 +514,7 @@ func TestWebHooks(t *testing.T) {
 								"body": "%s",
 								"auth": %s
 							}`, ts.URL+path, method, "./stub/test_body.jsonnet", auth.createAuthConfig()))
-							wh := NewWebHook(&resilientClientProvider{}, conf)
+							wh := NewWebHook(newResilientClient(), conf)
 
 							err := tc.callWebHook(wh, req, f, s, identity.CredentialsTypePassword)
 							if method == "GARBAGE" {
@@ -550,7 +557,7 @@ func TestWebHooks(t *testing.T) {
 		}
 		f := &login.Flow{ID: x.NewUUID()}
 		conf := json.RawMessage("not valid json")
-		wh := NewWebHook(&resilientClientProvider{}, conf)
+		wh := NewWebHook(newResilientClient(), conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -569,7 +576,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/bad_template.jsonnet"))
-		wh := NewWebHook(&resilientClientProvider{}, conf)
+		wh := NewWebHook(newResilientClient(), conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -609,7 +616,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/test_body.jsonnet"))
-			wh := NewWebHook(&resilientClientProvider{}, conf)
+			wh := NewWebHook(newResilientClient(), conf)
 
 			err := wh.ExecuteLoginPreHook(nil, req, f)
 			if tc.mustSuccess {

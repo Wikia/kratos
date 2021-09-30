@@ -19,6 +19,8 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 
+	"github.com/ory/kratos/ui/node"
+
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
@@ -59,16 +61,16 @@ type (
 	}
 
 	webHookConfig struct {
-		sum         string
-		method      string
-		url         string
-		templateURI string
-		auth        AuthStrategy
-		interrupt   bool
-		retries     int
-		minWait     time.Duration
-		maxWait     time.Duration
-		timeout     time.Duration
+		sum          string
+		method       string
+		url          string
+		templateURI  string
+		auth         AuthStrategy
+		canInterrupt bool
+		retries      int
+		minWait      time.Duration
+		maxWait      time.Duration
+		timeout      time.Duration
 	}
 
 	webHookDependencies interface {
@@ -191,11 +193,11 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 			Type   string
 			Config json.RawMessage
 		}
-		Interrupt bool
-		Retries   int
-		Timeout   string
-		MinWait   string `json:"min_wait"`
-		MaxWait   string `json:"max_wait"`
+		CanInterrupt bool
+		Retries      int
+		Timeout      string
+		MinWait      string `json:"min_wait"`
+		MaxWait      string `json:"max_wait"`
 	}
 
 	var rc rawWebHookConfig
@@ -226,16 +228,16 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 		retryMax = rc.Retries
 	}
 	return &webHookConfig{
-		sum:         fmt.Sprintf("%x", md5.Sum(r)),
-		method:      rc.Method,
-		url:         rc.Url,
-		templateURI: rc.Body,
-		auth:        as,
-		interrupt:   rc.Interrupt,
-		retries:     retryMax,
-		timeout:     timeout,
-		minWait:     retryWaitMin,
-		maxWait:     retryWaitMax,
+		sum:          fmt.Sprintf("%x", md5.Sum(r)),
+		method:       rc.Method,
+		url:          rc.Url,
+		templateURI:  rc.Body,
+		auth:         as,
+		canInterrupt: rc.CanInterrupt,
+		retries:      retryMax,
+		timeout:      timeout,
+		minWait:      retryWaitMin,
+		maxWait:      retryWaitMax,
 	}, nil
 }
 
@@ -253,7 +255,7 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 	})
 }
 
-func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow, session *session.Session) error {
+func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.Group, flow *login.Flow, session *session.Session) error {
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
@@ -474,7 +476,7 @@ func doHttpCall(client *retryablehttp.Client, conf *webHookConfig, body io.Reade
 	if err != nil {
 		return err
 	} else if resp.StatusCode >= http.StatusBadRequest {
-		if conf.interrupt {
+		if conf.canInterrupt {
 			if err := parseResponse(resp); err != nil {
 				return err
 			}
@@ -522,7 +524,7 @@ func parseResponse(resp *http.Response) (err error) {
 		validationErr.Add(schema.NewHookValidationError(msg.InstancePtr, msg.Message, messages))
 	}
 
-	if validationErr.Empty() {
+	if !validationErr.HasErrors() {
 		return errors.New("error while parsing hook response: got no validation errors")
 	}
 

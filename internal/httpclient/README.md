@@ -128,42 +128,17 @@ Class | Method | HTTP request | Description
  - [AdminCreateIdentityBody](docs/AdminCreateIdentityBody.md)
  - [AdminCreateSelfServiceRecoveryLinkBody](docs/AdminCreateSelfServiceRecoveryLinkBody.md)
  - [AdminUpdateIdentityBody](docs/AdminUpdateIdentityBody.md)
- - [AuthenticateOKBody](docs/AuthenticateOKBody.md)
- - [ContainerChangeResponseItem](docs/ContainerChangeResponseItem.md)
- - [ContainerCreateCreatedBody](docs/ContainerCreateCreatedBody.md)
- - [ContainerTopOKBody](docs/ContainerTopOKBody.md)
- - [ContainerUpdateOKBody](docs/ContainerUpdateOKBody.md)
- - [ContainerWaitOKBody](docs/ContainerWaitOKBody.md)
- - [ContainerWaitOKBodyError](docs/ContainerWaitOKBodyError.md)
- - [ErrorResponse](docs/ErrorResponse.md)
  - [GenericError](docs/GenericError.md)
- - [GraphDriverData](docs/GraphDriverData.md)
  - [HealthNotReadyStatus](docs/HealthNotReadyStatus.md)
  - [HealthStatus](docs/HealthStatus.md)
- - [IdResponse](docs/IdResponse.md)
  - [Identity](docs/Identity.md)
  - [IdentityCredentials](docs/IdentityCredentials.md)
- - [ImageDeleteResponseItem](docs/ImageDeleteResponseItem.md)
- - [ImageSummary](docs/ImageSummary.md)
+ - [IdentityState](docs/IdentityState.md)
  - [InlineResponse200](docs/InlineResponse200.md)
  - [InlineResponse2001](docs/InlineResponse2001.md)
  - [InlineResponse503](docs/InlineResponse503.md)
  - [JsonError](docs/JsonError.md)
  - [Meta](docs/Meta.md)
- - [Plugin](docs/Plugin.md)
- - [PluginConfig](docs/PluginConfig.md)
- - [PluginConfigArgs](docs/PluginConfigArgs.md)
- - [PluginConfigInterface](docs/PluginConfigInterface.md)
- - [PluginConfigLinux](docs/PluginConfigLinux.md)
- - [PluginConfigNetwork](docs/PluginConfigNetwork.md)
- - [PluginConfigRootfs](docs/PluginConfigRootfs.md)
- - [PluginConfigUser](docs/PluginConfigUser.md)
- - [PluginDevice](docs/PluginDevice.md)
- - [PluginEnv](docs/PluginEnv.md)
- - [PluginInterfaceType](docs/PluginInterfaceType.md)
- - [PluginMount](docs/PluginMount.md)
- - [PluginSettings](docs/PluginSettings.md)
- - [Port](docs/Port.md)
  - [RecoveryAddress](docs/RecoveryAddress.md)
  - [SelfServiceError](docs/SelfServiceError.md)
  - [SelfServiceLoginFlow](docs/SelfServiceLoginFlow.md)
@@ -176,7 +151,6 @@ Class | Method | HTTP request | Description
  - [SelfServiceSettingsFlowState](docs/SelfServiceSettingsFlowState.md)
  - [SelfServiceVerificationFlow](docs/SelfServiceVerificationFlow.md)
  - [SelfServiceVerificationFlowState](docs/SelfServiceVerificationFlowState.md)
- - [ServiceUpdateResponse](docs/ServiceUpdateResponse.md)
  - [Session](docs/Session.md)
  - [SettingsProfileFormConfig](docs/SettingsProfileFormConfig.md)
  - [SubmitSelfServiceLoginFlowBody](docs/SubmitSelfServiceLoginFlowBody.md)
@@ -208,8 +182,6 @@ Class | Method | HTTP request | Description
  - [UiText](docs/UiText.md)
  - [VerifiableIdentityAddress](docs/VerifiableIdentityAddress.md)
  - [Version](docs/Version.md)
- - [Volume](docs/Volume.md)
- - [VolumeUsageData](docs/VolumeUsageData.md)
 
 
 ## Documentation For Authorization
@@ -218,14 +190,11 @@ Class | Method | HTTP request | Description
 
 ### oryAccessToken
 
-- **Type**: HTTP Bearer token authentication
+- **Type**: API key
+- **API key parameter name**: Authorization
+- **Location**: HTTP header
 
-Example
-
-```golang
-auth := context.WithValue(context.Background(), sw.ContextAccessToken, "BEARER_TOKEN_STRING")
-r, err := client.Service.Operation(auth, args)
-```
+Note, each API key must be added to a map of `map[string]APIKey` where the key is: Authorization and passed in as the auth context for each request.
 
 
 ## Documentation for Utility Methods

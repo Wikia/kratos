@@ -115,6 +115,16 @@ func NewFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Reques
 	return f, nil
 }
 
+func FromOldFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Request, strategies Strategies, of *Flow) (*Flow, error) {
+	nf, err := NewFlow(conf, exp, csrf, r, strategies, of.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	nf.RequestURL = of.RequestURL
+	return nf, nil
+}
+
 func NewPostHookFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Request, strategies Strategies, original flow.Flow) (*Flow, error) {
 	f, err := NewFlow(conf, exp, csrf, r, strategies, original.GetType())
 	if err != nil {
@@ -149,4 +159,9 @@ func (f Flow) GetID() uuid.UUID {
 
 func (f Flow) GetNID() uuid.UUID {
 	return f.NID
+}
+
+func (f *Flow) SetCSRFToken(token string) {
+	f.CSRFToken = token
+	f.UI.SetCSRF(token)
 }

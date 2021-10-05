@@ -65,7 +65,9 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
-	h.r.CSRFHandler().ExemptPath(RouteWhoami)
+	// We need to completely ignore the whoami path so that we do not accidentally set
+	// some cookie.
+	h.r.CSRFHandler().IgnorePath(RouteWhoami)
 	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,

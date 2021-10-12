@@ -23,6 +23,7 @@ import (
 
 const RouteCollection = "/identities"
 const RouteItem = RouteCollection + "/:id"
+const RouteItemCredentials = RouteItem + "/credentials"
 
 type (
 	handlerDependencies interface {
@@ -66,6 +67,8 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 
 	admin.POST(RouteCollection, h.create)
 	admin.PUT(RouteItem, h.update)
+
+	admin.PUT(RouteItemCredentials, h.updateCredentials)
 }
 
 // A list of identities.
@@ -312,6 +315,25 @@ type AdminUpdateIdentityBody struct {
 	State State `json:"state"`
 }
 
+type AdminUpdateIdentityCredentialsBody struct {
+	// Traits represent an identity's traits. The identity is able to create, modify, and delete traits
+	// in a self-service manner. The input will always be validated against the JSON Schema defined
+	// in `schema_id`.
+	//
+	// required: true
+	Traits json.RawMessage `json:"traits"`
+
+	// State is the identity's state.
+	//
+	// required: true
+	ImportCredentials []CredentialsBody `json:"import_credentials"`
+}
+
+type CredentialsBody struct {
+	Type   CredentialsType      `json:"type"`
+	Config sqlxx.JSONRawMessage `json:"config"`
+}
+
 // swagger:route PUT /identities/{id} v0alpha1 adminUpdateIdentity
 //
 // Update an Identity
@@ -417,6 +439,61 @@ type adminDeleteIdentity struct {
 //       500: jsonError
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	if err := h.r.IdentityPool().(PrivilegedPool).DeleteIdentity(r.Context(), x.ParseUUID(ps.ByName("id"))); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// swagger:route PUT /identities/{id}/credentials v0alpha1 adminUpdateCredentials
+//
+// Update Identity Credentials
+//
+// Calling this endpoint updates the credentials according to the specification provided.
+//
+// Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+//
+//     Produces:
+//     - application/json
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       204: emptyResponse
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) updateCredentials(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	var ur AdminUpdateIdentityCredentialsBody
+	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	pool := h.r.IdentityPool().(PrivilegedPool)
+	i, err := pool.GetIdentityConfidential(r.Context(), x.ParseUUID(ps.ByName("id")))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	for _, v := range ur.ImportCredentials {
+		cred, ok := i.GetCredentials(v.Type)
+		if ok {
+			cred.Config = v.Config
+		} else {
+			cred = &Credentials{
+				Type:        v.Type,
+				Identifiers: []string{},
+				Config:      v.Config,
+			}
+		}
+	}
+
+	if err := h.r.IdentityManager().Update(
+		r.Context(),
+		i,
+		ManagerAllowWriteProtectedTraits,
+	); err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}

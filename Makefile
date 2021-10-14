@@ -77,7 +77,9 @@ test-coverage: .bin/go-acc .bin/goveralls
 # Generates the SDK
 .PHONY: sdk
 sdk: .bin/swagger .bin/ory node_modules
-		swagger generate spec -m -o spec/swagger.json -x github.com/ory/kratos-client-go
+		swagger generate spec -m -o spec/swagger.json \
+			-x github.com/ory/kratos-client-go \
+			-x github.com/ory/dockertest
 		ory dev swagger sanitize ./spec/swagger.json
 		swagger validate ./spec/swagger.json
 		CIRCLE_PROJECT_USERNAME=ory CIRCLE_PROJECT_REPONAME=kratos \
@@ -89,6 +91,8 @@ sdk: .bin/swagger .bin/ory node_modules
 					-p file://.schema/openapi/patches/selfservice.yaml \
 					-p file://.schema/openapi/patches/security.yaml \
 					-p file://.schema/openapi/patches/session.yaml \
+					-p file://.schema/openapi/patches/identity.yaml \
+					-p file://.schema/openapi/patches/generic_error.yaml \
 					spec/swagger.json spec/api.json
 
 		rm -rf internal/httpclient/models internal/httpclient/clients

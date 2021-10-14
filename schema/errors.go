@@ -213,3 +213,13 @@ func (e *ValidationListError) WithError(instancePtr, message string, details tex
 func NewValidationListError() *ValidationListError {
 	return &ValidationListError{Validations: []*ValidationError{}}
 }
+
+func NewAddressNotVerifiedError() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `account address not yet verified`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationAddressNotVerified()),
+	})
+}

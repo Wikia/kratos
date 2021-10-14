@@ -254,6 +254,7 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 
 	f.UI.Messages.Clear()
 	f.State = recovery.StatePassedChallenge
+	f.SetCSRFToken(flow.GetCSRFToken(s.d, w, r, f.Type))
 	f.RecoveredIdentityID = uuid.NullUUID{
 		UUID:  recoveredID,
 		Valid: true,
@@ -364,7 +365,6 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 		// Continue execution
 	}
 
-	req.UI.Reset("email")
 	req.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	req.UI.GetNodes().Upsert(
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
@@ -388,7 +388,6 @@ func (s *Strategy) HandleRecoveryError(w http.ResponseWriter, r *http.Request, r
 			email = body.Email
 		}
 
-		req.UI.Reset("email")
 		req.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 		req.UI.GetNodes().Upsert(
 			// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}

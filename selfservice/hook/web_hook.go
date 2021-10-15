@@ -58,7 +58,7 @@ type (
 		url         string
 		templateURI string
 		auth        AuthStrategy
-		interrupt    bool
+		interrupt   bool
 	}
 
 	webHookDependencies interface {
@@ -73,6 +73,7 @@ type (
 		RequestUrl     string                `json:"request_url"`
 		Identity       *identity.Identity    `json:"identity,omitempty"`
 		Credentials    *identity.Credentials `json:"credentials,omitempty"`
+		HookType       string                `json:"hook_type,omitempty"`
 	}
 
 	WebHook struct {
@@ -210,6 +211,7 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
+		HookType:       "LoginPreHook",
 	})
 }
 
@@ -220,6 +222,7 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
+		HookType:       "LoginPostHook",
 	})
 }
 
@@ -230,6 +233,7 @@ func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.R
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
+		HookType:       "LoginPreHook",
 	})
 }
 
@@ -240,6 +244,7 @@ func (e *WebHook) ExecutePostRecoveryHook(_ http.ResponseWriter, req *http.Reque
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
+		HookType:       "PostRecoveryHook",
 	})
 }
 
@@ -249,6 +254,7 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
+		HookType:       "RegistrationPreHook",
 	})
 }
 
@@ -261,6 +267,7 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
 		Credentials:    credentials,
+		HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
 	})
 }
 
@@ -273,16 +280,29 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
 		Credentials:    credentials,
+		HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity) error {
+func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
+		HookType:       "SettingsPrePersistHook:" + settingsType,
+	})
+}
+
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	return e.execute(&templateContext{
+		Flow:           flow,
+		RequestHeaders: req.Header,
+		RequestMethod:  req.Method,
+		RequestUrl:     req.RequestURI,
+		Identity:       id,
+		HookType:       "SettingsPostPersistHook:" + settingsType,
 	})
 }
 

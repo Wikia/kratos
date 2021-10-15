@@ -39,7 +39,7 @@ func (e *Verifier) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter,
 	return e.do(r, s.Identity, f)
 }
 
-func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, i *identity.Identity) error {
+func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, i *identity.Identity, settingsType string) error {
 	return e.do(r, i, a)
 }
 

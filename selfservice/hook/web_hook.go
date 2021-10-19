@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
@@ -357,7 +356,6 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		return nil, err
 	} else {
-		spew.Dump(res)
 		return bytes.NewReader([]byte(res)), nil
 	}
 }

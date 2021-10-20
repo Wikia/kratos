@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
 
@@ -126,8 +124,6 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			return err
 		}
 
-		spew.Dump(ctxUpdate.Flow, i, settingsType)
-
 		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully.")
 	}
 
@@ -187,7 +183,6 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			}
 			return err
 		}
-		spew.Dump(ctxUpdate.Flow, i, settingsType)
 
 		e.d.Logger().WithRequest(r).
 			WithField("executor", fmt.Sprintf("%T", executor)).

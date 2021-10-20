@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
@@ -287,7 +285,6 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 }
 
 func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	spew.Dump(flow, id, "SettingsPrePersistHook:"+settingsType)
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
@@ -304,7 +301,6 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 }
 
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	spew.Dump(flow, id, "SettingsPostPersistHook:"+settingsType)
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
@@ -380,7 +376,6 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		return nil, err
 	} else {
-		spew.Dump(res)
 		return bytes.NewReader([]byte(res)), nil
 	}
 }

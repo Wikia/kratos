@@ -434,11 +434,14 @@ func (s *Strategy) unlinkProvider(w http.ResponseWriter, r *http.Request, ctxUpd
 	}
 
 	i.Credentials[s.ID()] = *creds
-	if err := s.d.SettingsHookExecutor().PostSettingsHook(w, r, s.SettingsStrategyID(), ctxUpdate, i, settings.WithCallback(func(ctxUpdate *settings.UpdateContext) error {
-		return s.PopulateSettingsMethod(r, ctxUpdate.Session.Identity, ctxUpdate.Flow)
-	})); err != nil {
-		return s.handleSettingsError(w, r, ctxUpdate, p, err)
-	}
+	// fandom-start
+	// TODO PLATFORM-6334 avoid calling PostSettingsHook twice when unlinking OAuth Provider
+	//if err := s.d.SettingsHookExecutor().PostSettingsHook(w, r, s.SettingsStrategyID(), ctxUpdate, i, settings.WithCallback(func(ctxUpdate *settings.UpdateContext) error {
+	//	return s.PopulateSettingsMethod(r, ctxUpdate.Session.Identity, ctxUpdate.Flow)
+	//})); err != nil {
+	//	return s.handleSettingsError(w, r, ctxUpdate, p, err)
+	//}
+	// fandom-end
 
 	return nil
 }

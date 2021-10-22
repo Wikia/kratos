@@ -114,8 +114,6 @@ func (p *Persister) findIdentityCredentialsType(ctx context.Context, ct identity
 func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.Identity) error {
 	c := p.GetConnection(ctx)
 
-	spew.Dump(i)
-
 	nid := corp.ContextualizeNID(ctx, p.nid)
 	for k := range i.Credentials {
 		cred := i.Credentials[k]
@@ -288,6 +286,8 @@ func (p *Persister) UpdateIdentity(ctx context.Context, i *identity.Identity) er
 	if err := p.validateIdentity(ctx, i); err != nil {
 		return err
 	}
+
+	spew.Dump(i)
 
 	i.NID = corp.ContextualizeNID(ctx, p.nid)
 	return sqlcon.HandleError(p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {

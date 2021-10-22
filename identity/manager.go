@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"github.com/davecgh/go-spew/spew"
 	"reflect"
 
 	"github.com/gofrs/uuid"
@@ -92,6 +93,10 @@ func (m *Manager) Update(ctx context.Context, updated *Identity, opts ...Manager
 	o := newManagerOptions(opts)
 	if err := m.validate(ctx, updated, o); err != nil {
 		return err
+	}
+
+	for k := range updated.Credentials {
+		spew.Dump("after validate", updated.Credentials[k])
 	}
 
 	original, err := m.r.IdentityPool().(PrivilegedPool).GetIdentityConfidential(ctx, updated.ID)

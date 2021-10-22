@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/gofrs/uuid"
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
@@ -137,6 +138,10 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 				i.RemoveCredentials(v.Type)
 			}
 		}
+	}
+
+	for k := range i.Credentials {
+		spew.Dump("saving", i.Credentials[k])
 	}
 
 	if err := h.r.IdentityManager().Update(r.Context(), i, identity.ManagerAllowWriteProtectedTraits); err != nil {

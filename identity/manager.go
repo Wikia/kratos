@@ -108,6 +108,10 @@ func (m *Manager) Update(ctx context.Context, updated *Identity, opts ...Manager
 		return err
 	}
 
+	for k := range updated.Credentials {
+		spew.Dump("before update", updated.Credentials[k])
+	}
+
 	return m.r.IdentityPool().(PrivilegedPool).UpdateIdentity(ctx, updated)
 }
 

@@ -283,13 +283,15 @@ func (p *Persister) ListIdentities(ctx context.Context, page, perPage int) ([]id
 }
 
 func (p *Persister) UpdateIdentity(ctx context.Context, i *identity.Identity) error {
+
+	for k := range i.Credentials {
+		spew.Dump("before", i.Credentials[k])
+	}
 	if err := p.validateIdentity(ctx, i); err != nil {
 		return err
 	}
-
-	spew.Dump(i)
 	for k := range i.Credentials {
-		spew.Dump(i.Credentials[k])
+		spew.Dump("afer", i.Credentials[k])
 	}
 
 	i.NID = corp.ContextualizeNID(ctx, p.nid)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/davecgh/go-spew/spew"
 	"strings"
 	"time"
 
@@ -112,6 +113,8 @@ func (p *Persister) findIdentityCredentialsType(ctx context.Context, ct identity
 
 func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.Identity) error {
 	c := p.GetConnection(ctx)
+
+	spew.Dump(i)
 
 	nid := corp.ContextualizeNID(ctx, p.nid)
 	for k := range i.Credentials {

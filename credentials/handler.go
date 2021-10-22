@@ -68,6 +68,16 @@ type RemoveCredentialsBody struct {
 	Filter string                   `json:"filter"`
 }
 
+type IdentityAlreadyExists struct {
+	identityId uuid.UUID
+}
+
+func (e *IdentityAlreadyExists) Error() string {
+	return fmt.Sprintf("These OIDC credentials are already used by another identity %s", e.identityId)
+}
+
+var ErrUnexpectedProviderType = errors.New("Illegal credentials type")
+
 // swagger:route PUT /identities/{id}/credentials v0alpha1 adminUpdateCredentials
 //
 // Update Identity Credentials
@@ -100,7 +110,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	}
 
 	for _, v := range ur.ImportCredentials {
-		creds, ok := i.GetCredentials(v.Type)
+		creds, ok := h.findCredentials(i, v)
 		if !ok {
 			creds, err = h.createCredentials(r.Context(), id, v)
 		} else {
@@ -137,15 +147,9 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	h.r.Writer().Write(w, r, identity.IdentityWithCredentialsMetadataInJSON(*i))
 }
 
-type IdentityAlreadyExists struct {
-	identityId uuid.UUID
+func (h *Handler) findCredentials(i *identity.Identity, v ImportCredentialsBody) (*identity.Credentials, bool) {
+	return i.GetCredentials(v.Type)
 }
-
-func (e *IdentityAlreadyExists) Error() string {
-	return fmt.Sprintf("These OIDC credentials are already used by another identity %s", e.identityId)
-}
-
-var ErrUnexpectedProviderType = errors.New("Illegal credentials type")
 
 func (h *Handler) removeCredentials(v RemoveCredentialsBody, creds *identity.Credentials) (*identity.Credentials, error) {
 	if v.Type == identity.CredentialsTypeOIDC {

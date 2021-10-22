@@ -288,6 +288,9 @@ func (p *Persister) UpdateIdentity(ctx context.Context, i *identity.Identity) er
 	}
 
 	spew.Dump(i)
+	for k := range i.Credentials {
+		spew.Dump(i.Credentials[k])
+	}
 
 	i.NID = corp.ContextualizeNID(ctx, p.nid)
 	return sqlcon.HandleError(p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {

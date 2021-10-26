@@ -9,11 +9,16 @@ import (
 )
 
 func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPrePersistExecutor) {
-	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
-		if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
-			b = append(b, hook)
-		}
-	}
+	//fandom-start
+	// TODO PLATFORM-6406 https://fandom.atlassian.net/browse/PLATFORM-6406 Registration hook is being fired two times during registration flow
+	// avoid executing PostRegistrationPrePersistHooks as we have no way of distinguishing PrePersistHooks from PostPersistHooks
+	//
+	//for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+	//	if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
+	//		b = append(b, hook)
+	//	}
+	//}
+	//fandom-end
 
 	return
 }

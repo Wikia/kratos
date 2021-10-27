@@ -1,1 +1,1 @@
-UPDATE "identity_recovery_tokens" SET "identity_recovery_address_id" = "_identity_recovery_address_id_tmp";
+ALTER TABLE "identity_recovery_tokens" DROP COLUMN "_identity_recovery_address_id_tmp";

@@ -1,1 +1,1 @@
-ALTER TABLE "identity_recovery_tokens" ADD COLUMN "identity_id" char(36) NOT NULL;
+DROP INDEX IF EXISTS "identity_recovery_tokens_nid_idx";

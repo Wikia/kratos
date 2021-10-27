@@ -8,6 +8,7 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
+
 	"github.com/ory/kratos/corp"
 	"github.com/ory/kratos/identity"
 
@@ -75,8 +76,11 @@ func (p *Persister) UseRecoveryToken(ctx context.Context, token string) (*link.R
 
 		var ra identity.RecoveryAddress
 		if err := tx.Where("id = ? AND nid = ?", rt.RecoveryAddressID, nid).First(&ra); err == nil {
-			rt.RecoveryAddress = &ra
+			if !errors.Is(sqlcon.HandleError(err), sqlcon.ErrNoRows) {
+				return err
+			}
 		}
+		rt.RecoveryAddress = &ra
 
 		/* #nosec G201 TableName is static */
 		return tx.RawQuery(fmt.Sprintf("UPDATE %s SET used=true, used_at=? WHERE id=? AND nid = ?", rt.TableName(ctx)), time.Now().UTC(), rt.ID, nid).Exec()

@@ -44,7 +44,7 @@ type RecoveryToken struct {
 	// UpdatedAt is a helper struct field for gobuffalo.pop.
 	UpdatedAt time.Time `json:"-" faker:"-" db:"updated_at"`
 	// RecoveryAddressID is a helper struct field for gobuffalo.pop.
-	RecoveryAddressID uuid.NullUUID `json:"-" faker:"-" db:"identity_recovery_address_id"`
+	RecoveryAddressID *uuid.UUID `json:"-" faker:"-" db:"identity_recovery_address_id"`
 	// FlowID is a helper struct field for gobuffalo.pop.
 	FlowID     uuid.NullUUID `json:"-" faker:"-" db:"selfservice_recovery_flow_id"`
 	NID        uuid.UUID     `json:"-"  faker:"-" db:"nid"`
@@ -58,11 +58,10 @@ func (RecoveryToken) TableName(ctx context.Context) string {
 func NewSelfServiceRecoveryToken(address *identity.RecoveryAddress, f *recovery.Flow, expiresIn time.Duration) *RecoveryToken {
 	now := time.Now().UTC()
 	var identityId = uuid.UUID{}
-	var recoveryAddressID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
+	var recoveryAddressID = uuid.UUID{}
 	if address != nil {
 		identityId = address.IdentityID
-		recoveryAddressID.UUID = address.ID
-		recoveryAddressID.Valid = true
+		recoveryAddressID = address.ID
 	}
 	return &RecoveryToken{
 		ID:                x.NewUUID(),
@@ -72,19 +71,18 @@ func NewSelfServiceRecoveryToken(address *identity.RecoveryAddress, f *recovery.
 		IssuedAt:          now,
 		IdentityID:        identityId,
 		FlowID:            uuid.NullUUID{UUID: f.ID, Valid: true},
-		RecoveryAddressID: recoveryAddressID,
+		RecoveryAddressID: &recoveryAddressID,
 	}
 }
 
 func NewRecoveryToken(identityID uuid.UUID, expiresIn time.Duration) *RecoveryToken {
 	now := time.Now().UTC()
 	return &RecoveryToken{
-		ID:                x.NewUUID(),
-		Token:             randx.MustString(32, randx.AlphaNum),
-		ExpiresAt:         now.Add(expiresIn),
-		IssuedAt:          now,
-		IdentityID:        identityID,
-		RecoveryAddressID: uuid.NullUUID{UUID: uuid.UUID{}, Valid: false},
+		ID:         x.NewUUID(),
+		Token:      randx.MustString(32, randx.AlphaNum),
+		ExpiresAt:  now.Add(expiresIn),
+		IssuedAt:   now,
+		IdentityID: identityID,
 	}
 }
 

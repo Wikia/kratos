@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
@@ -67,13 +68,16 @@ type (
 	}
 
 	templateContext struct {
-		Flow           flow.Flow             `json:"flow"`
-		RequestHeaders http.Header           `json:"request_headers"`
-		RequestMethod  string                `json:"request_method"`
-		RequestUrl     string                `json:"request_url"`
-		Identity       *identity.Identity    `json:"identity,omitempty"`
-		Credentials    *identity.Credentials `json:"credentials,omitempty"`
+		Flow           flow.Flow          `json:"flow"`
+		RequestHeaders http.Header        `json:"request_headers"`
+		RequestMethod  string             `json:"request_method"`
+		RequestUrl     string             `json:"request_url"`
+		Identity       *identity.Identity `json:"identity,omitempty"`
+		// fandom-start
+		Credentials *identity.Credentials `json:"credentials,omitempty"`
+		Fields      url.Values            `json:"fields,omitempty"`
 		HookType       string                `json:"hook_type,omitempty"`
+		// fandom-end
 	}
 
 	WebHook struct {
@@ -266,8 +270,11 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
-		Credentials:    credentials,
-		HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
+		// fandom-start
+		Credentials: credentials,
+		Fields:      req.Form,
+    HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
+		// fandom-end
 	})
 }
 
@@ -279,8 +286,11 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
-		Credentials:    credentials,
-		HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
+		// fandom-start
+		Credentials: credentials,
+		Fields:      req.Form,
+    HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
+		// fandom-end
 	})
 }
 

@@ -158,7 +158,6 @@ func (c *Container) ParseError(group node.Group, err error) error {
 		return err
 	} else if e := new(schema.ValidationError); errors.As(err, &e) {
 		pointer, _ := jsonschemax.JSONPointerToDotNotation(e.InstancePtr)
-		fmt.Printf("validatoin error: %s\n", pointer)
 		for i := range e.Messages {
 			c.AddMessage(group, &e.Messages[i], pointer)
 		}
@@ -191,7 +190,6 @@ func (c *Container) ParseError(group node.Group, err error) error {
 		}
 		return nil
 	} else if e := schema.NewValidationListError(); errors.As(err, &e) {
-		fmt.Println("list error validation")
 		for _, ee := range e.Validations {
 			if err := c.ParseError(group, ee); err != nil {
 				return err

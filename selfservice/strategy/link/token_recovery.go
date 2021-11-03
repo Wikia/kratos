@@ -28,7 +28,7 @@ type RecoveryToken struct {
 	Token string `json:"-" db:"token"`
 
 	// RecoveryAddress links this token to a recovery address.
-	// required: false
+	// required: true
 	RecoveryAddress *identity.RecoveryAddress `json:"recovery_address" belongs_to:"identity_recovery_addresses" fk_id:"RecoveryAddressID"`
 
 	// ExpiresAt is the time (UTC) when the token expires.

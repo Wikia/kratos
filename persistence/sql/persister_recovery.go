@@ -75,7 +75,7 @@ func (p *Persister) UseRecoveryToken(ctx context.Context, token string) (*link.R
 		}
 
 		var ra identity.RecoveryAddress
-		if err := tx.Where("id = ? AND nid = ?", rt.RecoveryAddressID, nid).First(&ra); err == nil {
+		if err := tx.Where("id = ? AND nid = ?", rt.RecoveryAddressID, nid).First(&ra); err != nil {
 			if !errors.Is(sqlcon.HandleError(err), sqlcon.ErrNoRows) {
 				return err
 			}

@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"github.com/ory/kratos/credentials"
 	"net/http"
 	"strings"
 	"sync"
@@ -79,6 +80,8 @@ type RegistryDefault struct {
 	hookSessionIssuer    *hook.SessionIssuer
 	hookSessionDestroyer *hook.SessionDestroyer
 	hookAddressVerifier  *hook.AddressVerifier
+
+	credentialsHandler *credentials.Handler
 
 	identityHandler   *identity.Handler
 	identityValidator *identity.Validator
@@ -166,6 +169,8 @@ func (m *RegistryDefault) RegisterAdminRoutes(ctx context.Context, router *x.Rou
 	m.SettingsHandler().RegisterAdminRoutes(router)
 	m.IdentityHandler().RegisterAdminRoutes(router)
 	m.SelfServiceErrorHandler().RegisterAdminRoutes(router)
+
+	m.CredentialsHandler().RegisterAdminRoutes(router)
 
 	m.RecoveryHandler().RegisterAdminRoutes(router)
 	m.AllRecoveryStrategies().RegisterAdminRoutes(router)
@@ -350,6 +355,13 @@ func (m *RegistryDefault) IdentityHandler() *identity.Handler {
 		m.identityHandler = identity.NewHandler(m)
 	}
 	return m.identityHandler
+}
+
+func (m *RegistryDefault) CredentialsHandler() *credentials.Handler {
+	if m.credentialsHandler == nil {
+		m.credentialsHandler = credentials.NewHandler(m)
+	}
+	return m.credentialsHandler
 }
 
 func (m *RegistryDefault) SchemaHandler() *schema.Handler {

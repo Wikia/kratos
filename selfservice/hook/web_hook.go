@@ -259,8 +259,10 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
 	credentials, _ := id.GetCredentials(ct)
 	// fandom-start
-	if err := req.ParseForm(); err != nil {
-		return errors.WithStack(err)
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 	// fandom-end
 	return e.execute(&templateContext{
@@ -279,8 +281,10 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
 	credentials, _ := session.Identity.GetCredentials(ct)
 	// fandom-start
-	if err := req.ParseForm(); err != nil {
-		return errors.WithStack(err)
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 	// fandom-end
 	return e.execute(&templateContext{

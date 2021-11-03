@@ -209,7 +209,8 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, a
 	// fandom-start
 	// copy stored Form values to allow passing non identity aware fields between callbacks/redirects
 	for k, v := range container.Form {
-		if r.Form.Has(k) {
+		_ = r.ParseForm()
+		if _, ok := r.Form[k]; ok {
 			continue
 		}
 		for _, item := range v {

@@ -106,9 +106,6 @@ func TestAdminStrategy(t *testing.T) {
 		require.NoError(t, reg.IdentityManager().Create(context.Background(),
 			&id, identity.ManagerAllowWriteProtectedTraits))
 
-		publicTS, adminTS := testhelpers.NewKratosServer(t, reg)
-		adminSDK := testhelpers.NewSDKClient(adminTS)
-
 		rl, _, err := adminSDK.V0alpha1Api.AdminCreateSelfServiceRecoveryLink(context.Background()).AdminCreateSelfServiceRecoveryLinkBody(kratos.AdminCreateSelfServiceRecoveryLinkBody{
 			IdentityId: id.ID.String(),
 			ExpiresIn:  pointerx.String("100ms"),

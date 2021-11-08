@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ory/kratos/corp"
-	"github.com/ory/kratos/identity"
-
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
+
+	"github.com/ory/kratos/corp"
+	"github.com/ory/kratos/identity"
 
 	"github.com/ory/x/sqlcon"
 
@@ -76,9 +76,10 @@ func (p *Persister) UseRecoveryToken(ctx context.Context, token string) (*link.R
 
 		var ra identity.RecoveryAddress
 		if err := tx.Where("id = ? AND nid = ?", rt.RecoveryAddressID, nid).First(&ra); err != nil {
-			return sqlcon.HandleError(err)
+			if !errors.Is(sqlcon.HandleError(err), sqlcon.ErrNoRows) {
+				return err
+			}
 		}
-
 		rt.RecoveryAddress = &ra
 
 		/* #nosec G201 TableName is static */

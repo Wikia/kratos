@@ -23,11 +23,11 @@ import (
 
 type (
 	PostHookPrePersistExecutor interface {
-		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
+		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
 	PostHookPrePersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
 	PostHookPostPersistExecutor    interface {
-		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
+		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
 	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
 	HooksProvider                   interface {
@@ -115,7 +115,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			"flow_method":       settingsType,
 		}
 
-		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i); err != nil {
+		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().WithRequest(r).WithFields(logFields).
 					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
@@ -169,7 +169,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	}
 
 	for k, executor := range e.d.PostSettingsPostPersistHooks(r.Context(), settingsType) {
-		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i); err != nil {
+		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().
 					WithRequest(r).

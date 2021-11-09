@@ -76,6 +76,7 @@ type (
 		// fandom-start
 		Credentials *identity.Credentials `json:"credentials,omitempty"`
 		Fields      url.Values            `json:"fields,omitempty"`
+		HookType       string                `json:"hook_type,omitempty"`
 		// fandom-end
 	}
 
@@ -214,6 +215,7 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
+		HookType:       "LoginPreHook",
 	})
 }
 
@@ -224,6 +226,7 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
+		HookType:       "LoginPostHook",
 	})
 }
 
@@ -234,6 +237,7 @@ func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.R
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
+		HookType:       "LoginPreHook",
 	})
 }
 
@@ -244,6 +248,7 @@ func (e *WebHook) ExecutePostRecoveryHook(_ http.ResponseWriter, req *http.Reque
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
+		HookType:       "PostRecoveryHook",
 	})
 }
 
@@ -253,6 +258,7 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
+		HookType:       "RegistrationPreHook",
 	})
 }
 
@@ -274,6 +280,7 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 		// fandom-start
 		Credentials: credentials,
 		Fields:      req.Form,
+    HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
 		// fandom-end
 	})
 }
@@ -296,17 +303,40 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 		// fandom-start
 		Credentials: credentials,
 		Fields:      req.Form,
+    HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
 		// fandom-end
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity) error {
+func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	var credentials *identity.Credentials
+	if settingsType == "password" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	}
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
+		Credentials:    credentials,
+		HookType:       "SettingsPrePersistHook:" + settingsType,
+	})
+}
+
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	var credentials *identity.Credentials
+	if settingsType == "password" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	}
+	return e.execute(&templateContext{
+		Flow:           flow,
+		RequestHeaders: req.Header,
+		RequestMethod:  req.Method,
+		RequestUrl:     req.RequestURI,
+		Identity:       id,
+		Credentials:    credentials,
+		HookType:       "SettingsPostPersistHook:" + settingsType,
 	})
 }
 

@@ -15,6 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v5/logging"
+
 	"github.com/ory/x/tlsx"
 
 	"github.com/google/uuid"
@@ -258,6 +261,10 @@ func New(ctx context.Context, l *logrusx.Logger, opts ...configx.OptionModifier)
 	if err != nil {
 		return nil, err
 	}
+
+	pop.SetLogger(func(lvl logging.Level, s string, args ...interface{}) {
+		l.Debugf(s, args...)
+	})
 
 	l.UseConfig(p)
 	return &Config{l: l, p: p}, nil

@@ -9,16 +9,11 @@ import (
 )
 
 func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPrePersistExecutor) {
-	//fandom-start
-	// TODO PLATFORM-6406 https://fandom.atlassian.net/browse/PLATFORM-6406 Registration hook is being fired two times during registration flow
-	// avoid executing PostRegistrationPrePersistHooks as we have no way of distinguishing PrePersistHooks from PostPersistHooks
-	//
-	//for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
-	//	if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
-	//		b = append(b, hook)
-	//	}
-	//}
-	//fandom-end
+	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+		if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
+			b = append(b, hook)
+		}
+	}
 
 	return
 }
@@ -30,11 +25,12 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 		initialHookCount = 1
 	}
 
-	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
-		if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
-			b = append(b, hook)
-		}
-	}
+	// https://fandom.atlassian.net/browse/PLATFORM-6478
+	//for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+	//	if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
+	//		b = append(b, hook)
+	//	}
+	//}
 
 	if len(b) == initialHookCount {
 		// since we don't want merging hooks defined in a specific strategy and global hooks

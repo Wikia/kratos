@@ -2,15 +2,17 @@ package driver
 
 import (
 	"context"
-	"github.com/ory/kratos/credentials"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/ory/kratos/credentials"
+
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
 	"github.com/luna-duclos/instrumentedsql/opentracing"
+
 	"github.com/ory/x/httpx"
 
 	"github.com/ory/kratos/corp"
@@ -63,7 +65,7 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
-	rc  *retryablehttp.Client
+	rc  map[string]*retryablehttp.Client
 
 	injectedSelfserviceHooks map[string]func(config.SelfServiceHook) interface{}
 
@@ -663,9 +665,28 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetResilientClient() *retryablehttp.Client {
-	if m.rc == nil {
-		m.rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
+func (m *RegistryDefault) GetDefaultResilientClient() *retryablehttp.Client {
+	var rc *retryablehttp.Client
+	if cl, ok := m.rc["default"]; ok {
+		rc = cl
+	} else {
+		rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
+		m.rc["default"] = rc
 	}
-	return m.rc
+	return rc
+}
+
+func (m *RegistryDefault) GetSpecializedResilientClient(name string, retries int, timeout time.Duration, minWait time.Duration, maxWait time.Duration) *retryablehttp.Client {
+	var rc *retryablehttp.Client
+	if cl, ok := m.rc[name]; ok {
+		rc = cl
+	} else {
+		rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()),
+			httpx.ResilientClientWithMaxRetry(retries),
+			httpx.ResilientClientWithConnectionTimeout(timeout),
+			httpx.ResilientClientWithMaxRetryWait(minWait),
+			httpx.ResilientClientWithMaxRetryWait(maxWait))
+		m.rc[name] = rc
+	}
+	return rc
 }

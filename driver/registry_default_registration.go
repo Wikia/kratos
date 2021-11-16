@@ -8,8 +8,26 @@ import (
 	"github.com/ory/kratos/selfservice/flow/registration"
 )
 
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+func filter(hooks []config.SelfServiceHook, persistencePhase string) (ret []config.SelfServiceHook) {
+	for _, h := range hooks {
+		if len(h.PersistencePhase) == 0 || contains(h.PersistencePhase, persistencePhase) {
+			ret = append(ret, h)
+		}
+	}
+	return
+}
+
 func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPrePersistExecutor) {
-	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), "pre-persist")) {
 		if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -25,17 +43,16 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 		initialHookCount = 1
 	}
 
-	// https://fandom.atlassian.net/browse/PLATFORM-6478
-	//for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
-	//	if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
-	//		b = append(b, hook)
-	//	}
-	//}
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), "post-persist")) {
+		if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
+			b = append(b, hook)
+		}
+	}
 
 	if len(b) == initialHookCount {
 		// since we don't want merging hooks defined in a specific strategy and global hooks
 		// global hooks are added only if no strategy specific hooks are defined
-		for _, v := range m.getHooks(config.HookGlobal, m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(config.HookGlobal)) {
+		for _, v := range m.getHooks(config.HookGlobal, filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(config.HookGlobal), "post-persist")) {
 			if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
 				b = append(b, hook)
 			}

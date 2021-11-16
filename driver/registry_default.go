@@ -192,7 +192,9 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 }
 
 func NewRegistryDefault() *RegistryDefault {
-	return &RegistryDefault{}
+	return &RegistryDefault{
+		rc: map[string]*retryablehttp.Client{},
+	}
 }
 
 func (m *RegistryDefault) WithLogger(l *logrusx.Logger) Registry {
@@ -663,17 +665,6 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 		m.pmm = prometheus.NewMetricsManager("kratos", m.buildVersion, m.buildHash, m.buildDate)
 	}
 	return m.pmm
-}
-
-func (m *RegistryDefault) GetDefaultResilientClient() *retryablehttp.Client {
-	var rc *retryablehttp.Client
-	if cl, ok := m.rc["default"]; ok {
-		rc = cl
-	} else {
-		rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
-		m.rc["default"] = rc
-	}
-	return rc
 }
 
 func (m *RegistryDefault) GetSpecializedResilientClient(name string, retries int, timeout time.Duration, minWait time.Duration, maxWait time.Duration) *retryablehttp.Client {

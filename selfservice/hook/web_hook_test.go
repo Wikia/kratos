@@ -47,9 +47,7 @@ func newResilientClient() *resilientClientProvider {
 		log: logrusx.New("kratos", "test"),
 	}
 }
-func (r *resilientClientProvider) GetDefaultResilientClient() *retryablehttp.Client {
-	return retryablehttp.NewClient()
-}
+
 func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ int, _ time.Duration, _ time.Duration, _ time.Duration) *retryablehttp.Client {
 	return retryablehttp.NewClient()
 }

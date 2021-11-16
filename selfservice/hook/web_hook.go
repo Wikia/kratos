@@ -56,16 +56,15 @@ type (
 	}
 
 	webHookConfig struct {
-		method         string
-		url            string
-		templateURI    string
-		auth           AuthStrategy
-		interrupt      bool
-		retries        int
-		breakHttpCodes []int
-		minWait        time.Duration
-		maxWait        time.Duration
-		timeout        time.Duration
+		method      string
+		url         string
+		templateURI string
+		auth        AuthStrategy
+		interrupt   bool
+		retries     int
+		minWait     time.Duration
+		maxWait     time.Duration
+		timeout     time.Duration
 	}
 
 	webHookDependencies interface {
@@ -197,12 +196,11 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 			Type   string
 			Config json.RawMessage
 		}
-		Interrupt      bool
-		Retries        int
-		BreakHttpCodes []int
-		Timeout        time.Duration
-		MinWait        time.Duration
-		MaxWait        time.Duration
+		Interrupt bool
+		Retries   int
+		Timeout   string
+		MinWait   string `json:"min_wait"`
+		MaxWait   string `json:"max_wait"`
 	}
 
 	var rc rawWebHookConfig
@@ -220,30 +218,28 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 	retryWaitMin := 1 * time.Second
 	retryWaitMax := 30 * time.Second
 	retryMax := 4
-	if rc.Timeout > 0 {
-		timeout = rc.Timeout
+	if t, err := time.ParseDuration(rc.Timeout); err != nil {
+		timeout = t
 	}
-	if rc.MinWait > 0 {
-		retryWaitMin = rc.MinWait
+	if t, err := time.ParseDuration(rc.MinWait); err != nil {
+		retryWaitMin = t
 	}
-	if rc.MaxWait > 0 {
-		retryWaitMin = rc.MaxWait
+	if t, err := time.ParseDuration(rc.MaxWait); err != nil {
+		retryWaitMin = t
 	}
 	if rc.Retries > 0 {
 		retryMax = rc.Retries
 	}
-
 	return &webHookConfig{
-		method:         rc.Method,
-		url:            rc.Url,
-		templateURI:    rc.Body,
-		auth:           as,
-		interrupt:      rc.Interrupt,
-		retries:        retryMax,
-		breakHttpCodes: rc.BreakHttpCodes,
-		timeout:        timeout,
-		minWait:        retryWaitMin,
-		maxWait:        retryWaitMax,
+		method:      rc.Method,
+		url:         rc.Url,
+		templateURI: rc.Body,
+		auth:        as,
+		interrupt:   rc.Interrupt,
+		retries:     retryMax,
+		timeout:     timeout,
+		minWait:     retryWaitMin,
+		maxWait:     retryWaitMax,
 	}, nil
 }
 

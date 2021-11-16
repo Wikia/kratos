@@ -264,6 +264,13 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 
 func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
 	credentials, _ := id.GetCredentials(ct)
+	// fandom-start
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	// fandom-end
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
@@ -280,6 +287,13 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
 	credentials, _ := session.Identity.GetCredentials(ct)
+	// fandom-start
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	// fandom-end
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
@@ -379,12 +393,13 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	enc.SetIndent("", "")
 
 	if err := enc.Encode(data); err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
 	vm.TLACode("ctx", buf.String())
 
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
-		return nil, err
+		l.WithError(err).WithField("data", data).Error("could not compile JSONNET template")
+		return nil, errors.WithStack(err)
 	} else {
 		return bytes.NewReader([]byte(res)), nil
 	}

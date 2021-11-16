@@ -206,6 +206,18 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, a
 	}
 
 	i.SetCredentials(s.ID(), *creds)
+	// fandom-start
+	// copy stored Form values to allow passing non identity aware fields between callbacks/redirects
+	for k, v := range container.Form {
+		_ = r.ParseForm()
+		if _, ok := r.Form[k]; ok {
+			continue
+		}
+		for _, item := range v {
+			r.Form.Add(k, item)
+		}
+	}
+	// fandom-end
 	if err := s.d.RegistrationExecutor().PostRegistrationHook(w, r, identity.CredentialsTypeOIDC, a, i); err != nil {
 		return nil, s.handleError(w, r, a, provider.Config().ID, i.Traits, err)
 	}

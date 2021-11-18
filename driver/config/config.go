@@ -165,7 +165,7 @@ type (
 	//fandom-end
 	SelfServiceHook struct {
 		Name             string          `json:"hook"`
-		PersistencePhase []string        `json:"persistence_phase"`
+		PersistencePhase string          `json:"persistence_phase"`
 		Config           json.RawMessage `json:"config"`
 	}
 	SelfServiceStrategy struct {

@@ -8,18 +8,11 @@ import (
 	"github.com/ory/kratos/selfservice/flow/registration"
 )
 
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}
-
 func filter(hooks []config.SelfServiceHook, persistencePhase string) (ret []config.SelfServiceHook) {
 	for _, h := range hooks {
-		if len(h.PersistencePhase) == 0 || contains(h.PersistencePhase, persistencePhase) {
+		if len(h.PersistencePhase) == 0 || // empty value means default = "all"
+			h.PersistencePhase == "all" || // default value
+			h.PersistencePhase == persistencePhase {
 			ret = append(ret, h)
 		}
 	}

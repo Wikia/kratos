@@ -312,6 +312,8 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
 	return e.execute(&templateContext{
 		Flow:           flow,
@@ -328,6 +330,8 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
 	return e.execute(&templateContext{
 		Flow:           flow,

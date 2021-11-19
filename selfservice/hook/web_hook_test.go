@@ -11,7 +11,8 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
-	"time"
+
+	"github.com/ory/x/httpx"
 
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -48,7 +49,7 @@ func newResilientClient() *resilientClientProvider {
 	}
 }
 
-func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ int, _ time.Duration, _ time.Duration, _ time.Duration) *retryablehttp.Client {
+func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ ...httpx.ResilientOptions) *retryablehttp.Client {
 	return retryablehttp.NewClient()
 }
 

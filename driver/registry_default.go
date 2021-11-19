@@ -667,16 +667,12 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetSpecializedResilientClient(name string, retries int, timeout time.Duration, minWait time.Duration, maxWait time.Duration) *retryablehttp.Client {
+func (m *RegistryDefault) GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
 	var rc *retryablehttp.Client
 	if cl, ok := m.rc[name]; ok {
 		rc = cl
 	} else {
-		rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()),
-			httpx.ResilientClientWithMaxRetry(retries),
-			httpx.ResilientClientWithConnectionTimeout(timeout),
-			httpx.ResilientClientWithMaxRetryWait(minWait),
-			httpx.ResilientClientWithMaxRetryWait(maxWait))
+		rc = httpx.NewResilientClient(opts...)
 		m.rc[name] = rc
 	}
 	return rc

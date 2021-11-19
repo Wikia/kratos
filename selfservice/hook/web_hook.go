@@ -2,12 +2,15 @@ package hook
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/ory/x/httpx"
 
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
@@ -56,6 +59,7 @@ type (
 	}
 
 	webHookConfig struct {
+		sum         string
 		method      string
 		url         string
 		templateURI string
@@ -112,15 +116,6 @@ var strategyFactories = map[string]authStrategyFactory{
 	"":           newNoopAuthStrategy,
 	"api_key":    newApiKeyStrategy,
 	"basic_auth": newBasicAuthStrategy,
-}
-
-func containsInt(needle int, haystack []int) bool {
-	for _, val := range haystack {
-		if needle == val {
-			return true
-		}
-	}
-	return false
 }
 
 func newAuthStrategy(name string, c json.RawMessage) (as AuthStrategy, err error) {
@@ -231,6 +226,7 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 		retryMax = rc.Retries
 	}
 	return &webHookConfig{
+		sum:         fmt.Sprintf("%x", md5.Sum(r)),
 		method:      rc.Method,
 		url:         rc.Url,
 		templateURI: rc.Body,
@@ -395,7 +391,12 @@ func (e *WebHook) execute(data *templateContext) error {
 			return fmt.Errorf("failed to create web hook body: %w", err)
 		}
 	}
-	rc := e.r.GetSpecializedResilientClient(data.HookType, conf.retries, conf.timeout, conf.minWait, conf.maxWait)
+	rc := e.r.GetSpecializedResilientClient(data.HookType+conf.sum,
+		httpx.ResilientClientWithLogger(e.r.Logger()),
+		httpx.ResilientClientWithMaxRetry(conf.retries),
+		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
+		httpx.ResilientClientWithMaxRetryWait(conf.minWait),
+		httpx.ResilientClientWithMaxRetryWait(conf.maxWait))
 	err = doHttpCall(rc, conf, body)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")

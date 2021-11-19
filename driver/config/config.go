@@ -143,6 +143,17 @@ const (
 // DefaultSessionCookieName returns the default cookie name for the kratos session.
 const DefaultSessionCookieName = "ory_kratos_session"
 
+//fandom-start
+type PersistencePhase string
+
+const (
+	All         PersistencePhase = "all"
+	PrePersist                   = "pre-persist"
+	PostPersist                  = "post-persist"
+)
+
+//fandom-end
+
 type (
 	Argon2 struct {
 		Memory            bytesize.ByteSize `json:"memory"`
@@ -164,9 +175,11 @@ type (
 	}
 	//fandom-end
 	SelfServiceHook struct {
-		Name             string          `json:"hook"`
-		PersistencePhase string          `json:"persistence_phase"`
-		Config           json.RawMessage `json:"config"`
+		Name string `json:"hook"`
+		//fandom-start
+		PersistencePhase PersistencePhase `json:"persistence_phase"`
+		//fandom-end
+		Config json.RawMessage `json:"config"`
 	}
 	SelfServiceStrategy struct {
 		Enabled bool            `json:"enabled"`

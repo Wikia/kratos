@@ -200,6 +200,26 @@
               "default": false,
               "description": "Should hook be able to interrupt the flow. It only applies to a certain flows and require concrete response format"
             },
+            "retries": {
+              "type": "integer",
+              "default": 4,
+              "description": "Number of hook retries"
+            },
+            "timeout": {
+              "type": "string",
+              "default": "1m",
+              "description": "Hook connection timeout"
+            },
+            "min_wait": {
+              "type": "string",
+              "default": "1s",
+              "description": "Hook minimum wait time"
+            },
+            "max_wait": {
+              "type": "string",
+              "default": "30s",
+              "description": "Hook max wait time"
+            },
             "auth": {
               "type": "object",
               "title": "Auth mechanisms",

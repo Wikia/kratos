@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/ory/x/httpx"
+
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/sirupsen/logrus/hooks/test"
 
@@ -46,7 +48,8 @@ func newResilientClient() *resilientClientProvider {
 		log: logrusx.New("kratos", "test"),
 	}
 }
-func (r *resilientClientProvider) GetResilientClient() *retryablehttp.Client {
+
+func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ ...httpx.ResilientOptions) *retryablehttp.Client {
 	return retryablehttp.NewClient()
 }
 

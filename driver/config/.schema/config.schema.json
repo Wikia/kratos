@@ -159,6 +159,16 @@
         "hook": {
           "const": "web_hook"
         },
+        "persistence_phase": {
+          "type": "string",
+          "description": "Whether hook should be run before or after persisting data (or both)",
+          "enum": [
+            "all",
+            "pre-persist",
+            "post-persist"
+          ],
+          "default": "all"
+        },
         "config": {
           "type": "object",
           "title": "Web-Hook Configuration",

@@ -266,6 +266,24 @@ selfservice:
             - hook: session
 ```
 
+#### `persistence_phase`
+
+By default, registration `after` hooks are being run both in pre-persist phase
+(before identity is being saved) and post-persist phase (after it is saved).
+You can specify a single phase for a hook to be run in though. Possible options
+are `all` (the default), `pre-persist` and `post-persist`.
+
+```yaml title="path/to/my/kratos.config.yml"
+selfservice:
+  flows:
+    registration:
+      after:
+        password:
+          hooks:
+            - hook: invalidate_cache
+              persistence_phase: post-persist
+```
+
 #### `session`
 
 Adding the `session` hook signs the user immediately in once the account has

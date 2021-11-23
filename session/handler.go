@@ -4,12 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
 	"github.com/ory/x/decoderx"
-
-	"github.com/ory/x/errorsx"
 
 	"github.com/ory/herodot"
 
@@ -49,7 +48,8 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
-	RouteIdentity           = RouteCollection + "/identity"
+	RouteIdentity           = "/identities"
+	RouteDeleteSession      = RouteIdentity + "/:id/sessions"
 	RouteIdentityManagement = RouteIdentity + "/:id"
 )
 
@@ -60,14 +60,17 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 
+	admin.DELETE(RouteDeleteSession, h.deleteIdentitySessions)
+
 	admin.GET(RouteIdentityManagement, h.session)
 	admin.DELETE(RouteIdentityManagement, h.logout)
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
-	// We need to completely ignore the whoami path so that we do not accidentally set
+	// We need to completely ignore the whoami/logout path so that we do not accidentally set
 	// some cookie.
 	h.r.CSRFHandler().IgnorePath(RouteWhoami)
+	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/sessions")
 	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
@@ -75,6 +78,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 		public.Handle(m, RouteWhoami, h.whoami)
 		public.Handle(m, RouteIdentityManagement, x.RedirectToAdminRoute(h.r))
 	}
+	public.DELETE(RouteDeleteSession, x.RedirectToAdminRoute(h.r))
 }
 
 // nolint:deadcode,unused
@@ -95,7 +99,7 @@ type toSession struct {
 	Cookie string `json:"Cookie"`
 }
 
-// swagger:route GET /sessions/whoami v0alpha1 toSession
+// swagger:route GET /sessions/whoami v0alpha2 toSession
 //
 // Check Who the Current HTTP Session Belongs To
 //
@@ -124,6 +128,11 @@ type toSession struct {
 //  // console.log(session)
 //	```
 //
+// Depending on your configuration this endpoint might return a 403 status code if the session has a lower Authenticator
+// Assurance Level (AAL) than is possible for the identity. This can happen if the identity has password + webauthn
+// credentials (which would result in AAL2) but the session has only AAL1. If this error occurs, ask the user
+// to sign in with the second factor or change the configuration.
+//
 // This endpoint is useful for:
 //
 // - AJAX calls. Remember to send credentials and set up CORS correctly!
@@ -138,6 +147,11 @@ type toSession struct {
 //
 // If none of these headers are set or the cooke or token are invalid, the endpoint returns a HTTP 401 status code.
 //
+// As explained above, this request may fail due to several reasons. The `error.id` can be one of:
+//
+// - `session_inactive`: No active session was found in the request (e.g. no Ory Session Cookie / Ory Session Token).
+// - `session_aal2_required`: An active session was found but it does not fulfil the Authenticator Assurance Level, implying that the session must (e.g.) authenticate the second factor.
+//
 //     Produces:
 //     - application/json
 //
@@ -146,12 +160,24 @@ type toSession struct {
 //     Responses:
 //       200: session
 //       401: jsonError
+//       403: jsonError
 //       500: jsonError
 func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
+		return
+	}
+
+	var aalErr *ErrAALNotSatisfied
+	if err := h.r.SessionManager().DoesSessionSatisfy(r, s, h.r.Config(r.Context()).SessionWhoAmIAAL()); errors.As(err, &aalErr) {
+		h.r.Audit().WithRequest(r).WithError(err).Info("Session was found but AAL is not satisfied for calling this endpoint.")
+		h.r.Writer().WriteError(w, r, err)
+		return
+	} else if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("Unable to determine AAL."))
 		return
 	}
 
@@ -164,6 +190,49 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	h.r.Writer().Write(w, r, s)
 }
 
+// swagger:parameters adminDeleteIdentitySessions
+// nolint:deadcode,unused
+type adminDeleteIdentitySessions struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route DELETE /identities/{id}/sessions v0alpha2 adminDeleteIdentitySessions
+//
+// Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
+//
+// This endpoint is useful for:
+//
+// - To forcefully logout Identity from all devices and sessions
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       204: emptyResponse
+//       400: jsonError
+//       401: jsonError
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) deleteIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	iID, err := uuid.FromString(ps.ByName("id"))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
+		return
+	}
+	if err := h.r.SessionPersister().DeleteSessionsByIdentity(r.Context(), iID); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // swagger:parameters adminLogoutIdentity
 // nolint:deadcode,unused
 type adminLogoutIdentity struct {
@@ -174,7 +243,7 @@ type adminLogoutIdentity struct {
 	ID string `json:"id"`
 }
 
-// swagger:route DELETE /sessions/identity/{id} v0alpha1 adminLogoutIdentity
+// swagger:route DELETE /sessions/identity/{id} v0alpha2 adminLogoutIdentity
 //
 // Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.
 //
@@ -240,7 +309,7 @@ type AdminIdentitySessionResponse struct {
 	Identity *identity.Identity `json:"identity"`
 }
 
-// swagger:route GET /sessions/identity/{id} v0alpha1 adminIdentitySession
+// swagger:route GET /sessions/identity/{id} v0alpha2 adminIdentitySession
 //
 // Calling this endpoint issues a session for a given identity.
 //
@@ -264,13 +333,13 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 		return
 	}
 
-	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC())
+	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
 
-	if err := h.r.SessionPersister().CreateSession(r.Context(), s); err != nil {
+	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
@@ -291,7 +360,7 @@ func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated http
 				return
 			}
 
-			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrForbidden.WithReason("This endpoint can only be accessed with a valid session. Please log in and try again.").WithDebugf("%+v", err)))
+			h.r.Writer().WriteError(w, r, errors.WithStack(NewErrNoActiveSessionFound().WithReason("This endpoint can only be accessed with a valid session. Please log in and try again.")))
 			return
 		}
 
@@ -302,7 +371,7 @@ func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated http
 func (h *Handler) IsNotAuthenticated(wrap httprouter.Handle, onAuthenticated httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		if _, err := h.r.SessionManager().FetchFromRequest(r.Context(), r); err != nil {
-			if errorsx.Cause(err).Error() == ErrNoActiveSessionFound.Error() {
+			if e := new(ErrNoActiveSessionFound); errors.As(err, &e) {
 				wrap(w, r, ps)
 				return
 			}

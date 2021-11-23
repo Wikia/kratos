@@ -66,3 +66,8 @@ func (h *Argon2) Generate(ctx context.Context, password []byte) ([]byte, error) 
 
 	return b.Bytes(), nil
 }
+
+func (h *Argon2) Understands(hash []byte) bool {
+	algorithm, _, err := ParsePasswordHash(hash)
+	return err == nil && bytes.Equal(algorithm, Argon2AlgorithmId)
+}

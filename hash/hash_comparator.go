@@ -11,17 +11,19 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/gofrs/uuid"
-	"github.com/hashicorp/go-retryablehttp"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
 
+	"github.com/gofrs/uuid"
+	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/ory/kratos/driver/config"
@@ -34,9 +36,10 @@ var ErrEmptyPasswordCompare = fmt.Errorf("empty password provided")
 
 var hashSeparator = []byte("$")
 var bcryptLegacyPrefix = regexp.MustCompile(`^2[abzy]?$`)
+
 //fandom-start - add param: identityId uuid.UUID
 func Compare(ctx context.Context, cfg *config.Config, identityId uuid.UUID, password []byte, hash []byte) error {
-//fandom-end
+	//fandom-end
 	algorithm, realHash, err := ParsePasswordHash(hash)
 	if err != nil {
 		return errors.WithStack(err)
@@ -47,12 +50,14 @@ func Compare(ctx context.Context, cfg *config.Config, identityId uuid.UUID, pass
 		return CompareArgon2id(ctx, cfg, password, realHash)
 	case bytes.Equal(algorithm, BcryptAlgorithmId):
 		return CompareBcrypt(ctx, cfg, password, realHash)
+	case bytes.Equal(algorithm, Pbkdf2AlgorithmId):
+		return ComparePbkdf2(ctx, cfg, password, realHash)
 	//fandom-start
 	case bytes.Equal(algorithm, LegacyFandomHasherId):
 		return CompareLegacyFandom(ctx, cfg, identityId, password, realHash)
 	//fandom-end
 	default:
-		return ErrUnknownHashAlgorithm
+		return errors.WithStack(ErrUnknownHashAlgorithm)
 	}
 }
 
@@ -91,6 +96,9 @@ func ParsePasswordHash(input []byte) (algorithm, hash []byte, err error) {
 		fallthrough
 	case bytes.Equal(hashParts[1], BcryptAlgorithmId):
 		algorithm = BcryptAlgorithmId
+		return
+	case bytes.Equal(hashParts[1], Pbkdf2AlgorithmId):
+		algorithm = Pbkdf2AlgorithmId
 		return
 	//fandom-start
 	case bytes.Equal(hashParts[1], LegacyFandomHasherId):
@@ -145,7 +153,27 @@ func CompareArgon2id(_ context.Context, _ *config.Config, password []byte, hashP
 	if subtle.ConstantTimeCompare(hash, otherHash) == 1 {
 		return nil
 	}
-	return ErrMismatchedHashAndPassword
+	return errors.WithStack(ErrMismatchedHashAndPassword)
+}
+
+func ComparePbkdf2(_ context.Context, _ *config.Config, password []byte, hash []byte) error {
+	// Extract the parameters, salt and derived key from the encoded password
+	// hash.
+	p, salt, hash, err := decodePbkdf2Hash(string(hash))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// Derive the key from the other password using the same parameters.
+	otherHash := pbkdf2.Key(password, salt, int(p.Iterations), int(p.KeyLength), getPseudorandomFunctionForPbkdf2(p.Algorithm))
+
+	// Check that the contents of the hashed passwords are identical. Note
+	// that we are using the subtle.ConstantTimeCompare() function for this
+	// to help prevent timing attacks.
+	if subtle.ConstantTimeCompare(hash, otherHash) == 1 {
+		return nil
+	}
+	return errors.WithStack(ErrMismatchedHashAndPassword)
 }
 
 func decodeArgon2idHash(encodedHash []byte) (p *config.Argon2, salt, hash []byte, err error) {
@@ -287,7 +315,7 @@ func prepareHashToCompare(splitHash [][]byte, identityId uuid.UUID, password []b
 
 type SingleMapping struct {
 	IdentityId *string `json:"identityId,omitempty"`
-	UserId *string `json:"userId,omitempty"`
+	UserId     *string `json:"userId,omitempty"`
 }
 
 func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error) {
@@ -297,7 +325,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 		log.Default().Printf("identity-mapper url is not configured")
 		return "", fmt.Errorf("identity-mapper url is not configured")
 	}
-	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/mapping/app/community_platform/identity/" + identityId.String(), nil)
+	req, err := retryablehttp.NewRequest("GET", serviceUrl+"/mapping/app/community_platform/identity/"+identityId.String(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -351,3 +379,38 @@ func md5HashPassword(password []byte) []byte {
 }
 
 //fandom-end
+
+// decodePbkdf2Hash decodes PBKDF2 encoded password hash.
+// format: $pbkdf2-<digest>$i=<iterations>,l=<length>$<salt>$<hash>
+func decodePbkdf2Hash(encodedHash string) (p *Pbkdf2, salt, hash []byte, err error) {
+	parts := strings.Split(encodedHash, "$")
+	if len(parts) != 5 {
+		return nil, nil, nil, ErrInvalidHash
+	}
+
+	p = new(Pbkdf2)
+	digestParts := strings.SplitN(parts[1], "-", 2)
+	if len(digestParts) != 2 {
+		return nil, nil, nil, ErrInvalidHash
+	}
+	p.Algorithm = digestParts[1]
+
+	_, err = fmt.Sscanf(parts[2], "i=%d,l=%d", &p.Iterations, &p.KeyLength)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	salt, err = base64.RawStdEncoding.Strict().DecodeString(parts[3])
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	p.SaltLength = uint32(len(salt))
+
+	hash, err = base64.RawStdEncoding.Strict().DecodeString(parts[4])
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	p.KeyLength = uint32(len(hash))
+
+	return p, salt, hash, nil
+}

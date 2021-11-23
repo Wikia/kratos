@@ -59,6 +59,39 @@ func NewTOTPVerifierWrongError(instancePtr string) error {
 	})
 }
 
+func NewWebAuthnVerifierWrongError(instancePtr string) error {
+	t := text.NewErrorValidationTOTPVerifierWrong()
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     t.Text,
+			InstancePtr: instancePtr,
+		},
+		Messages: new(text.Messages).Add(t),
+	})
+}
+
+func NewLookupAlreadyUsed() error {
+	t := text.NewErrorValidationLookupAlreadyUsed()
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     t.Text,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(t),
+	})
+}
+
+func NewErrorValidationLookupInvalid() error {
+	t := text.NewErrorValidationLookupInvalid()
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     t.Text,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(t),
+	})
+}
+
 type ValidationErrorContextPasswordPolicyViolation struct {
 	Reason string
 }
@@ -174,6 +207,46 @@ func NewNoVerificationStrategyResponsible() error {
 	})
 }
 
+func NewAddressNotVerifiedError() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `account address not yet verified`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationAddressNotVerified()),
+	})
+}
+
+func NewNoTOTPDeviceRegistered() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `you have no TOTP device set up`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationNoTOTPDevice()),
+	})
+}
+
+func NewNoLookupDefined() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `you have no backup recovery codes set up`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationNoLookup()),
+	})
+}
+
+func NewNoWebAuthnRegistered() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `you have no WebAuthn device set up`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationNoWebAuthnDevice()),
+	})
+}
+
 func NewHookValidationError(instancePtr, message string, messages text.Messages) *ValidationError {
 	return &ValidationError{
 		ValidationError: &jsonschema.ValidationError{
@@ -212,14 +285,4 @@ func (e *ValidationListError) WithError(instancePtr, message string, details tex
 
 func NewValidationListError() *ValidationListError {
 	return &ValidationListError{Validations: []*ValidationError{}}
-}
-
-func NewAddressNotVerifiedError() error {
-	return errors.WithStack(&ValidationError{
-		ValidationError: &jsonschema.ValidationError{
-			Message:     `account address not yet verified`,
-			InstancePtr: "#/",
-		},
-		Messages: new(text.Messages).Add(text.NewErrorValidationAddressNotVerified()),
-	})
 }

@@ -86,7 +86,7 @@ func (ss *schemas) getByName(n string) (*schema, error) {
 }
 
 func TestSchemas(t *testing.T) {
-	t.Run("test .schema/config.schema.json", SchemaTestRunner("../../driver/config/.schema", "config"))
+	t.Run("test embedx/config.schema.json", SchemaTestRunner("../../embedx", "config"))
 }
 
 func SchemaTestRunner(spath string, sname string) func(*testing.T) {
@@ -97,8 +97,7 @@ func SchemaTestRunner(spath string, sname string) func(*testing.T) {
 		// To test refs independently and reduce test case size we replace every "$ref" with "const".
 		// That way refs will not be resolved but we still make sure that they are pointing to the right definition.
 		// Changing a definition will result in just changing test cases for that definition.
-		s := strings.Replace(string(sb), `"$ref":`, `"const":`, -1)
-
+		s := strings.ReplaceAll(string(sb), `"$ref":`, `"const":`)
 		schemas := schemas{{
 			name: "root",
 			raw:  s,

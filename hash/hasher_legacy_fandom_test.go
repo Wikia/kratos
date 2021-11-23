@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/x/configx"
 	"github.com/ory/x/logrusx"
-	"github.com/stretchr/testify/assert"
 
 	"github.com/ory/kratos/hash"
 )

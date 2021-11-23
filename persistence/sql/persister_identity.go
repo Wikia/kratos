@@ -144,9 +144,10 @@ func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.I
 			}
 
 			if err := c.Create(&identity.CredentialIdentifier{
-				Identifier:            ids,
-				IdentityCredentialsID: cred.ID,
-				NID:                   corp.ContextualizeNID(ctx, p.nid),
+				Identifier:                ids,
+				IdentityCredentialsID:     cred.ID,
+				IdentityCredentialsTypeID: ct.ID,
+				NID:                       corp.ContextualizeNID(ctx, p.nid),
 			}); err != nil {
 				return sqlcon.HandleError(err)
 			}
@@ -213,7 +214,8 @@ func (p *Persister) CreateIdentity(ctx context.Context, i *identity.Identity) er
 		i.SchemaID = config.DefaultIdentityTraitsSchemaID
 	}
 
-	i.StateChangedAt = sqlxx.NullTime(time.Now())
+	stateChangedAt := sqlxx.NullTime(time.Now())
+	i.StateChangedAt = &stateChangedAt
 	if i.State == "" {
 		i.State = identity.StateActive
 	}

@@ -61,3 +61,8 @@ func validateBcryptPasswordLength(password []byte) error {
 	}
 	return nil
 }
+
+func (h *Bcrypt) Understands(hash []byte) bool {
+	algorithm, _, err := ParsePasswordHash(hash)
+	return err == nil && bytes.Equal(algorithm, BcryptAlgorithmId)
+}

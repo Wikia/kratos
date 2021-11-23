@@ -88,3 +88,8 @@ func (h *LegacyFandomCrypt) Generate(ctx context.Context, password []byte) ([]by
 
 	return b.Bytes(), nil
 }
+
+func (h *LegacyFandomCrypt) Understands(hash []byte) bool {
+	algorithm, _, err := ParsePasswordHash(hash)
+	return err == nil && bytes.Equal(algorithm, LegacyFandomHasherId)
+}

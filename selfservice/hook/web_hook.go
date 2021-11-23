@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/ory/x/fetcher"
+	"github.com/ory/x/logrusx"
+
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
@@ -23,9 +26,6 @@ import (
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/x"
-
-	"github.com/ory/x/fetcher"
-	"github.com/ory/x/logrusx"
 )
 
 var _ registration.PostHookPostPersistExecutor = new(WebHook)
@@ -76,7 +76,7 @@ type (
 		// fandom-start
 		Credentials *identity.Credentials `json:"credentials,omitempty"`
 		Fields      url.Values            `json:"fields,omitempty"`
-		HookType       string                `json:"hook_type,omitempty"`
+		HookType    string                `json:"hook_type,omitempty"`
 		// fandom-end
 	}
 
@@ -230,13 +230,13 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 	})
 }
 
-func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.Request, flow *verification.Flow, id *identity.Identity) error {
+func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.Request, flow *verification.Flow, identity *identity.Identity) error {
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
-		Identity:       id,
+		Identity:       identity,
 		HookType:       "LoginPreHook",
 	})
 }
@@ -262,32 +262,9 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 	})
 }
 
-func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
-	credentials, _ := id.GetCredentials(ct)
-	// fandom-start
-	if req.Body != nil {
-		if err := req.ParseForm(); err != nil {
-			return errors.WithStack(err)
-		}
-	}
-	// fandom-end
-	return e.execute(&templateContext{
-		Flow:           flow,
-		RequestHeaders: req.Header,
-		RequestMethod:  req.Method,
-		RequestUrl:     req.RequestURI,
-		Identity:       id,
-		// fandom-start
-		Credentials: credentials,
-		Fields:      req.Form,
-    HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
-		// fandom-end
-	})
-}
-
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
-	credentials, _ := session.Identity.GetCredentials(ct)
 	// fandom-start
+	credentials, _ := session.Identity.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
 			return errors.WithStack(err)
@@ -303,8 +280,29 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 		// fandom-start
 		Credentials: credentials,
 		Fields:      req.Form,
-    HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
+		HookType:    "PostRegistrationPostPersistHook:" + ct.String(),
 		// fandom-end
+	})
+}
+
+// fandom-start
+
+func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
+	credentials, _ := id.GetCredentials(ct)
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return e.execute(&templateContext{
+		Flow:           flow,
+		RequestHeaders: req.Header,
+		RequestMethod:  req.Method,
+		RequestUrl:     req.RequestURI,
+		Identity:       id,
+		Credentials:    credentials,
+		Fields:         req.Form,
+		HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
 	})
 }
 
@@ -324,19 +322,25 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 	})
 }
 
+// fandom-end
+
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	// fandom-start
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
 	}
+	// fandom-end
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
-		Credentials:    credentials,
-		HookType:       "SettingsPostPersistHook:" + settingsType,
+		// fandom-start
+		Credentials: credentials,
+		HookType:    "SettingsPrePersistHook:" + settingsType,
+		// fandom-end
 	})
 }
 
@@ -358,6 +362,9 @@ func (e *WebHook) execute(data *templateContext) error {
 		}
 	}
 
+	if body == nil {
+		body = bytes.NewReader(make([]byte, 0))
+	}
 	err = doHttpCall(e.r.GetResilientClient(), conf.method, conf.url, conf.auth, conf.interrupt, body)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
@@ -368,7 +375,7 @@ func (e *WebHook) execute(data *templateContext) error {
 
 func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*bytes.Reader, error) {
 	if len(templateURI) == 0 {
-		return nil, nil
+		return bytes.NewReader(make([]byte, 0)), nil
 	}
 
 	f := fetcher.NewFetcher()

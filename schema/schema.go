@@ -16,6 +16,7 @@ import (
 	_ "github.com/ory/jsonschema/v3/fileloader"
 	_ "github.com/ory/jsonschema/v3/httploader"
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/x/pagination"
 	"github.com/ory/x/urlx"
 )
 
@@ -38,6 +39,21 @@ func (s Schemas) GetByID(id string) (*Schema, error) {
 	return nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf("Unable to find JSON Schema ID: %s", id))
 }
 
+func (s Schemas) Total() int {
+	return len(s)
+}
+
+func (s Schemas) List(page, perPage int) Schemas {
+	if page < 0 {
+		page = 0
+	}
+	if perPage < 1 {
+		perPage = 1
+	}
+	start, end := pagination.Index((page+1)*perPage, page*perPage, len(s))
+	return s[start:end]
+}
+
 var orderedKeyCacheMutex sync.RWMutex
 var orderedKeyCache map[string][]string
 
@@ -49,7 +65,7 @@ func computeKeyPositions(schema []byte, dest *[]string, parents []string) {
 	switch gjson.GetBytes(schema, "type").String() {
 	case "object":
 		gjson.GetBytes(schema, "properties").ForEach(func(key, value gjson.Result) bool {
-			computeKeyPositions([]byte(value.Raw), dest, append(parents, strings.Replace(key.String(), ".", "\\.", -1)))
+			computeKeyPositions([]byte(value.Raw), dest, append(parents, strings.ReplaceAll(key.String(), ".", "\\.")))
 			return true
 		})
 	default:

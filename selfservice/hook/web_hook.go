@@ -2,11 +2,15 @@ package hook
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"time"
+
+	"github.com/ory/x/httpx"
 
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
@@ -55,11 +59,16 @@ type (
 	}
 
 	webHookConfig struct {
+		sum         string
 		method      string
 		url         string
 		templateURI string
 		auth        AuthStrategy
 		interrupt   bool
+		retries     int
+		minWait     time.Duration
+		maxWait     time.Duration
+		timeout     time.Duration
 	}
 
 	webHookDependencies interface {
@@ -76,7 +85,7 @@ type (
 		// fandom-start
 		Credentials *identity.Credentials `json:"credentials,omitempty"`
 		Fields      url.Values            `json:"fields,omitempty"`
-		HookType       string                `json:"hook_type,omitempty"`
+		HookType    string                `json:"hook_type,omitempty"`
 		// fandom-end
 	}
 
@@ -183,6 +192,10 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 			Config json.RawMessage
 		}
 		Interrupt bool
+		Retries   int
+		Timeout   string
+		MinWait   string `json:"min_wait"`
+		MaxWait   string `json:"max_wait"`
 	}
 
 	var rc rawWebHookConfig
@@ -196,12 +209,33 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 		return nil, fmt.Errorf("failed to create web hook auth strategy: %w", err)
 	}
 
+	timeout := time.Minute
+	retryWaitMin := 1 * time.Second
+	retryWaitMax := 30 * time.Second
+	retryMax := 4
+	if t, err := time.ParseDuration(rc.Timeout); err != nil {
+		timeout = t
+	}
+	if t, err := time.ParseDuration(rc.MinWait); err != nil {
+		retryWaitMin = t
+	}
+	if t, err := time.ParseDuration(rc.MaxWait); err != nil {
+		retryWaitMin = t
+	}
+	if rc.Retries > 0 {
+		retryMax = rc.Retries
+	}
 	return &webHookConfig{
+		sum:         fmt.Sprintf("%x", md5.Sum(r)),
 		method:      rc.Method,
 		url:         rc.Url,
 		templateURI: rc.Body,
 		auth:        as,
 		interrupt:   rc.Interrupt,
+		retries:     retryMax,
+		timeout:     timeout,
+		minWait:     retryWaitMin,
+		maxWait:     retryWaitMax,
 	}, nil
 }
 
@@ -280,7 +314,7 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 		// fandom-start
 		Credentials: credentials,
 		Fields:      req.Form,
-    HookType:       "PostRegistrationPrePersistHook:" + ct.String(),
+		HookType:    "PostRegistrationPrePersistHook:" + ct.String(),
 		// fandom-end
 	})
 }
@@ -303,7 +337,7 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 		// fandom-start
 		Credentials: credentials,
 		Fields:      req.Form,
-    HookType:       "PostRegistrationPostPersistHook:" + ct.String(),
+		HookType:    "PostRegistrationPostPersistHook:" + ct.String(),
 		// fandom-end
 	})
 }
@@ -357,8 +391,13 @@ func (e *WebHook) execute(data *templateContext) error {
 			return fmt.Errorf("failed to create web hook body: %w", err)
 		}
 	}
-
-	err = doHttpCall(e.r.GetResilientClient(), conf.method, conf.url, conf.auth, conf.interrupt, body)
+	rc := e.r.GetSpecializedResilientClient(data.HookType+conf.sum,
+		httpx.ResilientClientWithLogger(e.r.Logger()),
+		httpx.ResilientClientWithMaxRetry(conf.retries),
+		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
+		httpx.ResilientClientWithMaxRetryWait(conf.minWait),
+		httpx.ResilientClientWithMaxRetryWait(conf.maxWait))
+	err = doHttpCall(rc, conf, body)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
 	}
@@ -405,21 +444,21 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 }
 
-func doHttpCall(client *retryablehttp.Client, method string, url string, as AuthStrategy, interrupt bool, body io.Reader) error {
-	req, err := retryablehttp.NewRequest(method, url, body)
+func doHttpCall(client *retryablehttp.Client, conf *webHookConfig, body io.Reader) error {
+	req, err := retryablehttp.NewRequest(conf.method, conf.url, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	as.apply(req.Request)
+	conf.auth.apply(req.Request)
 
 	resp, err := client.Do(req)
 
 	if err != nil {
 		return err
 	} else if resp.StatusCode >= http.StatusBadRequest {
-		if interrupt {
+		if conf.interrupt {
 			if err := parseResponse(resp); err != nil {
 				return err
 			}

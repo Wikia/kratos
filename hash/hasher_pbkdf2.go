@@ -36,7 +36,8 @@ func (h *Pbkdf2) Generate(_ context.Context, password []byte) ([]byte, error) {
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(
 		&b,
-		"$pbkdf2-%s$i=%d,l=%d$%s$%s",
+		"$%s$pbkdf2-%s$i=%d,l=%d$%s$%s",
+		Pbkdf2AlgorithmId,
 		h.Algorithm,
 		h.Iterations,
 		h.KeyLength,

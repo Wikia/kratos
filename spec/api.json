@@ -4275,55 +4275,6 @@
       }
     },
     "/sessions/identity/{id}": {
-      "delete": {
-        "description": "This endpoint is useful for:\n\nTo forcefully logout Identity from all devices and sessions",
-        "operationId": "adminLogoutIdentity",
-        "parameters": [
-          {
-            "description": "ID is the identity's ID.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "$ref": "#/components/responses/emptyResponse"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "summary": "Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.",
-        "tags": [
-          "v0alpha2"
-        ]
-      },
       "get": {
         "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
         "operationId": "adminIdentitySession",

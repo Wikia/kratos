@@ -2003,49 +2003,6 @@
             }
           }
         }
-      },
-      "delete": {
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "description": "This endpoint is useful for:\n\nTo forcefully logout Identity from all devices and sessions",
-        "schemes": [
-          "http",
-          "https"
-        ],
-        "tags": [
-          "v0alpha2"
-        ],
-        "summary": "Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.",
-        "operationId": "adminLogoutIdentity",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "ID is the identity's ID.",
-            "name": "id",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "202": {
-            "$ref": "#/responses/emptyResponse"
-          },
-          "401": {
-            "description": "jsonError",
-            "schema": {
-              "$ref": "#/definitions/jsonError"
-            }
-          },
-          "500": {
-            "description": "jsonError",
-            "schema": {
-              "$ref": "#/definitions/jsonError"
-            }
-          }
-        }
       }
     },
     "/sessions/whoami": {

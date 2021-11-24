@@ -48,8 +48,7 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
-	RouteIdentity           = "/identities"
-	RouteDeleteSession      = RouteIdentity + "/:id/sessions"
+	RouteIdentity           = RouteCollection + "/identity"
 	RouteIdentityManagement = RouteIdentity + "/:id"
 )
 
@@ -59,11 +58,8 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		// Redirect to public endpoint
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
-
-	admin.DELETE(RouteDeleteSession, h.deleteIdentitySessions)
-
+	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
 	admin.GET(RouteIdentityManagement, h.session)
-	admin.DELETE(RouteIdentityManagement, h.logout)
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
@@ -78,7 +74,6 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 		public.Handle(m, RouteWhoami, h.whoami)
 		public.Handle(m, RouteIdentityManagement, x.RedirectToAdminRoute(h.r))
 	}
-	public.DELETE(RouteDeleteSession, x.RedirectToAdminRoute(h.r))
 }
 
 // nolint:deadcode,unused
@@ -231,42 +226,6 @@ func (h *Handler) deleteIdentitySessions(w http.ResponseWriter, r *http.Request,
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// swagger:parameters adminLogoutIdentity
-// nolint:deadcode,unused
-type adminLogoutIdentity struct {
-	// ID is the identity's ID.
-	//
-	// required: true
-	// in: path
-	ID string `json:"id"`
-}
-
-// swagger:route DELETE /sessions/identity/{id} v0alpha2 adminLogoutIdentity
-//
-// Calling this endpoint irrecoverably and permanently Invalidates all sessions tha belongs to a given Identity.
-//
-// This endpoint is useful for:
-//
-// - To forcefully logout Identity from all devices and sessions
-//
-//     Schemes: http, https
-//
-//     Security:
-//       oryAccessToken:
-//
-//     Responses:
-//       202: emptyResponse
-//       401: jsonError
-//       500: jsonError
-func (h *Handler) logout(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	if err := h.r.SessionPersister().DeleteSessionsByIdentity(r.Context(), x.ParseUUID(ps.ByName("id"))); err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-
-	w.WriteHeader(http.StatusAccepted)
 }
 
 // swagger:parameters adminIdentitySession

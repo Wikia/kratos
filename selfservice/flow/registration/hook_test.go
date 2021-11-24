@@ -85,21 +85,18 @@ func TestRegistrationExecutor(t *testing.T) {
 					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
 				})
 
-				// fandom-start
-				// TODO PLATFORM-6406 https://fandom.atlassian.net/browse/PLATFORM-6406 Registration hook is being fired two times during registration flow
-				//t.Run("case=fail if hooks fail", func(t *testing.T) {
-				//	t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
-				//	viperSetPost(t, conf, strategy, []config.SelfServiceHook{{Name: "err", Config: []byte(`{"ExecutePostRegistrationPrePersistHook": "abort"}`)}})
-				//	i := testhelpers.SelfServiceHookFakeIdentity(t)
-				//
-				//	res, body := makeRequestPost(t, newServer(t, i, flow.TypeBrowser), false, url.Values{})
-				//	assert.EqualValues(t, http.StatusOK, res.StatusCode)
-				//	assert.Equal(t, "", body)
-				//
-				//	_, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID)
-				//	require.Error(t, err)
-				//})
-				// fandom-end
+				t.Run("case=fail if hooks fail", func(t *testing.T) {
+					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
+					viperSetPost(t, conf, strategy, []config.SelfServiceHook{{Name: "err", Config: []byte(`{"ExecutePostRegistrationPrePersistHook": "abort"}`)}})
+					i := testhelpers.SelfServiceHookFakeIdentity(t)
+
+					res, body := makeRequestPost(t, newServer(t, i, flow.TypeBrowser), false, url.Values{})
+					assert.EqualValues(t, http.StatusOK, res.StatusCode)
+					assert.Equal(t, "", body)
+
+					_, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID)
+					require.Error(t, err)
+				})
 
 				t.Run("case=use return_to value", func(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))

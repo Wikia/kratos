@@ -74,7 +74,7 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
-	rc  *retryablehttp.Client
+	rc  map[string]*retryablehttp.Client
 
 	injectedSelfserviceHooks map[string]func(config.SelfServiceHook) interface{}
 
@@ -203,7 +203,9 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 }
 
 func NewRegistryDefault() *RegistryDefault {
-	return &RegistryDefault{}
+	return &RegistryDefault{
+		rc: map[string]*retryablehttp.Client{},
+	}
 }
 
 func (m *RegistryDefault) WithLogger(l *logrusx.Logger) Registry {
@@ -692,9 +694,13 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetResilientClient() *retryablehttp.Client {
-	if m.rc == nil {
-		m.rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
+func (m *RegistryDefault) GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	var rc *retryablehttp.Client
+	if cl, ok := m.rc[name]; ok {
+		rc = cl
+	} else {
+		rc = httpx.NewResilientClient(opts...)
+		m.rc[name] = rc
 	}
-	return m.rc
+	return rc
 }

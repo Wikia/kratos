@@ -242,6 +242,93 @@ func TestDriverDefault_Hooks(t *testing.T) {
 				assert.Equal(t, expectedExecutors, h)
 			})
 		}
+
+		// AFTER pre-persist and post-persist hooks
+		for _, tc := range []struct {
+			uc                  string
+			prep                func(conf *config.Config)
+			expect_pre_persist  func(reg *driver.RegistryDefault) []registration.PostHookPrePersistExecutor
+			expect_post_persist func(reg *driver.RegistryDefault) []registration.PostHookPostPersistExecutor
+		}{
+			{
+				uc:                  "No hooks configured",
+				prep:                func(conf *config.Config) {},
+				expect_pre_persist:  func(reg *driver.RegistryDefault) []registration.PostHookPrePersistExecutor { return nil },
+				expect_post_persist: func(reg *driver.RegistryDefault) []registration.PostHookPostPersistExecutor { return nil },
+			},
+			{
+				uc: "A web_hook is configured for both pre-persist and post-persist phases by default",
+				prep: func(conf *config.Config) {
+					conf.MustSet(config.ViperKeySelfServiceRegistrationAfter+".password.hooks", []map[string]interface{}{
+						{
+							"hook":   "web_hook",
+							"config": map[string]interface{}{"url": "foo", "method": "POST", "body": "bar"},
+						},
+					})
+				},
+				expect_pre_persist: func(reg *driver.RegistryDefault) []registration.PostHookPrePersistExecutor {
+					return []registration.PostHookPrePersistExecutor{
+						hook.NewWebHook(reg, json.RawMessage(`{"body":"bar","method":"POST","url":"foo"}`)),
+					}
+				},
+				expect_post_persist: func(reg *driver.RegistryDefault) []registration.PostHookPostPersistExecutor {
+					return []registration.PostHookPostPersistExecutor{
+						hook.NewWebHook(reg, json.RawMessage(`{"body":"bar","method":"POST","url":"foo"}`)),
+					}
+				},
+			},
+			{
+				uc: "A web_hook is configured for pre-persist phase only",
+				prep: func(conf *config.Config) {
+					conf.MustSet(config.ViperKeySelfServiceRegistrationAfter+".password.hooks", []map[string]interface{}{
+						{
+							"hook":              "web_hook",
+							"persistence_phase": "pre-persist",
+							"config":            map[string]interface{}{"url": "foo", "method": "POST", "body": "bar"},
+						},
+					})
+				},
+				expect_pre_persist: func(reg *driver.RegistryDefault) []registration.PostHookPrePersistExecutor {
+					return []registration.PostHookPrePersistExecutor{
+						hook.NewWebHook(reg, json.RawMessage(`{"body":"bar","method":"POST","url":"foo"}`)),
+					}
+				},
+				expect_post_persist: func(reg *driver.RegistryDefault) []registration.PostHookPostPersistExecutor { return nil },
+			},
+			{
+				uc: "A web_hook is configured for post-persist phase only",
+				prep: func(conf *config.Config) {
+					conf.MustSet(config.ViperKeySelfServiceRegistrationAfter+".password.hooks", []map[string]interface{}{
+						{
+							"hook":              "web_hook",
+							"persistence_phase": "post-persist",
+							"config":            map[string]interface{}{"url": "foo", "method": "POST", "body": "bar"},
+						},
+					})
+				},
+				expect_pre_persist: func(reg *driver.RegistryDefault) []registration.PostHookPrePersistExecutor { return nil },
+				expect_post_persist: func(reg *driver.RegistryDefault) []registration.PostHookPostPersistExecutor {
+					return []registration.PostHookPostPersistExecutor{
+						hook.NewWebHook(reg, json.RawMessage(`{"body":"bar","method":"POST","url":"foo"}`)),
+					}
+				},
+			},
+		} {
+			t.Run(fmt.Sprintf("after/uc=%s", tc.uc), func(t *testing.T) {
+				conf, reg := internal.NewFastRegistryWithMocks(t)
+				tc.prep(conf)
+
+				pre := reg.PostRegistrationPrePersistHooks(ctx, identity.CredentialsTypePassword)
+				post := reg.PostRegistrationPostPersistHooks(ctx, identity.CredentialsTypePassword)
+
+				expectedPrePersistExecutors := tc.expect_pre_persist(reg)
+				require.Len(t, pre, len(expectedPrePersistExecutors))
+				assert.Equal(t, expectedPrePersistExecutors, pre)
+				expectedPostPersistExecutors := tc.expect_post_persist(reg)
+				require.Len(t, post, len(expectedPostPersistExecutors))
+				assert.Equal(t, expectedPostPersistExecutors, post)
+			})
+		}
 	})
 
 	t.Run("type=login", func(t *testing.T) {

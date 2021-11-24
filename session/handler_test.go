@@ -401,48 +401,6 @@ func TestHandlerDeleteSessionByIdentityID(t *testing.T) {
 	})
 }
 
-func TestSessionLogout(t *testing.T) {
-	conf, reg := internal.NewFastRegistryWithMocks(t)
-
-	// Start kratos server
-	publicTS, adminTS := testhelpers.NewKratosServerWithCSRF(t, reg)
-
-	mockServerURL := urlx.ParseOrPanic(publicTS.URL)
-
-	conf.MustSet(config.ViperKeyAdminBaseURL, adminTS.URL)
-	testhelpers.SetDefaultIdentitySchema(t, conf, "file://./stub/identity.schema.json")
-	testhelpers.SetIdentitySchemas(t, conf, map[string]string{
-		"customer": "file://./stub/handler/customer.schema.json",
-		"employee": "file://./stub/handler/employee.schema.json",
-	})
-	conf.MustSet(config.ViperKeyPublicBaseURL, mockServerURL.String())
-
-	var logout = func(t *testing.T, base *httptest.Server, href string, expectCode int) {
-		req, err := http.NewRequest("DELETE", base.URL+href, nil)
-		require.NoError(t, err)
-
-		res, err := base.Client().Do(req)
-		require.NoError(t, err)
-
-		require.EqualValues(t, expectCode, res.StatusCode)
-	}
-
-	t.Run("case=should return 202 after invalidating all sessions", func(t *testing.T) {
-		for name, ts := range map[string]*httptest.Server{"public": publicTS, "admin": adminTS} {
-			t.Run("endpoint="+name, func(t *testing.T) {
-				i := identity.NewIdentity("")
-				require.NoError(t, reg.IdentityManager().Create(context.Background(), i))
-				s := &Session{Identity: i}
-				require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), s))
-
-				logout(t, ts, "/sessions/identity/"+i.ID.String(), http.StatusAccepted)
-				_, err := reg.SessionPersister().GetSession(context.Background(), s.ID)
-				require.True(t, errors.Is(err, sqlcon.ErrNoRows))
-			})
-		}
-	})
-}
-
 func TestSessionRequest(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 

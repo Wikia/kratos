@@ -200,7 +200,9 @@ func TestPbkdf2Hasher(t *testing.T) {
 					assert.NotEqual(t, pw, hs)
 
 					t.Logf("hash: %s", hs)
-					require.NoError(t, hash.ComparePbkdf2(context.Background(), reg.Config(context.Background()), pw, hs))
+					_, realHash, err := hash.ParsePasswordHash(hs)
+					require.NoError(t, err, "could not parse hash")
+					require.NoError(t, hash.ComparePbkdf2(context.Background(), reg.Config(context.Background()), pw, realHash))
 
 					assert.True(t, hasher.Understands(hs))
 
@@ -216,7 +218,7 @@ func TestPbkdf2Hasher(t *testing.T) {
 
 func TestCompare(t *testing.T) {
 	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
-		configx.WithConfigFiles("../internal/.kratos.yaml"))
+		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	identityId, _ := uuid.NewV4()
 
@@ -243,17 +245,17 @@ func TestCompare(t *testing.T) {
 	assert.Nil(t, hash.CompareArgon2id(context.Background(), p, []byte("test"), []byte("$v=19$m=32,t=5,p=4$cm94YnRVOW5jZzFzcVE4bQ$fBxypOL0nP/zdPE71JtAV71i487LbX3fJI5PoTN6Lp4")))
 	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$argon2id$v=19$m=32,t=5,p=4$cm94YnRVOW5jZzFzcVE4bQ$fBxypOL0nP/zdPE71JtAV71i487LbX3fJI5PoTN6Lp5")))
 
-	assert.Nil(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
+	assert.Nil(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
 	assert.Nil(t, hash.ComparePbkdf2(context.Background(), p, []byte("test"), []byte("$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpp")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpp")))
 
-	assert.Nil(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha512$i=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPwc")))
+	assert.Nil(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha512$i=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPwc")))
 	assert.Nil(t, hash.ComparePbkdf2(context.Background(), p, []byte("test"), []byte("$pbkdf2-sha512$i=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPwc")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha512$i=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPww")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha512$i=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPww")))
 
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$aaaa$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXcc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpII")))
-	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2-sha512$I=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPwc")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$aaaa$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXcc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpI")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha256$i=100000,l=32$1jP+5Zxpxgtee/iPxGgOz0RfE9/KJuDElP1ley4VxXc$QJxzfvdbHYBpydCbHoFg3GJEqMFULwskiuqiJctoYpII")))
+	assert.Error(t, hash.Compare(context.Background(), p, identityId, []byte("test"), []byte("$pbkdf2$pbkdf2-sha512$I=100000,l=32$bdHBpn7OWOivJMVJypy2UqR0UnaD5prQXRZevj/05YU$+wArTfv1a+bNGO1iZrmEdVjhA+lL11wF4/IxpgYfPwc")))
 }

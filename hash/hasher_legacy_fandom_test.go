@@ -3,6 +3,7 @@ package hash_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -46,8 +47,8 @@ func TestComparatorLegacyFandomSuccess(t *testing.T) {
 }
 
 func TestComparatorLegacyFandomFail(t *testing.T) {
-	p := config.MustNew(t, logrusx.New("", ""),
-		configx.WithConfigFiles("../internal/.kratos.yaml"))
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	for k, pw := range [][]byte{
 		mkpw(t, 8),
@@ -71,8 +72,8 @@ func TestComparatorLegacyFandomFail(t *testing.T) {
 }
 
 func TestLegacyFandomCompare(t *testing.T) {
-	p := config.MustNew(t, logrusx.New("", ""),
-		configx.WithConfigFiles("../internal/.kratos.yaml"))
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	for _, testData := range [][3][]byte{
 		// test bcrypt-aes hash

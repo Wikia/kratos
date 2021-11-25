@@ -9,7 +9,7 @@ Method | HTTP request | Description
 [**AdminDeleteIdentity**](V0alpha2Api.md#AdminDeleteIdentity) | **Delete** /identities/{id} | Delete an Identity
 [**AdminDeleteIdentitySessions**](V0alpha2Api.md#AdminDeleteIdentitySessions) | **Delete** /identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 [**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /identities/{id} | Get an Identity
-[**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /sessions/identity/{id} | Calling this endpoint issues a session for a given identity.
+[**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 [**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /identities | List Identities
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 [**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /identities/{id} | Update an Identity

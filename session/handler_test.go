@@ -441,7 +441,7 @@ func TestSessionRequest(t *testing.T) {
 				i := identity.NewIdentity("")
 				require.NoError(t, reg.IdentityManager().Create(context.Background(), i))
 
-				res := session(t, ts, "/sessions/identity/"+i.ID.String(), http.StatusOK)
+				res := session(t, ts, "/identities/"+i.ID.String()+"/session", http.StatusOK)
 				s, err := reg.SessionPersister().GetSession(context.Background(), res.Session.ID)
 				require.Empty(t, err)
 				require.Equal(t, i.ID.String(), s.Identity.ID.String())

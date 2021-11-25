@@ -1827,7 +1827,7 @@ func (a *V0alpha2ApiService) AdminIdentitySessionExecute(r V0alpha2ApiApiAdminId
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/sessions/identity/{id}"
+	localVarPath := localBasePath + "/identities/{id}/session"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)

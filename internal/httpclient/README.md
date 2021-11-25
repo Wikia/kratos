@@ -91,7 +91,7 @@ Class | Method | HTTP request | Description
 *V0alpha2Api* | [**AdminDeleteIdentity**](docs/V0alpha2Api.md#admindeleteidentity) | **Delete** /identities/{id} | Delete an Identity
 *V0alpha2Api* | [**AdminDeleteIdentitySessions**](docs/V0alpha2Api.md#admindeleteidentitysessions) | **Delete** /identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /identities/{id} | Get an Identity
-*V0alpha2Api* | [**AdminIdentitySession**](docs/V0alpha2Api.md#adminidentitysession) | **Get** /sessions/identity/{id} | Calling this endpoint issues a session for a given identity.
+*V0alpha2Api* | [**AdminIdentitySession**](docs/V0alpha2Api.md#adminidentitysession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 *V0alpha2Api* | [**AdminListIdentities**](docs/V0alpha2Api.md#adminlistidentities) | **Get** /identities | List Identities
 *V0alpha2Api* | [**AdminUpdateCredentials**](docs/V0alpha2Api.md#adminupdatecredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 *V0alpha2Api* | [**AdminUpdateIdentity**](docs/V0alpha2Api.md#adminupdateidentity) | **Put** /identities/{id} | Update an Identity

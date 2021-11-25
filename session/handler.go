@@ -48,8 +48,9 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
-	RouteIdentity           = RouteCollection + "/identity"
-	RouteIdentityManagement = RouteIdentity + "/:id"
+	RouteIdentity           = "/identities"
+	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
+	RouteIdentitySession    = RouteIdentity + "/:id/session"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -59,7 +60,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
-	admin.GET(RouteIdentityManagement, h.session)
+	admin.GET(RouteIdentitySession, h.session)
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
@@ -67,12 +68,13 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	// some cookie.
 	h.r.CSRFHandler().IgnorePath(RouteWhoami)
 	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/sessions")
-	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*")
+	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/session")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
 		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
 		public.Handle(m, RouteIdentityManagement, x.RedirectToAdminRoute(h.r))
+		public.Handle(m, RouteIdentitySession, x.RedirectToAdminRoute(h.r))
 	}
 }
 
@@ -228,6 +230,7 @@ func (h *Handler) deleteIdentitySessions(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// fandom-start
 // swagger:parameters adminIdentitySession
 // nolint:deadcode,unused
 type adminIdentitySession struct {
@@ -253,14 +256,14 @@ type AdminIdentitySessionResponse struct {
 	// The session token is only issued for API flows, not for Browser flows!
 	Token string `json:"session_token"`
 
-	// The Session
+	// Session
 	//
 	// The session contains information about the user, the session device, and so on.
 	//
 	// required: true
 	Session *Session `json:"session"`
 
-	// The Identity
+	// Identity
 	//
 	// The identity that just signed up.
 	//
@@ -268,7 +271,7 @@ type AdminIdentitySessionResponse struct {
 	Identity *identity.Identity `json:"identity"`
 }
 
-// swagger:route GET /sessions/identity/{id} v0alpha2 adminIdentitySession
+// swagger:route GET /identities/{id}/session v0alpha2 adminIdentitySession
 //
 // Calling this endpoint issues a session for a given identity.
 //
@@ -310,6 +313,8 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
+
+// fandom-end
 
 func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

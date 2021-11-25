@@ -89,14 +89,18 @@ func (s *ManagerHTTP) issueCookiesAndCSRF(ctx context.Context, w http.ResponseWr
 		cookie.Options.Path = alias.Path
 	}
 
-	old, err := s.FetchFromRequest(ctx, r)
-	if err != nil {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
-	} else if old.Identity.ID != session.Identity.ID {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
+	// fandom-start
+	if generateCSRF {
+		old, err := s.FetchFromRequest(ctx, r)
+		if err != nil {
+			// No session was set prior -> regenerate anti-csrf token
+			_ = s.r.CSRFHandler().RegenerateToken(w, r)
+		} else if old.Identity.ID != session.Identity.ID {
+			// No session was set prior -> regenerate anti-csrf token
+			_ = s.r.CSRFHandler().RegenerateToken(w, r)
+		}
 	}
+	// fandom-end
 
 	if s.r.Config(ctx).SessionSameSiteMode() != 0 {
 		cookie.Options.SameSite = s.r.Config(ctx).SessionSameSiteMode()

@@ -16,8 +16,6 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-var Pbkdf2AlgorithmId = []byte("pbkdf2")
-
 type Pbkdf2 struct {
 	Algorithm  string
 	Iterations uint32
@@ -36,8 +34,7 @@ func (h *Pbkdf2) Generate(_ context.Context, password []byte) ([]byte, error) {
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(
 		&b,
-		"$%s$pbkdf2-%s$i=%d,l=%d$%s$%s",
-		Pbkdf2AlgorithmId,
+		"$pbkdf2-%s$i=%d,l=%d$%s$%s",
 		h.Algorithm,
 		h.Iterations,
 		h.KeyLength,
@@ -51,8 +48,7 @@ func (h *Pbkdf2) Generate(_ context.Context, password []byte) ([]byte, error) {
 }
 
 func (h *Pbkdf2) Understands(hash []byte) bool {
-	algorithm, _, err := ParsePasswordHash(hash)
-	return err == nil && bytes.Equal(algorithm, Pbkdf2AlgorithmId)
+	return IsPbkdf2Hash(hash)
 }
 
 func getPseudorandomFunctionForPbkdf2(alg string) func() hash.Hash {

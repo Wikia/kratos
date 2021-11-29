@@ -763,11 +763,7 @@ func TestCompleteLogin(t *testing.T) {
 		var o password.CredentialsConfig
 		require.NoError(t, json.NewDecoder(bytes.NewBuffer(c.Config)).Decode(&o))
 		assert.True(t, reg.Hasher().Understands([]byte(o.HashedPassword)), "%s", o.HashedPassword)
-		algorithm, _, err := hash.ParsePasswordHash([]byte(o.HashedPassword))
-		// fandom-start
-		assert.NoError(t, err, "unrecognized hash: %s", o.HashedPassword)
-		assert.Equal(t, hash.BcryptAlgorithmId, algorithm, "not a Bcrypt hash: %s", o.HashedPassword)
-		// fandom-end
+		assert.True(t, hash.IsBcryptHash([]byte(o.HashedPassword)), "%s", o.HashedPassword)
 
 		// retry after upgraded
 		body = testhelpers.SubmitLoginForm(t, false, browserClient, publicTS, values,

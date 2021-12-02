@@ -433,6 +433,7 @@ func (h *Handler) submitFlow(w http.ResponseWriter, r *http.Request, _ httproute
 	}
 
 	var i *identity.Identity
+	var ng node.Group
 	for _, ss := range h.d.AllLoginStrategies() {
 		interim, err := ss.Login(w, r, f)
 		if errors.Is(err, flow.ErrStrategyNotResponsible) {
@@ -443,7 +444,7 @@ func (h *Handler) submitFlow(w http.ResponseWriter, r *http.Request, _ httproute
 			h.d.LoginFlowErrorHandler().WriteFlowError(w, r, f, ss.NodeGroup(), err)
 			return
 		}
-
+		ng = ss.NodeGroup()
 		i = interim
 		break
 	}
@@ -456,10 +457,10 @@ func (h *Handler) submitFlow(w http.ResponseWriter, r *http.Request, _ httproute
 	// TODO Handle n+1 authentication factor
 
 	if err := h.d.LoginHookExecutor().PostLoginHook(w, r, f, i); err != nil {
-		if err == ErrAddressNotVerified {
+		if errors.Is(err, ErrAddressNotVerified) {
 			h.d.LoginFlowErrorHandler().WriteFlowError(w, r, f, node.DefaultGroup, errors.WithStack(schema.NewAddressNotVerifiedError()))
 		} else {
-			h.d.SelfServiceErrorManager().Forward(r.Context(), w, r, err)
+			h.d.LoginFlowErrorHandler().WriteFlowError(w, r, f, ng, err)
 		}
 		return
 	}

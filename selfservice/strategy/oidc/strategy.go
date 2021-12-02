@@ -113,6 +113,9 @@ type authCodeContainer struct {
 	FlowID string          `json:"flow_id"`
 	State  string          `json:"state"`
 	Traits json.RawMessage `json:"traits"`
+	// fandom-start
+	ExtraFields map[string]string `json:"extra_fields"`
+	// fandom-end
 }
 
 func (s *Strategy) CountActiveCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {

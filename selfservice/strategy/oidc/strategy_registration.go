@@ -129,11 +129,24 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	}
 
 	state := x.NewUUID().String()
+	// fandom-start
+	extraFields := map[string]string{}
+	_ = r.ParseForm()
+	for k, v := range r.PostForm {
+		if len(v) == 0 {
+			continue
+		}
+		extraFields[k] = v[0]
+	}
+	// fandom-end
 	if err := s.d.ContinuityManager().Pause(r.Context(), w, r, sessionName,
 		continuity.WithPayload(&authCodeContainer{
 			State:  state,
 			FlowID: f.ID.String(),
 			Traits: p.Traits,
+			// fandom-start
+			ExtraFields: extraFields,
+			// fandom-end
 		}),
 		continuity.WithLifespan(time.Minute*30)); err != nil {
 		return s.handleError(w, r, f, pid, nil, err)
@@ -258,16 +271,13 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, a
 	// fandom-start
 	// TODO: this will probably not work anymore
 	// copy stored Form values to allow passing non identity aware fields between callbacks/redirects
-	var v map[string]interface{}
-	if err := json.Unmarshal(container.Traits, &v); err == nil {
-		for k, v := range v {
-			_ = r.ParseForm()
+	if container.ExtraFields != nil {
+		_ = r.ParseForm()
+		for k, v := range container.ExtraFields {
 			if _, ok := r.Form[k]; ok {
 				continue
 			}
-			if item, ok := v.(string); ok {
-				r.Form.Add(k, item)
-			}
+			r.Form.Add(k, v)
 		}
 	}
 	// fandom-end

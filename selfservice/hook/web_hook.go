@@ -448,6 +448,10 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 	vm.TLACode("ctx", buf.String())
 
+	// fandom-start
+	l.WithField("hook_request_body", buf.String()).WithSensitiveField("context", data).Debug("webhook body prepared")
+	// fandom-end
+
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		l.WithError(err).WithField("data", data).Error("could not compile JSONNET template")
 		return nil, errors.WithStack(err)

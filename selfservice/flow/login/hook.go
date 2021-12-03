@@ -117,7 +117,10 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, a *
 	}
 
 	if a.Type == flow.TypeAPI {
-		if err := e.d.SessionPersister().UpsertSession(r.Context(), s); err != nil {
+		// Fandom-start set session cookie for API flow login -> https://fandom.atlassian.net/browse/PLATFORM-6395
+		// https://fandom.atlassian.net/wiki/spaces/MOB/pages/1963163864/Fandom+Auth+in+mobile-app
+		if err := e.d.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s); err != nil {
+			// Fandom-end
 			return errors.WithStack(err)
 		}
 		e.d.Audit().

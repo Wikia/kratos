@@ -180,7 +180,15 @@ func TestFlowLifecycle(t *testing.T) {
 					f := login.Flow{Type: tt, ExpiresAt: time.Now().Add(time.Minute), IssuedAt: time.Now(), UI: container.New(""), Refresh: false, RequestedAAL: "aal1"}
 					require.NoError(t, reg.LoginFlowPersister().CreateLoginFlow(context.Background(), &f))
 
-					hc := testhelpers.NewClientWithCookies(t)
+					// fandom-start
+					var hc *http.Client
+					if tt == flow.TypeAPI {
+						hc = &http.Client{}
+					} else {
+						hc = testhelpers.NewClientWithCookies(t)
+					}
+					// fandom-end
+
 					res, err := hc.PostForm(ts.URL+login.RouteSubmitFlow+"?flow="+f.ID.String(), url.Values{"method": {"password"}, "password_identifier": {id1mail}, "password": {"foobar"}, "csrf_token": {x.FakeCSRFToken}})
 					require.NoError(t, err)
 					firstSession := x.MustReadAll(res.Body)

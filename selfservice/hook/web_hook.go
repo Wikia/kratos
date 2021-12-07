@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/ory/x/httpx"
 
 	"github.com/ory/x/fetcher"
@@ -507,8 +506,6 @@ func parseResponse(resp *http.Response) (err error) {
 			err = closeErr
 		}
 	}(resp.Body)
-
-	spew.Dump(string(body))
 
 	hookResponse := &rawHookResponse{
 		Messages: []errorMessage{},

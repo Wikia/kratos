@@ -133,7 +133,7 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	extraFields := map[string]string{}
 	_ = r.ParseForm()
 	for k, v := range r.PostForm {
-		if len(v) == 0 {
+		if len(v) == 0 || v[0] == "" {
 			continue
 		}
 		extraFields[k] = v[0]
@@ -269,11 +269,13 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, a
 
 	i.SetCredentials(s.ID(), *creds)
 	// fandom-start
-	// TODO: this will probably not work anymore
 	// copy stored Form values to allow passing non identity aware fields between callbacks/redirects
 	if container.ExtraFields != nil {
 		_ = r.ParseForm()
 		for k, v := range container.ExtraFields {
+			if v == "" {
+				continue
+			}
 			if _, ok := r.Form[k]; ok {
 				continue
 			}

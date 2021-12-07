@@ -377,7 +377,7 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 		Identity:       id,
 		// fandom-start
 		Credentials: credentials,
-		HookType:    "SettingsPrePersistHook:" + settingsType,
+		HookType:    "SettingsPostPersistHook:" + settingsType,
 		// fandom-end
 	})
 }

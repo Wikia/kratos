@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/ory/x/httpx"
 
 	"github.com/ory/x/fetcher"
@@ -449,13 +450,16 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	vm.TLACode("ctx", buf.String())
 
 	// fandom-start
-	l.WithField("hook_request_body", buf.String()).WithSensitiveField("context", data).Debug("webhook body prepared")
+	l.WithField("context", buf.String()).Debug("webhook body context")
 	// fandom-end
 
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		l.WithError(err).WithField("data", data).Error("could not compile JSONNET template")
 		return nil, errors.WithStack(err)
 	} else {
+		// fandom-start
+		l.WithField("context", buf.String()).WithSensitiveField("web_hook_body", res).Debug("webhook body prepared")
+		// fandom-end
 		return bytes.NewReader([]byte(res)), nil
 	}
 }
@@ -499,6 +503,8 @@ func parseResponse(resp *http.Response) (err error) {
 			err = closeErr
 		}
 	}(resp.Body)
+
+	spew.Dump(string(body))
 
 	hookResponse := &rawHookResponse{
 		Messages: []errorMessage{},

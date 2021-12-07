@@ -350,6 +350,8 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
 	return e.execute(&templateContext{
 		Flow:           flow,
@@ -369,6 +371,8 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
 	// fandom-end
 	return e.execute(&templateContext{
@@ -379,7 +383,7 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 		Identity:       id,
 		// fandom-start
 		Credentials: credentials,
-		HookType:    "SettingsPrePersistHook:" + settingsType,
+		HookType:    "SettingsPostPersistHook:" + settingsType,
 		// fandom-end
 	})
 }
@@ -451,13 +455,16 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	vm.TLACode("ctx", buf.String())
 
 	// fandom-start
-	l.WithField("hook_request_body", buf.String()).WithSensitiveField("context", data).Debug("webhook body prepared")
+	l.WithField("context", buf.String()).Debug("webhook body context")
 	// fandom-end
 
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		l.WithError(err).WithField("data", data).Error("could not compile JSONNET template")
 		return nil, errors.WithStack(err)
 	} else {
+		// fandom-start
+		l.WithField("context", buf.String()).WithSensitiveField("web_hook_body", res).Debug("webhook body prepared")
+		// fandom-end
 		return bytes.NewReader([]byte(res)), nil
 	}
 }

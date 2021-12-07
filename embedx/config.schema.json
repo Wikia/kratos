@@ -685,6 +685,9 @@
         "default_browser_return_url": {
           "$ref": "#/definitions/defaultReturnTo"
         },
+        "oidc": {
+          "$ref": "#/definitions/selfServiceAfterSettingsMethod"
+        },
         "password": {
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },

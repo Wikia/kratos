@@ -11,11 +11,9 @@ import (
 
 	"github.com/ory/kratos/corp"
 	"github.com/ory/kratos/identity"
-
-	"github.com/ory/x/sqlcon"
-
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/strategy/link"
+	"github.com/ory/x/sqlcon"
 )
 
 var _ recovery.FlowPersister = new(Persister)

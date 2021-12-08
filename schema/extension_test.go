@@ -13,12 +13,16 @@ import (
 )
 
 type extensionStub struct {
-	identifiers []string
+	identifiers  []string
+	accountNames []string
 }
 
 func (r *extensionStub) Run(ctx jsonschema.ValidationContext, config ExtensionConfig, value interface{}) error {
 	if config.Credentials.Password.Identifier {
 		r.identifiers = append(r.identifiers, fmt.Sprintf("%s", value))
+	}
+	if config.Credentials.TOTP.AccountName {
+		r.accountNames = append(r.accountNames, fmt.Sprintf("%s", value))
 	}
 	return nil
 }
@@ -48,7 +52,7 @@ func TestExtensionRunner(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
 				c := jsonschema.NewCompiler()
-				runner, err := NewExtensionRunner(ExtensionRunnerIdentityMetaSchema)
+				runner, err := NewExtensionRunner()
 				require.NoError(t, err)
 
 				r := new(extensionStub)
@@ -60,13 +64,14 @@ func TestExtensionRunner(t *testing.T) {
 				}
 
 				assert.EqualValues(t, tc.expect, r.identifiers)
+				assert.EqualValues(t, tc.expect, r.accountNames)
 			})
 		}
 	})
 
 	t.Run("method=applies meta schema", func(t *testing.T) {
 		c := jsonschema.NewCompiler()
-		runner, err := NewExtensionRunner(ExtensionRunnerIdentityMetaSchema)
+		runner, err := NewExtensionRunner()
 		require.NoError(t, err)
 
 		runner.Register(c)

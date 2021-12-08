@@ -8,7 +8,7 @@ import (
 )
 
 func (m *RegistryDefault) PostSettingsPrePersistHooks(ctx context.Context, settingsType string) (b []settings.PostHookPrePersistExecutor) {
-	for _, v := range m.getHooks(settingsType, m.Config(ctx).SelfServiceFlowSettingsAfterHooks(settingsType)) {
+	for _, v := range m.getHooks(settingsType, filter(m.Config(ctx).SelfServiceFlowSettingsAfterHooks(settingsType), config.PrePersist)) {
 		if hook, ok := v.(settings.PostHookPrePersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -23,7 +23,7 @@ func (m *RegistryDefault) PostSettingsPostPersistHooks(ctx context.Context, sett
 		initialHookCount = 1
 	}
 
-	for _, v := range m.getHooks(settingsType, m.Config(ctx).SelfServiceFlowSettingsAfterHooks(settingsType)) {
+	for _, v := range m.getHooks(settingsType, filter(m.Config(ctx).SelfServiceFlowSettingsAfterHooks(settingsType), config.PostPersist)) {
 		if hook, ok := v.(settings.PostHookPostPersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -32,7 +32,7 @@ func (m *RegistryDefault) PostSettingsPostPersistHooks(ctx context.Context, sett
 	if len(b) == initialHookCount {
 		// since we don't want merging hooks defined in a specific strategy and global hooks
 		// global hooks are added only if no strategy specific hooks are defined
-		for _, v := range m.getHooks(config.HookGlobal, m.Config(ctx).SelfServiceFlowSettingsAfterHooks(config.HookGlobal)) {
+		for _, v := range m.getHooks(config.HookGlobal, filter(m.Config(ctx).SelfServiceFlowSettingsAfterHooks(config.HookGlobal), config.PostPersist)) {
 			if hook, ok := v.(settings.PostHookPostPersistExecutor); ok {
 				b = append(b, hook)
 			}

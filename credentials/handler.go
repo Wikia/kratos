@@ -6,12 +6,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+
 	"github.com/gofrs/uuid"
+
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/strategy/oidc"
 	"github.com/ory/kratos/selfservice/strategy/password"
-	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -51,7 +53,6 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 }
 
 type AdminUpdateIdentityCredentialsBody struct {
-
 	// Credentials to be imported.
 	ImportCredentials []ImportCredentialsBody `json:"import_credentials"`
 	// Credentials to be removed.
@@ -68,7 +69,17 @@ type RemoveCredentialsBody struct {
 	Filter string                   `json:"filter"`
 }
 
-// swagger:route PUT /identities/{id}/credentials v0alpha1 adminUpdateCredentials
+// swagger:parameters adminUpdateCredentials
+// nolint:deadcode,unused
+type adminUpdateCredentials struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route PUT /identities/{id}/credentials v0alpha2 adminUpdateCredentials
 //
 // Update Identity Credentials
 //
@@ -134,7 +145,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		return
 	}
 
-	h.r.Writer().Write(w, r, identity.IdentityWithCredentialsMetadataInJSON(*i))
+	h.r.Writer().Write(w, r, identity.WithCredentialsMetadataInJSON(*i))
 }
 
 type IdentityAlreadyExists struct {

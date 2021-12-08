@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/ory/kratos/text"
+
 	"github.com/golang/gddo/httputil"
 	"github.com/pkg/errors"
 
@@ -58,7 +60,7 @@ func SecureRedirectOverrideDefaultReturnTo(defaultReturnTo *url.URL) SecureRedir
 // SecureRedirectToIsWhitelisted validates if the redirect_to param is allowed for a given wildcard
 func SecureRedirectToIsWhiteListedHost(returnTo *url.URL, allowed url.URL) bool {
 	if allowed.Host != "" && allowed.Host[:1] == "*" {
-		return strings.HasSuffix(returnTo.Host, allowed.Host[1:])
+		return strings.HasSuffix(strings.ToLower(returnTo.Host), strings.ToLower(allowed.Host)[1:])
 	}
 	return strings.EqualFold(allowed.Host, returnTo.Host)
 }
@@ -105,6 +107,7 @@ func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureR
 
 	if !found {
 		return nil, errors.WithStack(herodot.ErrBadRequest.
+			WithID(text.ErrIDRedirectURLNotAllowed).
 			WithReasonf("Requested return_to URL \"%s\" is not whitelisted.", returnTo).
 			WithDebugf("Whitelisted domains are: %v", o.whitelist))
 	}
@@ -137,8 +140,24 @@ func SecureContentNegotiationRedirection(
 			return err
 		}
 
-		http.Redirect(w, r, ret.String(), http.StatusFound)
+		http.Redirect(w, r, ret.String(), http.StatusSeeOther)
 	}
 
 	return nil
+}
+
+func ContentNegotiationRedirection(
+	w http.ResponseWriter, r *http.Request, out interface{}, writer herodot.Writer, returnTo string,
+) {
+	switch httputil.NegotiateContentType(r, []string{
+		"text/html",
+		"application/json",
+	}, "text/html") {
+	case "application/json":
+		writer.Write(w, r, out)
+	case "text/html":
+		fallthrough
+	default:
+		http.Redirect(w, r, returnTo, http.StatusSeeOther)
+	}
 }

@@ -12,6 +12,9 @@ import (
 
 	"github.com/ory/x/httpx"
 
+	"github.com/ory/x/fetcher"
+	"github.com/ory/x/logrusx"
+
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
@@ -27,9 +30,6 @@ import (
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/x"
-
-	"github.com/ory/x/fetcher"
-	"github.com/ory/x/logrusx"
 )
 
 var _ registration.PostHookPostPersistExecutor = new(WebHook)
@@ -264,13 +264,13 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 	})
 }
 
-func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.Request, flow *verification.Flow, id *identity.Identity) error {
+func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.Request, flow *verification.Flow, identity *identity.Identity) error {
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
-		Identity:       id,
+		Identity:       identity,
 		HookType:       "LoginPreHook",
 	})
 }
@@ -320,8 +320,8 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 }
 
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
-	credentials, _ := session.Identity.GetCredentials(ct)
 	// fandom-start
+	credentials, _ := session.Identity.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
 			return errors.WithStack(err)
@@ -342,6 +342,8 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 	})
 }
 
+// fandom-start
+
 func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
 	var credentials *identity.Credentials
 	if settingsType == "password" {
@@ -360,21 +362,27 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 	})
 }
 
+// fandom-end
+
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	// fandom-start
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
 	} else if settingsType == "oidc" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
+	// fandom-end
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
 		RequestUrl:     req.RequestURI,
 		Identity:       id,
-		Credentials:    credentials,
-		HookType:       "SettingsPostPersistHook:" + settingsType,
+		// fandom-start
+		Credentials: credentials,
+		HookType:    "SettingsPostPersistHook:" + settingsType,
+		// fandom-end
 	})
 }
 
@@ -395,6 +403,10 @@ func (e *WebHook) execute(data *templateContext) error {
 			return fmt.Errorf("failed to create web hook body: %w", err)
 		}
 	}
+
+	if body == nil {
+		body = bytes.NewReader(make([]byte, 0))
+	}
 	rc := e.r.GetSpecializedResilientClient(data.HookType+conf.sum,
 		httpx.ResilientClientWithLogger(e.r.Logger()),
 		httpx.ResilientClientWithMaxRetry(conf.retries),
@@ -411,7 +423,7 @@ func (e *WebHook) execute(data *templateContext) error {
 
 func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*bytes.Reader, error) {
 	if len(templateURI) == 0 {
-		return nil, nil
+		return bytes.NewReader(make([]byte, 0)), nil
 	}
 
 	f := fetcher.NewFetcher()
@@ -440,10 +452,17 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 	vm.TLACode("ctx", buf.String())
 
+	// fandom-start
+	l.WithField("context", buf.String()).Debug("webhook body context")
+	// fandom-end
+
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
 		l.WithError(err).WithField("data", data).Error("could not compile JSONNET template")
 		return nil, errors.WithStack(err)
 	} else {
+		// fandom-start
+		l.WithField("context", buf.String()).WithSensitiveField("web_hook_body", res).Debug("webhook body prepared")
+		// fandom-end
 		return bytes.NewReader([]byte(res)), nil
 	}
 }

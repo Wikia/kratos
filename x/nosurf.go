@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ory/kratos/text"
+
 	"github.com/ory/kratos/driver/config"
 
 	"github.com/pkg/errors"
@@ -17,7 +19,9 @@ import (
 )
 
 var (
-	ErrInvalidCSRFToken = herodot.ErrForbidden.WithError("the request was rejected to protect you from Cross-Site-Request-Forgery").
+	ErrInvalidCSRFToken = herodot.ErrForbidden.
+				WithID(text.ErrIDCSRF).
+				WithError("the request was rejected to protect you from Cross-Site-Request-Forgery").
 				WithDetail("docs", "https://www.ory.sh/kratos/docs/debug/csrf").
 				WithReason("The request was rejected to protect you from Cross-Site-Request-Forgery (CSRF) which could cause account takeover, leaking personal information, and other serious security issues.")
 	ErrGone = herodot.DefaultError{
@@ -79,7 +83,7 @@ func FakeCSRFTokenGeneratorWithToken(token string) func(r *http.Request) string 
 	}
 }
 
-var _ CSRFHandler = new(FakeCSRFHandler)
+var _ nosurf.Handler = new(FakeCSRFHandler)
 
 type FakeCSRFHandler struct{ name string }
 
@@ -87,6 +91,15 @@ func NewFakeCSRFHandler(name string) *FakeCSRFHandler {
 	return &FakeCSRFHandler{
 		name: name,
 	}
+}
+
+func (f *FakeCSRFHandler) DisablePath(s string) {
+}
+
+func (f *FakeCSRFHandler) DisableGlob(s string) {
+}
+
+func (f *FakeCSRFHandler) DisableGlobs(s ...string) {
 }
 
 func (f *FakeCSRFHandler) ExemptPath(s string) {
@@ -109,16 +122,7 @@ func (f *FakeCSRFHandler) RegenerateToken(w http.ResponseWriter, r *http.Request
 }
 
 type CSRFProvider interface {
-	CSRFHandler() CSRFHandler
-}
-
-type CSRFHandler interface {
-	http.Handler
-	RegenerateToken(w http.ResponseWriter, r *http.Request) string
-	ExemptPath(string)
-	IgnorePath(string)
-	IgnoreGlob(string)
-	IgnoreGlobs(...string)
+	CSRFHandler() nosurf.Handler
 }
 
 func CSRFCookieName(reg interface {
@@ -229,7 +233,7 @@ func NewCSRFHandler(
 }
 
 func NewTestCSRFHandler(router http.Handler, reg interface {
-	WithCSRFHandler(CSRFHandler)
+	WithCSRFHandler(handler nosurf.Handler)
 	WithCSRFTokenGenerator(CSRFToken)
 	WriterProvider
 	LoggingProvider

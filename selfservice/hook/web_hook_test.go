@@ -21,7 +21,6 @@ import (
 	"github.com/ory/x/httpx"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/sirupsen/logrus/hooks/test"
 
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/flow/registration"
@@ -685,7 +684,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Registration Hook - no block",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s)
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, identity.CredentialsTypePassword)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -696,7 +695,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Registration Hook - block",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s)
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, identity.CredentialsTypePassword)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -751,7 +750,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook - no block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -762,7 +761,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook - block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -788,7 +787,7 @@ func TestWebHooks(t *testing.T) {
 								"canInterrupt": true
 							}`, ts.URL+path, method, "file://./stub/test_body.jsonnet"))
 
-					wh := NewWebHook(&x.SimpleLoggerWithClient{L: logrusx.New("kratos", "test"), C: httpx.NewResilientClient()}, conf)
+					wh := NewWebHook(newResilientClient(), conf)
 
 					err := tc.callWebHook(wh, req, f, s)
 					if tc.expectedError == nil {

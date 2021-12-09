@@ -10,9 +10,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ory/x/httpx"
-
 	"github.com/ory/x/fetcher"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/logrusx"
 
 	"github.com/google/go-jsonnet"
@@ -413,7 +412,7 @@ func (e *WebHook) execute(data *templateContext) error {
 		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
 		httpx.ResilientClientWithMaxRetryWait(conf.minWait),
 		httpx.ResilientClientWithMaxRetryWait(conf.maxWait))
-	err = doHttpCall(rc, conf, body)
+	err = doHttpCall(e.r.Logger(), rc, conf, body)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
 	}
@@ -467,7 +466,7 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 }
 
-func doHttpCall(client *retryablehttp.Client, conf *webHookConfig, body io.Reader) error {
+func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookConfig, body io.Reader) error {
 	req, err := retryablehttp.NewRequest(conf.method, conf.url, body)
 	if err != nil {
 		return err
@@ -479,10 +478,13 @@ func doHttpCall(client *retryablehttp.Client, conf *webHookConfig, body io.Reade
 	resp, err := client.Do(req)
 
 	if err != nil {
+		// fandom-start
+		l.WithError(err).Error("webhook failed with status code")
+		// fandom-end
 		return err
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		if conf.interrupt {
-			if err := parseResponse(resp); err != nil {
+			if err := parseResponse(l, resp); err != nil {
 				return err
 			}
 		}
@@ -492,7 +494,7 @@ func doHttpCall(client *retryablehttp.Client, conf *webHookConfig, body io.Reade
 	return nil
 }
 
-func parseResponse(resp *http.Response) (err error) {
+func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
 	if resp == nil {
 		return fmt.Errorf("empty response provided from the webhook")
 	}
@@ -511,6 +513,10 @@ func parseResponse(resp *http.Response) (err error) {
 		Messages: []errorMessage{},
 	}
 
+	// fandom-start
+	l.WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
+	// fandom-end
+
 	if err = json.Unmarshal(body, &hookResponse); err != nil {
 		return errors.Wrap(err, "hook response could not be unmarshalled properly")
 	}
@@ -528,6 +534,10 @@ func parseResponse(resp *http.Response) (err error) {
 		}
 		validationErr.Add(schema.NewHookValidationError(msg.InstancePtr, msg.Message, messages))
 	}
+
+	// fandom-start
+	l.WithField("validations", validationErr).Debug("webhook: parsed validations")
+	// fandom-end
 
 	if validationErr.Empty() {
 		return errors.New("error while parsing hook response: got no validation errors")

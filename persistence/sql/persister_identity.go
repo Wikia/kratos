@@ -71,7 +71,7 @@ FROM %s ic
 WHERE ici.identifier = ?
   AND ic.nid = ?
   AND ici.nid = ?
-  AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE ict.name = ?)`,
+  AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE name = ?)`,
 		corp.ContextualizeTableName(ctx, "identity_credentials"),
 		corp.ContextualizeTableName(ctx, "identity_credential_identifiers"),
 		corp.ContextualizeTableName(ctx, "identity_credential_types"),

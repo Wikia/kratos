@@ -67,15 +67,14 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
 	if err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(`SELECT
     ic.identity_id
 FROM %s ic
-         INNER JOIN %s ict on ic.identity_credential_type_id = ict.id
          INNER JOIN %s ici on ic.id = ici.identity_credential_id
 WHERE ici.identifier = ?
   AND ic.nid = ?
   AND ici.nid = ?
-  AND ict.name = ?`,
+  AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE ict.name = ?)`,
 		corp.ContextualizeTableName(ctx, "identity_credentials"),
-		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 		corp.ContextualizeTableName(ctx, "identity_credential_identifiers"),
+		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 	),
 		match,
 		nid,

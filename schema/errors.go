@@ -262,15 +262,19 @@ type ValidationListError struct {
 }
 
 func (e ValidationListError) Error() string {
-	return fmt.Sprintf("%d validation errors occurred", len(e.Validations))
+	var detailError string
+	for pos, validationErr := range e.Validations {
+		detailError = detailError + fmt.Sprintf("\n(%d) %s", pos, validationErr.Error())
+	}
+	return fmt.Sprintf("%d validation errors occurred:%s", len(e.Validations), detailError)
 }
 
 func (e *ValidationListError) Add(v *ValidationError) {
 	e.Validations = append(e.Validations, v)
 }
 
-func (e ValidationListError) Empty() bool {
-	return len(e.Validations) == 0
+func (e ValidationListError) HasErrors() bool {
+	return len(e.Validations) != 0
 }
 
 func (e *ValidationListError) WithError(instancePtr, message string, details text.Messages) {

@@ -412,7 +412,7 @@ func (e *WebHook) execute(data *templateContext) error {
 		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
 		httpx.ResilientClientWithMaxRetryWait(conf.minWait),
 		httpx.ResilientClientWithMaxRetryWait(conf.maxWait))
-	err = doHttpCall(e.r.Logger(), rc, conf, body)
+	err = doHttpCall(e.r.Logger(), rc, conf, body, data.RequestHeaders)
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
 	}
@@ -466,12 +466,15 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 }
 
-func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookConfig, body io.Reader) error {
+func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookConfig, body io.Reader, headers http.Header) error {
 	req, err := retryablehttp.NewRequest(conf.method, conf.url, body)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if pandoraOverride := headers.Get("X-Fandom-Pandora-Override"); pandoraOverride != "" {
+		req.Header.Set("X-Fandom-Pandora-Override", pandoraOverride)
+	}
 
 	conf.auth.apply(req.Request)
 

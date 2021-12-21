@@ -39,6 +39,9 @@ var _ verification.PostHookExecutor = new(WebHook)
 var _ recovery.PostHookExecutor = new(WebHook)
 var _ settings.PostHookPostPersistExecutor = new(WebHook)
 
+// Fandom-start
+const xFandomPandoraOverrideHeader = "X-Fandom-Pandora-Override"
+// Fandom-end
 type (
 	AuthStrategy interface {
 		apply(req *http.Request)
@@ -414,7 +417,9 @@ func (e *WebHook) execute(data *templateContext) error {
 		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
 		httpx.ResilientClientWithMaxRetryWait(conf.minWait),
 		httpx.ResilientClientWithMaxRetryWait(conf.maxWait))
+	// Fandom-start - forward X-Fandom-Pandora-Override header
 	err = doHttpCall(e.r.Logger(), rc, conf, body, data.RequestHeaders)
+	// Fandom-end
 	if err != nil {
 		return errors.Wrap(err, "failed to call web hook")
 	}
@@ -474,9 +479,11 @@ func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookCo
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if pandoraOverride := headers.Get("X-Fandom-Pandora-Override"); pandoraOverride != "" {
-		req.Header.Set("X-Fandom-Pandora-Override", pandoraOverride)
+	// Fandom-start - forward X-Fandom-Pandora-Override header
+	if pandoraOverride := headers.Get(xFandomPandoraOverrideHeader); pandoraOverride != "" {
+		req.Header.Set(xFandomPandoraOverrideHeader, pandoraOverride)
 	}
+	// Fandom-end
 
 	conf.auth.apply(req.Request)
 

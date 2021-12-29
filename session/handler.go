@@ -48,22 +48,20 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
-	RouteRefresh            = RouteCollection + "/refresh"
-	RouteSession            = RouteCollection + "/admin/:id"
+	RouteSession            = RouteCollection + "/:id"
 	RouteIdentity           = "/identities"
 	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
 	RouteIdentitySession    = RouteIdentity + "/:id/session"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
-	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
-		http.MethodDelete} {
+	for _, m := range []string{http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete} {
 		// Redirect to public endpoint
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
 	admin.PATCH(RouteSession, h.adminSessionRefresh)
-	admin.GET(RouteRefresh, h.adminCurrentSessionRefresh)
+	admin.GET(RouteSession, h.adminSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }
 
@@ -185,7 +183,7 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	// Refresh session if param was true
 	refresh := r.URL.Query().Get("refresh")
 	if h.r.Config(r.Context()).SessionWhoAmIRefresh() && refresh == "true" {
-		if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
 			h.r.Writer().WriteError(w, r, err)
 			return
 		}
@@ -345,12 +343,23 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 //       404: jsonError
 //       500: jsonError
 func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(ps.ByName("id")))
+	sid := ps.ByName("id")
+	if sid == "whoami" {
+		// Special case where we actually want to handle the whomai endpoint.
+		x.RedirectToPublicRoute(h.r)(w, r, ps)
+		return
+	}
+	if sid == "refresh" {
+		// Special case where we actually want to handle the refresh endpoint.
+		h.adminCurrentSessionRefresh(w, r, ps)
+		return
+	}
+	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(sid))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
-	if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+	if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
@@ -382,7 +391,7 @@ func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Requ
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
 		return
 	}
-	if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+	if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}

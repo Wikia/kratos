@@ -48,6 +48,7 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
+	RouteSession            = RouteCollection + "/:id"
 	RouteIdentity           = "/identities"
 	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
 	RouteIdentitySession    = RouteIdentity + "/:id/session"
@@ -60,6 +61,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
+	admin.PATCH(RouteSession, h.adminSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }
 
@@ -321,6 +323,37 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 	}
 
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
+}
+
+// swagger:route PATCH /sessions/{id} v0alpha2 adminIdentitySession
+//
+// Calling this endpoint refreshes a given session.
+//
+// This endpoint is useful for:
+//
+// - Session refresh
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: successfulAdminIdentitySession
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(ps.ByName("id")))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})
 }
 
 // fandom-end

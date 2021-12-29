@@ -49,7 +49,7 @@ const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
 	RouteRefresh            = RouteCollection + "/refresh"
-	RouteSession            = RouteCollection + "/:id"
+	RouteSession            = RouteCollection + "/admin/:id"
 	RouteIdentity           = "/identities"
 	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
 	RouteIdentitySession    = RouteIdentity + "/:id/session"

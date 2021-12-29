@@ -48,6 +48,7 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
+	RouteRefresh            = RouteCollection + "/refresh"
 	RouteSession            = RouteCollection + "/:id"
 	RouteIdentity           = "/identities"
 	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
@@ -62,6 +63,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
 	admin.PATCH(RouteSession, h.adminSessionRefresh)
+	admin.GET(RouteRefresh, h.adminCurrentSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }
 
@@ -346,6 +348,38 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(ps.ByName("id")))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})
+}
+
+// swagger:route GET /sessions/refresh v0alpha2 adminIdentitySession
+//
+// Calling this endpoint refreshes a given session.
+//
+// This endpoint is useful for:
+//
+// - Session refresh
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: successfulAdminIdentitySession
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
 		return
 	}
 	if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {

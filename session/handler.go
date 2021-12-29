@@ -178,6 +178,15 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		return
 	}
 
+	// Refresh session if param was true
+	refresh := r.URL.Query().Get("refresh")
+	if h.r.Config(r.Context()).SessionWhoAmIRefresh() && refresh == "true" {
+		if err := h.r.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s.Refresh(h.r.Config(r.Context()))); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+	}
+
 	// s.Devices = nil
 	s.Identity = s.Identity.CopyWithoutCredentials()
 

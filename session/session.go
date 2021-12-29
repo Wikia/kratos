@@ -156,6 +156,11 @@ func (s *Session) Declassify() *Session {
 	return s
 }
 
+func (s *Session) Refresh(c lifespanProvider) *Session {
+	s.ExpiresAt = time.Now().Add(c.SessionLifespan())
+	return s
+}
+
 func (s *Session) IsActive() bool {
 	return s.Active && s.ExpiresAt.After(time.Now()) && (s.Identity == nil || s.Identity.IsActive())
 }

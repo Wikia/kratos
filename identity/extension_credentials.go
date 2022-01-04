@@ -35,6 +35,7 @@ func (r *SchemaExtensionCredentials) Run(_ jsonschema.ValidationContext, s schem
 			}
 		}
 
+		// TODO--lowercasing something (?jsonnet? - ?no idea?)
 		r.v = stringslice.Unique(append(r.v, strings.ToLower(fmt.Sprintf("%s", value))))
 		cred.Identifiers = r.v
 		r.i.SetCredentials(CredentialsTypePassword, *cred)

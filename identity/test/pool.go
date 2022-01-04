@@ -454,6 +454,7 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			require.NoError(t, err)
 
 			assert.EqualValues(t, expected.Credentials[identity.CredentialsTypePassword].ID, creds.ID)
+			//TODO--test lowercasing identifiers
 			assert.EqualValues(t, []string{strings.ToLower(identifier)}, creds.Identifiers)
 			assert.JSONEq(t, string(expected.Credentials[identity.CredentialsTypePassword].Config), string(creds.Config))
 

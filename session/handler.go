@@ -170,7 +170,8 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	}
 
 	var aalErr *ErrAALNotSatisfied
-	if err := h.r.SessionManager().DoesSessionSatisfy(r, s, h.r.Config(r.Context()).SessionWhoAmIAAL()); errors.As(err, &aalErr) {
+	c := h.r.Config(r.Context())
+	if err := h.r.SessionManager().DoesSessionSatisfy(r, s, c.SessionWhoAmIAAL()); errors.As(err, &aalErr) {
 		h.r.Audit().WithRequest(r).WithError(err).Info("Session was found but AAL is not satisfied for calling this endpoint.")
 		h.r.Writer().WriteError(w, r, err)
 		return
@@ -182,8 +183,8 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 	// Refresh session if param was true
 	refresh := r.URL.Query().Get("refresh")
-	if h.r.Config(r.Context()).SessionWhoAmIRefresh() && refresh == "true" {
-		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
+	if c.SessionWhoAmIRefresh() && refresh == "true" && s.CanBeRefreshed(c) {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
 			h.r.Writer().WriteError(w, r, err)
 			return
 		}
@@ -359,9 +360,12 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
-	if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
+	c := h.r.Config(r.Context())
+	if s.CanBeRefreshed(c) {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
 	}
 
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})
@@ -391,9 +395,12 @@ func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Requ
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
 		return
 	}
-	if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(h.r.Config(r.Context()))); err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
+	c := h.r.Config(r.Context())
+	if s.CanBeRefreshed(c) {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
 	}
 
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})

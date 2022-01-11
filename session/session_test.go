@@ -60,6 +60,17 @@ func TestSession(t *testing.T) {
 		assert.Empty(t, s.AuthenticatedAt)
 	})
 
+	t.Run("case=session refresh", func(t *testing.T) {
+		i := new(identity.Identity)
+		i.State = identity.StateActive
+		s, _ := session.NewActiveSession(i, conf, authAt, identity.CredentialsTypePassword)
+		assert.False(t, s.CanBeRefreshed(conf), "fresh session is not refreshable")
+
+		s.ExpiresAt = s.ExpiresAt.Add(-12 * time.Hour)
+		assert.True(t, s.CanBeRefreshed(conf), "session is refreshable after 12hrs")
+
+	})
+
 	t.Run("case=aal", func(t *testing.T) {
 		for _, tc := range []struct {
 			d        string

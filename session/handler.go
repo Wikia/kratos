@@ -49,19 +49,22 @@ const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
 	RouteSession            = RouteCollection + "/:id"
+	RouteSessionRefresh     = RouteCollection + "/refresh"
+	RouteSessionRefreshId   = RouteSessionRefresh + "/:id"
 	RouteIdentity           = "/identities"
 	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
 	RouteIdentitySession    = RouteIdentity + "/:id/session"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
-	for _, m := range []string{http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete} {
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+		http.MethodDelete} {
 		// Redirect to public endpoint
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
 	admin.PATCH(RouteSession, h.adminSessionRefresh)
-	admin.GET(RouteSession, h.adminSessionRefresh)
+	admin.PATCH(RouteSessionRefreshId, h.adminSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }
 
@@ -326,7 +329,7 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
 
-// swagger:route PATCH /sessions/{id} v0alpha2 adminIdentitySession
+// swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminIdentitySession
 //
 // Calling this endpoint refreshes a given session.
 //
@@ -345,16 +348,6 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 //       500: jsonError
 func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	sid := ps.ByName("id")
-	if sid == "whoami" {
-		// Special case where we actually want to handle the whomai endpoint.
-		x.RedirectToPublicRoute(h.r)(w, r, ps)
-		return
-	}
-	if sid == "refresh" {
-		// Special case where we actually want to handle the refresh endpoint.
-		h.adminCurrentSessionRefresh(w, r, ps)
-		return
-	}
 	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(sid))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)

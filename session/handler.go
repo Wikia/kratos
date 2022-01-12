@@ -62,7 +62,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
-	admin.PATCH(RouteSessionRefresh, h.adminSessionRefresh)
+	admin.PATCH(RouteSessionRefresh, h.adminCurrentSessionRefresh)
 	admin.PATCH(RouteSessionRefreshId, h.adminSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }

@@ -48,7 +48,6 @@ func NewHandler(
 const (
 	RouteCollection         = "/sessions"
 	RouteWhoami             = RouteCollection + "/whoami"
-	RouteSession            = RouteCollection + "/:id"
 	RouteSessionRefresh     = RouteCollection + "/refresh"
 	RouteSessionRefreshId   = RouteSessionRefresh + "/:id"
 	RouteIdentity           = "/identities"
@@ -63,7 +62,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
 	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
-	admin.PATCH(RouteSession, h.adminSessionRefresh)
+	admin.PATCH(RouteSessionRefresh, h.adminSessionRefresh)
 	admin.PATCH(RouteSessionRefreshId, h.adminSessionRefresh)
 	admin.GET(RouteIdentitySession, h.session)
 }

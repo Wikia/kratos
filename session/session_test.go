@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/driver/config"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
@@ -61,6 +63,12 @@ func TestSession(t *testing.T) {
 	})
 
 	t.Run("case=session refresh", func(t *testing.T) {
+		conf.MustSet(config.ViperKeySessionLifespan, "24h")
+		conf.MustSet(config.ViperKeySessionRefreshTimeWindow, "12h")
+		t.Cleanup(func() {
+			conf.MustSet(config.ViperKeySessionLifespan, "1m")
+			conf.MustSet(config.ViperKeySessionRefreshTimeWindow, "1m")
+		})
 		i := new(identity.Identity)
 		i.State = identity.StateActive
 		s, _ := session.NewActiveSession(i, conf, authAt, identity.CredentialsTypePassword)

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -108,6 +109,12 @@ type toSession struct {
 // Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
 // Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
 //
+// It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
+// By default session refresh on this endpoint is disabled.
+// Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+// After enabling this option any refresh request will set the session life equal to `session.lifespan`.
+// If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+//
 // If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 //
 //	```js
@@ -139,6 +146,7 @@ type toSession struct {
 // - AJAX calls. Remember to send credentials and set up CORS correctly!
 // - Reverse proxies and API Gateways
 // - Server-side calls - use the `X-Session-Token` header!
+// - Session refresh
 //
 // This endpoint authenticates users by checking
 //
@@ -163,7 +171,7 @@ type toSession struct {
 //       401: jsonError
 //       403: jsonError
 //       500: jsonError
-func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
@@ -186,10 +194,12 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	// Refresh session if param was true
 	refresh := r.URL.Query().Get("refresh")
 	if c.SessionWhoAmIRefresh() && refresh == "true" && s.CanBeRefreshed(c) {
-		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
+		s = s.Refresh(c)
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
 			h.r.Writer().WriteError(w, r, err)
 			return
 		}
+		h.r.SessionManager().IssueCookie(r.Context(), w, r, s)
 	}
 
 	// s.Devices = nil
@@ -331,6 +341,7 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 // swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminIdentitySession
 //
 // Calling this endpoint refreshes a given session.
+// If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
 //
 // This endpoint is useful for:
 //
@@ -346,8 +357,12 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 //       404: jsonError
 //       500: jsonError
 func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	sid := ps.ByName("id")
-	s, err := h.r.SessionPersister().GetSession(r.Context(), x.ParseUUID(sid))
+	iID, err := uuid.FromString(ps.ByName("id"))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
+		return
+	}
+	s, err := h.r.SessionPersister().GetSession(r.Context(), iID)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
@@ -366,6 +381,7 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 // swagger:route GET /sessions/refresh v0alpha2 adminIdentitySession
 //
 // Calling this endpoint refreshes a given session.
+// If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
 //
 // This endpoint is useful for:
 //
@@ -382,6 +398,7 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 //       500: jsonError
 func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	fmt.Printf("\n %+v \n", r.Cookies())
 	if err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))

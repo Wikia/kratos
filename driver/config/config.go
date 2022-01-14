@@ -1036,7 +1036,7 @@ func (p *Config) SessionWhoAmIRefresh() bool {
 }
 
 func (p *Config) SessionRefreshTimeWindow() time.Duration {
-	return p.p.DurationF(ViperKeySessionRefreshTimeWindow, p.SessionLifespan()/2)
+	return p.p.DurationF(ViperKeySessionRefreshTimeWindow, p.SessionLifespan())
 }
 
 func (p *Config) SelfServiceSettingsRequiredAAL() string {

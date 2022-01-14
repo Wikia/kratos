@@ -338,7 +338,17 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
 
-// swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminIdentitySession
+// swagger:parameters adminSessionRefresh
+// nolint:deadcode,unused
+type adminSessionRefresh struct {
+	// ID is the session's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminSessionRefresh
 //
 // Calling this endpoint refreshes a given session.
 // If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
@@ -353,7 +363,7 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 //       oryAccessToken:
 //
 //     Responses:
-//       200: successfulAdminIdentitySession
+//       200: session
 //       404: jsonError
 //       500: jsonError
 func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -375,7 +385,7 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 		}
 	}
 
-	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})
+	h.r.Writer().Write(w, r, s)
 }
 
 // swagger:route GET /sessions/refresh v0alpha2 adminIdentitySession
@@ -412,7 +422,7 @@ func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: s.Identity})
+	h.r.Writer().Write(w, r, s)
 }
 
 // fandom-end

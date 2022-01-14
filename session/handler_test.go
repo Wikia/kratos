@@ -521,7 +521,7 @@ func TestHandlerRefreshCurrentSession(t *testing.T) {
 	originalCookie := testhelpers.MockHydrateCookieClient(t, client, publicTS.URL+"/set")
 	originalCookie.Expires = originalCookie.Expires.Add(-time.Second)
 
-	session := func(t *testing.T, base *httptest.Server, href string, expectCode int) AdminIdentitySessionResponse {
+	session := func(t *testing.T, base *httptest.Server, href string, expectCode int) Session {
 		req, err := http.NewRequest("PATCH", base.URL+href, nil)
 		require.NoError(t, err)
 		cookies := client.Jar.Cookies(mockServerURL)
@@ -537,7 +537,7 @@ func TestHandlerRefreshCurrentSession(t *testing.T) {
 		require.EqualValues(t, expectCode, res.StatusCode)
 		defer res.Body.Close()
 
-		var apiRes AdminIdentitySessionResponse
+		var apiRes Session
 		err = json.NewDecoder(res.Body).Decode(&apiRes)
 		require.NoError(t, err)
 		fmt.Print(apiRes)
@@ -547,10 +547,9 @@ func TestHandlerRefreshCurrentSession(t *testing.T) {
 
 	t.Run("case=should return 200 after successful session refresh and return valid session and token", func(t *testing.T) {
 		res := session(t, adminTS, "/sessions/refresh", http.StatusOK)
-		s, err := reg.SessionPersister().GetSession(context.Background(), res.Session.ID)
+		s, err := reg.SessionPersister().GetSession(context.Background(), res.ID)
 		require.Empty(t, err)
-		require.Equal(t, s.Token, res.Token)
-		require.True(t, res.Session.ExpiresAt.After(originalCookie.Expires))
+		require.True(t, res.ExpiresAt.After(originalCookie.Expires))
 		require.True(t, s.Active)
 	})
 }

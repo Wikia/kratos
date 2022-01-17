@@ -3,6 +3,7 @@
 .travis.yml
 README.md
 api/openapi.yaml
+api_default.go
 api_metadata.go
 api_v0alpha2.go
 client.go
@@ -11,6 +12,7 @@ docs/AdminCreateIdentityBody.md
 docs/AdminCreateSelfServiceRecoveryLinkBody.md
 docs/AdminUpdateIdentityBody.md
 docs/AuthenticatorAssuranceLevel.md
+docs/DefaultApi.md
 docs/ErrorAuthenticatorAssuranceLevelNotSatisfied.md
 docs/GenericError.md
 docs/HealthNotReadyStatus.md

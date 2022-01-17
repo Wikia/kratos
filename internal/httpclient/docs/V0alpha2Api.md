@@ -11,6 +11,7 @@ Method | HTTP request | Description
 [**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /identities/{id} | Get an Identity
 [**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 [**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /identities | List Identities
+[**AdminSessionRefresh**](V0alpha2Api.md#AdminSessionRefresh) | **Patch** /sessions/refresh/{id} | Calling this endpoint refreshes a given session. If &#x60;session.refresh_time_window&#x60; is set it will only refresh the session after this time has passed.
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 [**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /identities/{id} | Update an Identity
 [**CreateSelfServiceLogoutFlowUrlForBrowsers**](V0alpha2Api.md#CreateSelfServiceLogoutFlowUrlForBrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
@@ -507,6 +508,76 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**[]Identity**](Identity.md)
+
+### Authorization
+
+[oryAccessToken](../README.md#oryAccessToken)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## AdminSessionRefresh
+
+> Session AdminSessionRefresh(ctx, id).Execute()
+
+Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+
+
+
+### Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+    openapiclient "./openapi"
+)
+
+func main() {
+    id := "id_example" // string | ID is the session's ID.
+
+    configuration := openapiclient.NewConfiguration()
+    apiClient := openapiclient.NewAPIClient(configuration)
+    resp, r, err := apiClient.V0alpha2Api.AdminSessionRefresh(context.Background(), id).Execute()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminSessionRefresh``: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+    }
+    // response from `AdminSessionRefresh`: Session
+    fmt.Fprintf(os.Stdout, "Response from `V0alpha2Api.AdminSessionRefresh`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | ID is the session&#39;s ID. | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiAdminSessionRefreshRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**Session**](Session.md)
 
 ### Authorization
 

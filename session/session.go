@@ -167,7 +167,7 @@ func (s *Session) Refresh(c lifespanProvider) *Session {
 }
 
 func (s *Session) CanBeRefreshed(c refreshWindowProvider) bool {
-	return s.ExpiresAt.Add(-c.SessionRefreshTimeWindow()).Before(time.Now())
+	return s.ExpiresAt.Sub(c.SessionRefreshTimeWindow()).Before(time.Now())
 }
 
 func (s *Session) IsActive() bool {

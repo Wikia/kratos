@@ -2118,7 +2118,7 @@
             },
             "refresh": {
               "title": "Allow session refresh from whoami endpoint",
-              "description": "If set to true will will allow to refresh session lifespan if ?refresh=true is present",
+              "description": "If set to true will allow to refresh session lifespan if ?refresh=true is present",
               "type": "boolean",
               "default": false
             }

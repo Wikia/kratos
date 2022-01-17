@@ -1,7 +1,6 @@
 package session
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -388,9 +387,9 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 	h.r.Writer().Write(w, r, s)
 }
 
-// swagger:route GET /sessions/refresh v0alpha2 adminIdentitySession
+// swagger:route GET /sessions/refresh v0alpha2
 //
-// Calling this endpoint refreshes a given session.
+// Calling this endpoint refreshes a current user session.
 // If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
 //
 // This endpoint is useful for:
@@ -408,7 +407,6 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 //       500: jsonError
 func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
-	fmt.Printf("\n %+v \n", r.Cookies())
 	if err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))

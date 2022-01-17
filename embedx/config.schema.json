@@ -1904,6 +1904,12 @@
               "additionalProperties": true
             }
           }
+        },
+        "case_sensitive_identifier": {
+          "title": "Specifies if identity identifier (username-password) is case sensitive",
+          "description": "In some cases (legacy systems) it is required for the identity identifier to be case sensitive. This settings allows to toggle that behaviour.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": [

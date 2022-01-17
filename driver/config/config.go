@@ -141,8 +141,9 @@ const (
 	ViperKeyCipherAlgorithm                                  = "ciphers.algorithm"
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
 	//fandom-start
-	ViperKeyHasherLegacyFandomCost   = "hashers.legacyfandom.cost"
-	ViperKeyHasherLegacyFandomAESKey = "hashers.legacyfandom.key"
+	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
+	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
+	ViperKeyIdentityCaseSensitiveIdentifier = "identity.case_sensitive_identifier"
 	//fandom-end
 	ViperKeyPasswordHaveIBeenPwnedHost    = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled = "selfservice.methods.password.config.haveibeenpwned_enabled"
@@ -461,6 +462,10 @@ func (p *Config) HasherLegacyFandom() (*LegacyFandom, error) {
 		Cost: cost,
 		Key:  result,
 	}, nil
+}
+
+func (p *Config) IdentityCaseSensitiveIdentifier() bool {
+	return p.p.Bool(ViperKeyIdentityCaseSensitiveIdentifier)
 }
 
 //fandom-end

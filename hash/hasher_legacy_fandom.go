@@ -30,18 +30,16 @@ var (
 	isFandomLegacyHash = regexp.MustCompile(`^\$legacyfandom\$`)
 
 	ErrLegacyFandomUnknownSubType = fmt.Errorf("unknown fandom hash subtype")
-	ErrLegacyFandomBadHashFormat = fmt.Errorf("unknown fandom hash format")
-	ErrLegacyFandomWrongHash = fmt.Errorf("bad fandom hash")
-	ErrEmptyHashCompare = fmt.Errorf("empty hash provided")
-	ErrEmptyPasswordCompare = fmt.Errorf("empty password provided")
-	ErrUnknownHashFormat = fmt.Errorf("unknown hash format")
+	ErrLegacyFandomBadHashFormat  = fmt.Errorf("unknown fandom hash format")
+	ErrLegacyFandomWrongHash      = fmt.Errorf("bad fandom hash")
+	ErrEmptyHashCompare           = fmt.Errorf("empty hash provided")
+	ErrEmptyPasswordCompare       = fmt.Errorf("empty password provided")
+	ErrUnknownHashFormat          = fmt.Errorf("unknown hash format")
 
-	legacyFandomOldPrefixWithSalt = []byte("B")
+	legacyFandomOldPrefixWithSalt    = []byte("B")
 	legacyFandomOldPrefixWithoutSalt = []byte("A")
-	legacyFandomHashTypeBcrypt = []byte("bcrypt")
-	legacyFandomHashTypeWrapped = []byte("wrapped")
-
-	hashSeparator = []byte("$")
+	legacyFandomHashTypeBcrypt       = []byte("bcrypt")
+	legacyFandomHashTypeWrapped      = []byte("wrapped")
 )
 
 type LegacyFandomCrypt struct {
@@ -224,7 +222,7 @@ func prepareHashToCompare(splitHash [][]byte, identityId uuid.UUID, password []b
 
 type SingleMapping struct {
 	IdentityId *string `json:"identityId,omitempty"`
-	UserId *string `json:"userId,omitempty"`
+	UserId     *string `json:"userId,omitempty"`
 }
 
 func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error) {
@@ -234,7 +232,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 		log.Default().Printf("identity-mapper url is not configured")
 		return "", fmt.Errorf("identity-mapper url is not configured")
 	}
-	req, err := retryablehttp.NewRequest("GET", serviceUrl + "/mapping/app/community_platform/identity/" + identityId.String(), nil)
+	req, err := retryablehttp.NewRequest("GET", serviceUrl+"/mapping/app/community_platform/identity/"+identityId.String(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -311,4 +309,3 @@ func aes256Decrypt(ciphertext []byte, key *[32]byte) (plaintext []byte, err erro
 		nil,
 	)
 }
-

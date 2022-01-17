@@ -3,12 +3,6 @@ package password
 import (
 	"bufio"
 	"context"
-	"time"
-
-	"github.com/hashicorp/go-retryablehttp"
-
-	"github.com/ory/kratos/driver/config"
-
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
@@ -16,6 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/ory/kratos/driver/config"
 
 	"github.com/arbovm/levenshtein"
 
@@ -149,8 +148,6 @@ func (s *DefaultPasswordValidator) Validate(ctx context.Context, identifier, pas
 		return errors.Errorf("password length must be at least 6 characters but only got %d", len(password))
 	}
 
-	//TODO--lowercasing to calculate similarity with password
-	//TODO--change is not required
 	compIdentifier, compPassword := strings.ToLower(identifier), strings.ToLower(password)
 	dist := levenshtein.Distance(compIdentifier, compPassword)
 	lcs := float32(lcsLength(compIdentifier, compPassword)) / float32(len(compPassword))

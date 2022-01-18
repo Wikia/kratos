@@ -110,9 +110,9 @@ type toSession struct {
 //
 // It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 // By default session refresh on this endpoint is disabled.
-// Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+// Session refresh can be enabled only after setting `session.whoami.refresh_allowed` to true in the config.
 // After enabling this option any refresh request will set the session life equal to `session.lifespan`.
-// If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+// If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_min_time_left`
 //
 // If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 //
@@ -192,7 +192,7 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 
 	// Refresh session if param was true
 	refresh := r.URL.Query().Get("refresh")
-	if c.SessionWhoAmIRefresh() && refresh == "true" && s.CanBeRefreshed(c) {
+	if c.SessionWhoAmIRefreshAllowed() && refresh == "true" && s.CanBeRefreshed(c) {
 		s = s.Refresh(c)
 		if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
 			h.r.Writer().WriteError(w, r, err)
@@ -350,7 +350,7 @@ type adminSessionRefresh struct {
 // swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminSessionRefresh
 //
 // Calling this endpoint refreshes a given session.
-// If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+// If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 //
 // This endpoint is useful for:
 //
@@ -390,7 +390,7 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 // swagger:route GET /sessions/refresh v0alpha2
 //
 // Calling this endpoint refreshes a current user session.
-// If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+// If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 //
 // This endpoint is useful for:
 //

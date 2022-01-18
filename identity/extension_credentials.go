@@ -16,10 +16,13 @@ type SchemaExtensionCredentials struct {
 	i *Identity
 	v []string
 	l sync.Mutex
+	// fandom-start
+	caseSensitiveIds bool
+	// fandom-end
 }
 
-func NewSchemaExtensionCredentials(i *Identity) *SchemaExtensionCredentials {
-	return &SchemaExtensionCredentials{i: i}
+func NewSchemaExtensionCredentials(i *Identity, caseSensitiveIds bool) *SchemaExtensionCredentials {
+	return &SchemaExtensionCredentials{i: i, caseSensitiveIds: caseSensitiveIds}
 }
 
 func (r *SchemaExtensionCredentials) Run(_ jsonschema.ValidationContext, s schema.ExtensionConfig, value interface{}) error {
@@ -35,8 +38,16 @@ func (r *SchemaExtensionCredentials) Run(_ jsonschema.ValidationContext, s schem
 			}
 		}
 
-		// TODO--lowercasing something (?jsonnet? - ?no idea?)
-		r.v = stringslice.Unique(append(r.v, strings.ToLower(fmt.Sprintf("%s", value))))
+		// fandom-start
+		var id string
+		if !r.caseSensitiveIds {
+			id = strings.ToLower(fmt.Sprintf("%s", value))
+		} else {
+			id = fmt.Sprintf("%s", value)
+		}
+		// fandom-end
+
+		r.v = stringslice.Unique(append(r.v, id))
 		cred.Identifiers = r.v
 		r.i.SetCredentials(CredentialsTypePassword, *cred)
 	}

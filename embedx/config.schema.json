@@ -2115,6 +2115,12 @@
           "properties": {
             "required_aal": {
               "$ref": "#/definitions/featureRequiredAal"
+            },
+            "refresh_allowed": {
+              "title": "Allow session refresh from whoami endpoint",
+              "description": "If set to true will allow to refresh session lifespan if ?refresh=true is present",
+              "type": "boolean",
+              "default": false
             }
           },
           "additionalProperties": false
@@ -2168,6 +2174,18 @@
             }
           },
           "additionalProperties": false
+        },
+        "refresh_min_time_left": {
+          "title": "Session refresh minimal time left",
+          "description": "Time window when session can be refreshed to avoid excess refreshes. It is calculated as duration from the session expiration time.",
+          "type": "string",
+          "pattern": "^[0-9]+(ns|us|ms|s|m|h)$",
+          "default": "24h",
+          "examples": [
+            "1h",
+            "1m",
+            "1s"
+          ]
         }
       }
     },

@@ -92,19 +92,22 @@ func NewNoRedirectClientWithCookies(t *testing.T) *http.Client {
 	}
 }
 
-func MockHydrateCookieClient(t *testing.T, c *http.Client, u string) {
+func MockHydrateCookieClient(t *testing.T, c *http.Client, u string) *http.Cookie {
+	var sessionCookie *http.Cookie
 	res, err := c.Get(u)
 	require.NoError(t, err)
 	defer res.Body.Close()
 	assert.EqualValues(t, http.StatusOK, res.StatusCode)
 
 	var found bool
-	for _, c := range res.Cookies() {
-		if c.Name == config.DefaultSessionCookieName {
+	for _, rc := range res.Cookies() {
+		if rc.Name == config.DefaultSessionCookieName {
 			found = true
+			sessionCookie = rc
 		}
 	}
 	require.True(t, found)
+	return sessionCookie
 }
 
 func MockSessionCreateHandlerWithIdentity(t *testing.T, reg mockDeps, i *identity.Identity) (httprouter.Handle, *session.Session) {

@@ -598,6 +598,10 @@ func TestSession(t *testing.T) {
 	p.MustSet(config.ViperKeySessionName, "ory_session")
 	assert.Equal(t, "ory_session", p.SessionName())
 
+	assert.Equal(t, time.Hour*24, p.SessionRefreshMinTimeLeft())
+	p.MustSet(config.ViperKeySessionRefreshMinTimeLeft, "1m")
+	assert.Equal(t, time.Minute, p.SessionRefreshMinTimeLeft())
+
 	assert.Equal(t, time.Hour*24, p.SessionLifespan())
 	p.MustSet(config.ViperKeySessionLifespan, "1m")
 	assert.Equal(t, time.Minute, p.SessionLifespan())
@@ -605,6 +609,10 @@ func TestSession(t *testing.T) {
 	assert.Equal(t, true, p.SessionPersistentCookie())
 	p.MustSet(config.ViperKeySessionPersistentCookie, false)
 	assert.Equal(t, false, p.SessionPersistentCookie())
+
+	assert.Equal(t, false, p.SessionWhoAmIRefreshAllowed())
+	p.MustSet(config.ViperKeySessionWhoAmIRefreshAllowed, true)
+	assert.Equal(t, true, p.SessionWhoAmIRefreshAllowed())
 }
 
 func TestCookies(t *testing.T) {

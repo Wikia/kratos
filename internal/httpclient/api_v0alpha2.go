@@ -143,6 +143,23 @@ type V0alpha2Api interface {
 	AdminListIdentitiesExecute(r V0alpha2ApiApiAdminListIdentitiesRequest) ([]Identity, *http.Response, error)
 
 	/*
+			 * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+			 * This endpoint is useful for:
+
+		Session refresh
+			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			 * @param id ID is the session's ID.
+			 * @return V0alpha2ApiApiAdminSessionRefreshRequest
+	*/
+	AdminSessionRefresh(ctx context.Context, id string) V0alpha2ApiApiAdminSessionRefreshRequest
+
+	/*
+	 * AdminSessionRefreshExecute executes the request
+	 * @return Session
+	 */
+	AdminSessionRefreshExecute(r V0alpha2ApiApiAdminSessionRefreshRequest) (*Session, *http.Response, error)
+
+	/*
 			 * AdminUpdateCredentials Update Identity Credentials
 			 * Calling this endpoint updates the credentials according to the specification provided.
 
@@ -993,6 +1010,12 @@ type V0alpha2Api interface {
 		Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
 		Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
 
+		It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
+		By default session refresh on this endpoint is disabled.
+		Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+		After enabling this option any refresh request will set the session life equal to `session.lifespan`.
+		If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+
 		If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 
 		```js
@@ -1024,6 +1047,7 @@ type V0alpha2Api interface {
 		AJAX calls. Remember to send credentials and set up CORS correctly!
 		Reverse proxies and API Gateways
 		Server-side calls - use the `X-Session-Token` header!
+		Session refresh
 
 		This endpoint authenticates users by checking
 
@@ -2039,6 +2063,146 @@ func (a *V0alpha2ApiService) AdminListIdentitiesExecute(r V0alpha2ApiApiAdminLis
 		newErr := &GenericOpenAPIError{
 			body:  localVarBody,
 			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type V0alpha2ApiApiAdminSessionRefreshRequest struct {
+	ctx        context.Context
+	ApiService V0alpha2Api
+	id         string
+}
+
+func (r V0alpha2ApiApiAdminSessionRefreshRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.AdminSessionRefreshExecute(r)
+}
+
+/*
+ * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+ * This endpoint is useful for:
+
+Session refresh
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @param id ID is the session's ID.
+ * @return V0alpha2ApiApiAdminSessionRefreshRequest
+*/
+func (a *V0alpha2ApiService) AdminSessionRefresh(ctx context.Context, id string) V0alpha2ApiApiAdminSessionRefreshRequest {
+	return V0alpha2ApiApiAdminSessionRefreshRequest{
+		ApiService: a,
+		ctx:        ctx,
+		id:         id,
+	}
+}
+
+/*
+ * Execute executes the request
+ * @return Session
+ */
+func (a *V0alpha2ApiService) AdminSessionRefreshExecute(r V0alpha2ApiApiAdminSessionRefreshRequest) (*Session, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodPatch
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+		localVarReturnValue  *Session
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.AdminSessionRefresh")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/sessions/refresh/{id}"
+	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.ctx != nil {
+		// API Key Authentication
+		if auth, ok := r.ctx.Value(ContextAPIKeys).(map[string]APIKey); ok {
+			if apiKey, ok := auth["oryAccessToken"]; ok {
+				var key string
+				if apiKey.Prefix != "" {
+					key = apiKey.Prefix + " " + apiKey.Key
+				} else {
+					key = apiKey.Key
+				}
+				localVarHeaderParams["Authorization"] = key
+			}
+		}
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 500 {
 			var v JsonError
@@ -6515,6 +6679,12 @@ func (r V0alpha2ApiApiToSessionRequest) Execute() (*Session, *http.Response, err
 Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
 Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
 
+It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
+By default session refresh on this endpoint is disabled.
+Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+After enabling this option any refresh request will set the session life equal to `session.lifespan`.
+If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+
 If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 
 ```js
@@ -6546,6 +6716,7 @@ This endpoint is useful for:
 AJAX calls. Remember to send credentials and set up CORS correctly!
 Reverse proxies and API Gateways
 Server-side calls - use the `X-Session-Token` header!
+Session refresh
 
 This endpoint authenticates users by checking
 

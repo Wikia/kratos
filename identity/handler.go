@@ -24,6 +24,10 @@ import (
 const RouteCollection = "/identities"
 const RouteItem = RouteCollection + "/:id"
 
+// fandom-start - add API to validate email before saving user in UCP
+const RouteValidate = RouteCollection + "/validate"
+// fandom-end
+
 type (
 	handlerDependencies interface {
 		PoolProvider
@@ -65,6 +69,9 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(RouteItem, h.delete)
 
 	admin.POST(RouteCollection, h.create)
+	// fandom-start - add API to validate email before saving user in UCP
+	admin.POST(RouteValidate, h.validate)
+	// fandom-end
 	admin.PUT(RouteItem, h.update)
 }
 
@@ -382,6 +389,54 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 	h.r.Writer().Write(w, r, identity)
 }
+
+// fandom-start - add API to validate email before saving user in UCP
+
+// swagger:route POST /identities/validate v0alpha2 AdminUpdateIdentityBody
+//
+// Validates provided traits and state
+//
+// This endpoint validates traits against provided schema_id.
+// The full identity payload (except credentials) is expected. This endpoint does not support patching.
+//
+// Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+//
+//     Consumes:
+//     - application/json
+//
+//     Produces:
+//     - application/json
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       200: identity is valid
+//       400: jsonError
+//       500: jsonError
+func (h *Handler) validate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var ur AdminUpdateIdentityBody
+	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := ur.State.IsValid(); err != nil {
+		h.r.Writer().WriteErrorCode(w, r, http.StatusBadRequest, herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err))
+		return
+	}
+
+	identity := Identity{
+		SchemaID: ur.SchemaID,
+		State:    ur.State,
+		Traits:   []byte(ur.Traits),
+	}
+	if err := h.r.IdentityManager().validate(r.Context(), &identity, &managerOptions{}); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	h.r.Writer().Write(w, r, "Identity is valid")
+}
+// fandom-end
 
 // swagger:parameters adminDeleteIdentity
 // nolint:deadcode,unused

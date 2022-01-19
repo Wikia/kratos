@@ -24,6 +24,10 @@ type lifespanProvider interface {
 	SessionLifespan() time.Duration
 }
 
+type refreshWindowProvider interface {
+	SessionRefreshMinTimeLeft() time.Duration
+}
+
 // A Session
 //
 // swagger:model session
@@ -154,6 +158,15 @@ type Device struct {
 func (s *Session) Declassify() *Session {
 	s.Identity = s.Identity.CopyWithoutCredentials()
 	return s
+}
+
+func (s *Session) Refresh(c lifespanProvider) *Session {
+	s.ExpiresAt = time.Now().Add(c.SessionLifespan())
+	return s
+}
+
+func (s *Session) CanBeRefreshed(c refreshWindowProvider) bool {
+	return s.ExpiresAt.Add(-c.SessionRefreshMinTimeLeft()).Before(time.Now())
 }
 
 func (s *Session) IsActive() bool {

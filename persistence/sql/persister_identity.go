@@ -59,7 +59,9 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
 	}
 
 	// Force case-insensitivity for identifiers
-	if ct == identity.CredentialsTypePassword {
+	// fandom-start - temporary fix during identifier migration
+	if ct == identity.CredentialsTypePassword && !p.r.Config(ctx).IdentityCaseSensitiveIdentifier() {
+		// fandom-end
 		match = strings.ToLower(match)
 	}
 
@@ -68,7 +70,7 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
     ic.identity_id
 FROM %s ic
          INNER JOIN %s ici on ic.id = ici.identity_credential_id
-WHERE ici.identifier = ?
+WHERE (ici.identifier = ? OR ici.identifier = ?)
   AND ic.nid = ?
   AND ici.nid = ?
   AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE name = ?)`,
@@ -77,6 +79,9 @@ WHERE ici.identifier = ?
 		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 	),
 		match,
+		// fandom-start: remove this after migration (and update above SQL)
+		strings.ToLower(match),
+		// fandom-end
 		nid,
 		nid,
 		ct,
@@ -134,7 +139,7 @@ func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.I
 
 		for _, ids := range cred.Identifiers {
 			// Force case-insensitivity for identifiers
-			if cred.Type == identity.CredentialsTypePassword {
+			if cred.Type == identity.CredentialsTypePassword && !p.r.Config(ctx).IdentityCaseSensitiveIdentifier() {
 				ids = strings.ToLower(ids)
 			}
 

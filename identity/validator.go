@@ -48,7 +48,9 @@ func (v *Validator) ValidateWithRunner(ctx context.Context, i *Identity, runners
 
 func (v *Validator) Validate(ctx context.Context, i *Identity) error {
 	return v.ValidateWithRunner(ctx, i,
-		NewSchemaExtensionCredentials(i),
+		// fandom-start
+		NewSchemaExtensionCredentials(i, v.d.Config(ctx).IdentityCaseSensitiveIdentifier()),
+		// fandom-end
 		NewSchemaExtensionVerification(i, v.d.Config(ctx).SelfServiceFlowVerificationRequestLifespan()),
 		NewSchemaExtensionRecovery(i),
 	)

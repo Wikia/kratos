@@ -3,12 +3,6 @@ package password
 import (
 	"bufio"
 	"context"
-	"time"
-
-	"github.com/hashicorp/go-retryablehttp"
-
-	"github.com/ory/kratos/driver/config"
-
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
@@ -16,6 +10,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/ory/kratos/driver/config"
 
 	"github.com/arbovm/levenshtein"
 

@@ -2,7 +2,7 @@ package hook
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" // #nosec
 	"encoding/json"
 	"fmt"
 	"io"
@@ -227,7 +227,7 @@ func newWebHookConfig(r json.RawMessage) (*webHookConfig, error) {
 		retryMax = rc.Retries
 	}
 	return &webHookConfig{
-		sum:          fmt.Sprintf("%x", md5.Sum(r)),
+		sum:          fmt.Sprintf("%x", md5.Sum(r)), // #nosec
 		method:       rc.Method,
 		url:          rc.Url,
 		templateURI:  rc.Body,

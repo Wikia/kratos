@@ -4,7 +4,7 @@ All URIs are relative to *http://localhost*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**V0alpha2**](DefaultApi.md#V0alpha2) | **Get** /sessions/refresh | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_time_window&#x60; is set it will only refresh the session after this time has passed.
+[**V0alpha2**](DefaultApi.md#V0alpha2) | **Get** /sessions/refresh | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
 
 
 
@@ -12,7 +12,7 @@ Method | HTTP request | Description
 
 > SuccessfulAdminIdentitySession V0alpha2(ctx).Execute()
 
-Calling this endpoint refreshes a current user session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+Calling this endpoint refreshes a current user session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 
 
 

@@ -83,7 +83,7 @@ All URIs are relative to *http://localhost*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*DefaultApi* | [**V0alpha2**](docs/DefaultApi.md#v0alpha2) | **Get** /sessions/refresh | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_time_window&#x60; is set it will only refresh the session after this time has passed.
+*DefaultApi* | [**V0alpha2**](docs/DefaultApi.md#v0alpha2) | **Get** /sessions/refresh | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
 *MetadataApi* | [**GetVersion**](docs/MetadataApi.md#getversion) | **Get** /version | Return Running Software Version.
 *MetadataApi* | [**IsAlive**](docs/MetadataApi.md#isalive) | **Get** /health/alive | Check HTTP Server Status
 *MetadataApi* | [**IsReady**](docs/MetadataApi.md#isready) | **Get** /health/ready | Check HTTP Server and Database Status
@@ -97,6 +97,7 @@ Class | Method | HTTP request | Description
 *V0alpha2Api* | [**AdminSessionRefresh**](docs/V0alpha2Api.md#adminsessionrefresh) | **Patch** /sessions/refresh/{id} | Calling this endpoint refreshes a given session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
 *V0alpha2Api* | [**AdminUpdateCredentials**](docs/V0alpha2Api.md#adminupdatecredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 *V0alpha2Api* | [**AdminUpdateIdentity**](docs/V0alpha2Api.md#adminupdateidentity) | **Put** /identities/{id} | Update an Identity
+*V0alpha2Api* | [**AdminUpdateIdentityBody**](docs/V0alpha2Api.md#adminupdateidentitybody) | **Post** /identities/validate | Validates provided traits and state
 *V0alpha2Api* | [**CreateSelfServiceLogoutFlowUrlForBrowsers**](docs/V0alpha2Api.md#createselfservicelogoutflowurlforbrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
 *V0alpha2Api* | [**GetJsonSchema**](docs/V0alpha2Api.md#getjsonschema) | **Get** /schemas/{id} | 
 *V0alpha2Api* | [**GetSelfServiceError**](docs/V0alpha2Api.md#getselfserviceerror) | **Get** /self-service/errors | Get Self-Service Errors

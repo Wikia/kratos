@@ -26,6 +26,7 @@ const RouteItem = RouteCollection + "/:id"
 
 // fandom-start - add API to validate email before saving user in UCP
 const RouteValidate = RouteCollection + "/validate"
+
 // fandom-end
 
 type (
@@ -436,6 +437,7 @@ func (h *Handler) validate(w http.ResponseWriter, r *http.Request, _ httprouter.
 	}
 	h.r.Writer().Write(w, r, "Identity is valid")
 }
+
 // fandom-end
 
 // swagger:parameters adminDeleteIdentity

@@ -188,6 +188,36 @@ paths:
       summary: Create an Identity
       tags:
       - v0alpha2
+  /identities/validate:
+    post:
+      description: |-
+        This endpoint validates traits against provided schema_id.
+        The full identity payload (except credentials) is expected. This endpoint does not support patching.
+
+        Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+      operationId: AdminUpdateIdentityBody
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/identity'
+          description: is valid
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      summary: Validates provided traits and state
+      tags:
+      - v0alpha2
   /identities/{id}:
     delete:
       description: |-
@@ -2257,7 +2287,7 @@ paths:
       - oryAccessToken: []
       summary: |-
         Calling this endpoint refreshes a current user session.
-        If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+        If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
   /sessions/refresh/{id}:
     patch:
       description: |-

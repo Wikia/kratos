@@ -90,7 +90,7 @@ func (s *Strategy) CountActiveCredentials(cc map[identity.CredentialsType]identi
 				(hash.IsBcryptHash([]byte(conf.HashedPassword)) || hash.IsArgon2idHash([]byte(conf.HashedPassword)) ||
 					// fandom-start
 					hash.IsFandomLegacyHash([]byte(conf.HashedPassword))) {
-					// fandom-end
+				// fandom-end
 				count++
 			}
 		}

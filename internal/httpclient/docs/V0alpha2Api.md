@@ -11,9 +11,10 @@ Method | HTTP request | Description
 [**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /identities/{id} | Get an Identity
 [**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 [**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /identities | List Identities
-[**AdminSessionRefresh**](V0alpha2Api.md#AdminSessionRefresh) | **Patch** /sessions/refresh/{id} | Calling this endpoint refreshes a given session. If &#x60;session.refresh_time_window&#x60; is set it will only refresh the session after this time has passed.
+[**AdminSessionRefresh**](V0alpha2Api.md#AdminSessionRefresh) | **Patch** /sessions/refresh/{id} | Calling this endpoint refreshes a given session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 [**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /identities/{id} | Update an Identity
+[**AdminUpdateIdentityBody**](V0alpha2Api.md#AdminUpdateIdentityBody) | **Post** /identities/validate | Validates provided traits and state
 [**CreateSelfServiceLogoutFlowUrlForBrowsers**](V0alpha2Api.md#CreateSelfServiceLogoutFlowUrlForBrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
 [**GetJsonSchema**](V0alpha2Api.md#GetJsonSchema) | **Get** /schemas/{id} | 
 [**GetSelfServiceError**](V0alpha2Api.md#GetSelfServiceError) | **Get** /self-service/errors | Get Self-Service Errors
@@ -527,7 +528,7 @@ Name | Type | Description  | Notes
 
 > Session AdminSessionRefresh(ctx, id).Execute()
 
-Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 
 
 
@@ -726,6 +727,67 @@ Name | Type | Description  | Notes
 ### HTTP request headers
 
 - **Content-Type**: application/json
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## AdminUpdateIdentityBody
+
+> Identity AdminUpdateIdentityBody(ctx).Execute()
+
+Validates provided traits and state
+
+
+
+### Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+    openapiclient "./openapi"
+)
+
+func main() {
+
+    configuration := openapiclient.NewConfiguration()
+    apiClient := openapiclient.NewAPIClient(configuration)
+    resp, r, err := apiClient.V0alpha2Api.AdminUpdateIdentityBody(context.Background()).Execute()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminUpdateIdentityBody``: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+    }
+    // response from `AdminUpdateIdentityBody`: Identity
+    fmt.Fprintf(os.Stdout, "Response from `V0alpha2Api.AdminUpdateIdentityBody`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+This endpoint does not need any parameter.
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiAdminUpdateIdentityBodyRequest struct via the builder pattern
+
+
+### Return type
+
+[**Identity**](Identity.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)

@@ -27,7 +27,7 @@ var (
 type DefaultApi interface {
 
 	/*
-			 * V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+			 * V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 			 * This endpoint is useful for:
 
 		Session refresh
@@ -56,7 +56,7 @@ func (r DefaultApiApiV0alpha2Request) Execute() (*SuccessfulAdminIdentitySession
 }
 
 /*
- * V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+ * V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
  * This endpoint is useful for:
 
 Session refresh

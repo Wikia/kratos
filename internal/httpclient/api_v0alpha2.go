@@ -143,7 +143,7 @@ type V0alpha2Api interface {
 	AdminListIdentitiesExecute(r V0alpha2ApiApiAdminListIdentitiesRequest) ([]Identity, *http.Response, error)
 
 	/*
-			 * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+			 * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
 			 * This endpoint is useful for:
 
 		Session refresh
@@ -194,6 +194,23 @@ type V0alpha2Api interface {
 	 * @return Identity
 	 */
 	AdminUpdateIdentityExecute(r V0alpha2ApiApiAdminUpdateIdentityRequest) (*Identity, *http.Response, error)
+
+	/*
+			 * AdminUpdateIdentityBody Validates provided traits and state
+			 * This endpoint validates traits against provided schema_id.
+		The full identity payload (except credentials) is expected. This endpoint does not support patching.
+
+		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			 * @return V0alpha2ApiApiAdminUpdateIdentityBodyRequest
+	*/
+	AdminUpdateIdentityBody(ctx context.Context) V0alpha2ApiApiAdminUpdateIdentityBodyRequest
+
+	/*
+	 * AdminUpdateIdentityBodyExecute executes the request
+	 * @return Identity
+	 */
+	AdminUpdateIdentityBodyExecute(r V0alpha2ApiApiAdminUpdateIdentityBodyRequest) (*Identity, *http.Response, error)
 
 	/*
 			 * CreateSelfServiceLogoutFlowUrlForBrowsers Create a Logout URL for Browsers
@@ -1012,9 +1029,9 @@ type V0alpha2Api interface {
 
 		It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 		By default session refresh on this endpoint is disabled.
-		Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+		Session refresh can be enabled only after setting `session.whoami.refresh_allowed` to true in the config.
 		After enabling this option any refresh request will set the session life equal to `session.lifespan`.
-		If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+		If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_min_time_left`
 
 		If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 
@@ -2099,7 +2116,7 @@ func (r V0alpha2ApiApiAdminSessionRefreshRequest) Execute() (*Session, *http.Res
 }
 
 /*
- * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_time_window` is set it will only refresh the session after this time has passed.
+ * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
  * This endpoint is useful for:
 
 Session refresh
@@ -2481,6 +2498,129 @@ func (a *V0alpha2ApiService) AdminUpdateIdentityExecute(r V0alpha2ApiApiAdminUpd
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 409 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type V0alpha2ApiApiAdminUpdateIdentityBodyRequest struct {
+	ctx        context.Context
+	ApiService V0alpha2Api
+}
+
+func (r V0alpha2ApiApiAdminUpdateIdentityBodyRequest) Execute() (*Identity, *http.Response, error) {
+	return r.ApiService.AdminUpdateIdentityBodyExecute(r)
+}
+
+/*
+ * AdminUpdateIdentityBody Validates provided traits and state
+ * This endpoint validates traits against provided schema_id.
+The full identity payload (except credentials) is expected. This endpoint does not support patching.
+
+Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @return V0alpha2ApiApiAdminUpdateIdentityBodyRequest
+*/
+func (a *V0alpha2ApiService) AdminUpdateIdentityBody(ctx context.Context) V0alpha2ApiApiAdminUpdateIdentityBodyRequest {
+	return V0alpha2ApiApiAdminUpdateIdentityBodyRequest{
+		ApiService: a,
+		ctx:        ctx,
+	}
+}
+
+/*
+ * Execute executes the request
+ * @return Identity
+ */
+func (a *V0alpha2ApiService) AdminUpdateIdentityBodyExecute(r V0alpha2ApiApiAdminUpdateIdentityBodyRequest) (*Identity, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodPost
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+		localVarReturnValue  *Identity
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.AdminUpdateIdentityBody")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/identities/validate"
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
 			var v JsonError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
@@ -6681,9 +6821,9 @@ Additionally when the request it successful it adds the user ID to the 'X-Kratos
 
 It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 By default session refresh on this endpoint is disabled.
-Session refresh can be enabled only after setting `session.whoami.refresh` to true in the config.
+Session refresh can be enabled only after setting `session.whoami.refresh_allowed` to true in the config.
 After enabling this option any refresh request will set the session life equal to `session.lifespan`.
-If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_time_window`
+If you want to refresh the session only some time before session expiration you can set a proper value for `session.refresh_min_time_left`
 
 If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 

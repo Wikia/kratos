@@ -96,3 +96,5 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/tools v0.1.7
 )
+
+replace github.com/ory/x => github.com/wikia/x v0.0.267-0.20220126085936-1ae1a0b9bac2

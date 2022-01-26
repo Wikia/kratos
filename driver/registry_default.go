@@ -425,7 +425,7 @@ func (m *RegistryDefault) AnyHasher(t string) hash.Hasher {
 
 func (m *RegistryDefault) Hasher() hash.Hasher {
 	if m.passwordHasher == nil {
-		m.AnyHasher(m.c.HasherPasswordHashingAlgorithm())
+		m.passwordHasher = m.AnyHasher(m.c.HasherPasswordHashingAlgorithm())
 	}
 	return m.passwordHasher
 }

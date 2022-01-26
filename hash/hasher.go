@@ -12,5 +12,8 @@ type Hasher interface {
 }
 
 type HashProvider interface {
+	// fandom-start
+	AnyHasher(t string) Hasher
+	// fandom-end
 	Hasher() Hasher
 }

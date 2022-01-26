@@ -110,7 +110,14 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 		return s.handleRegistrationError(w, r, f, &p, err)
 	}
 
-	co, err := json.Marshal(&CredentialsConfig{HashedPassword: string(hpw)})
+	// fandom-start
+	lpw, err := s.d.AnyHasher("legacyfandom").Generate(r.Context(), []byte(p.Password))
+	if err != nil {
+		return s.handleRegistrationError(w, r, f, &p, err)
+	}
+	// fandom-end
+
+	co, err := json.Marshal(&CredentialsConfig{HashedPassword: string(hpw), LegacyPassword: string(lpw)})
 	if err != nil {
 		return s.handleRegistrationError(w, r, f, &p, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode password options to JSON: %s", err)))
 	}

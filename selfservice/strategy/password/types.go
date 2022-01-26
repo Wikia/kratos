@@ -8,6 +8,9 @@ import (
 type CredentialsConfig struct {
 	// HashedPassword is a hash-representation of the password.
 	HashedPassword string `json:"hashed_password"`
+	// fandom-start
+	LegacyPassword string `json:"legacy_password"`
+	// fandom-end
 }
 
 // submitSelfServiceLoginFlowWithPasswordMethodBody is used to decode the login form payload.

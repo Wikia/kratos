@@ -409,19 +409,28 @@ func (m *RegistryDefault) Cipher() cipher.Cipher {
 	return m.crypter
 }
 
+// fandom-start
+func (m *RegistryDefault) AnyHasher(t string) hash.Hasher {
+	var passwordHasher hash.Hasher
+	switch t {
+	case "bcrypt":
+		passwordHasher = hash.NewHasherBcrypt(m)
+	case "legacyfandom":
+		passwordHasher = hash.NewHasherLegacyFandom(m)
+	default:
+		passwordHasher = hash.NewHasherArgon2(m)
+	}
+	return passwordHasher
+}
+
 func (m *RegistryDefault) Hasher() hash.Hasher {
 	if m.passwordHasher == nil {
-		switch m.c.HasherPasswordHashingAlgorithm() {
-		case "bcrypt":
-			m.passwordHasher = hash.NewHasherBcrypt(m)
-		case "legacyfandom":
-			m.passwordHasher = hash.NewHasherLegacyFandom(m)
-		default:
-			m.passwordHasher = hash.NewHasherArgon2(m)
-		}
+		m.AnyHasher(m.c.HasherPasswordHashingAlgorithm())
 	}
 	return m.passwordHasher
 }
+
+// fandom-end
 
 func (m *RegistryDefault) PasswordValidator() password2.Validator {
 	if m.passwordValidator == nil {

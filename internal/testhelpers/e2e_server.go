@@ -67,6 +67,7 @@ func startE2EServerOnly(t *testing.T, configFile string, isTLS bool, configOptio
 		configx.WithValue("serve.admin.port", adminPort),
 		configx.WithValue("serve.public.base_url", publicUrl),
 		configx.WithValue("serve.admin.base_url", adminUrl),
+		configx.WithValue("hashers.legacyfandom.key", "QWERTYUIOPASDFGHQWERTYUIOPASDFGH"),
 		configx.WithValues(configOptions),
 	)
 

@@ -13,10 +13,10 @@ replace (
 	// Use the internal httpclient which can be generated in this codebase but mark it as the
 	// official SDK, allowing for the Ory CLI to consume Ory Kratos' CLI commands.
 	github.com/ory/kratos-client-go => ./internal/httpclient
+	github.com/ory/x => github.com/wikia/x v0.0.301-0.20220127185542-ca36afca2b8f
 	go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.4.6
 	golang.org/x/sys => golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac
 	gopkg.in/DataDog/dd-trace-go.v1 => gopkg.in/DataDog/dd-trace-go.v1 v1.27.1-0.20201005154917-54b73b3e126a
-	github.com/ory/x => github.com/wikia/x v0.0.301-0.20220127185542-ca36afca2b8f
 )
 
 require (
@@ -67,6 +67,7 @@ require (
 	github.com/mikefarah/yq v1.15.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe
+	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/ory/analytics-go/v4 v4.0.2
 	github.com/ory/dockertest/v3 v3.8.0
 	github.com/ory/go-acc v0.2.6

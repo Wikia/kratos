@@ -70,7 +70,7 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
     ic.identity_id
 FROM %s ic
          INNER JOIN %s ici on ic.id = ici.identity_credential_id
-WHERE (ici.identifier = ? OR ici.identifier = ?)
+WHERE ici.identifier = ?
   AND ic.nid = ?
   AND ici.nid = ?
   AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE name = ?)`,
@@ -79,9 +79,6 @@ WHERE (ici.identifier = ? OR ici.identifier = ?)
 		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 	),
 		match,
-		// fandom-start: remove this after migration (and update above SQL)
-		strings.ToLower(match),
-		// fandom-end
 		nid,
 		nid,
 		ct,

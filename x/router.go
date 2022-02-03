@@ -65,3 +65,7 @@ func (r *RouterPublic) PATCH(path string, handle httprouter.Handle) {
 func (r *RouterPublic) DELETE(path string, handle httprouter.Handle) {
 	r.Handle(http.MethodDelete, effectivePath(path), NoCacheHandler(handle))
 }
+
+func (r *RouterPublic) Lookup(method, path string) (httprouter.Handle, httprouter.Params, bool) {
+	return r.Router.Lookup(method, effectivePath(path))
+}

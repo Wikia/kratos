@@ -262,6 +262,9 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
 		HookType:       "LoginPostHook",
+		// fandom-start
+		Fields: req.Form,
+		// fandom-end
 	})
 }
 

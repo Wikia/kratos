@@ -49,6 +49,7 @@ func NewConfigurationWithDefaults(t *testing.T) *config.Config {
 			config.ViperKeySelfServiceBrowserDefaultReturnTo: "https://www.ory.sh/redirect-not-set",
 			config.ViperKeyDefaultIdentitySchemaURL:          UnsetDefaultIdentitySchema,
 			config.ViperKeySecretsCipher:                     []string{"secret-thirty-two-character-long"},
+			config.ViperKeyDatabaseCleanupLimit:              5,
 		}),
 		configx.SkipValidation(),
 	)

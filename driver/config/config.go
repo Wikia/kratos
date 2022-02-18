@@ -142,6 +142,7 @@ const (
 	ViperKeyHasherBcryptCost                                 = "hashers.bcrypt.cost"
 	ViperKeyCipherAlgorithm                                  = "ciphers.algorithm"
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
+	ViperKeyDatabaseCleanupLimit                             = "database.cleanup.limit"
 	//fandom-start
 	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
@@ -961,6 +962,10 @@ func (p *Config) IsBackgroundCourierEnabled() bool {
 	return p.Source().Bool("watch-courier")
 }
 
+func (p *Config) IsBackgroundCleanupEnabled() bool {
+	return p.Source().Bool("background-cleanup")
+}
+
 func (p *Config) CourierExposeMetricsPort() int {
 	return p.Source().Int("expose-metrics-port")
 }
@@ -995,6 +1000,10 @@ func (p *Config) SelfServiceFlowRecoveryRequestLifespan() time.Duration {
 
 func (p *Config) SelfServiceLinkMethodLifespan() time.Duration {
 	return p.p.DurationF(ViperKeyLinkLifespan, time.Hour)
+}
+
+func (p *Config) DatabaseCleanupLimit() int {
+	return p.p.IntF(ViperKeyDatabaseCleanupLimit, 5)
 }
 
 func (p *Config) SelfServiceFlowRecoveryAfterHooks(strategy string) []SelfServiceHook {

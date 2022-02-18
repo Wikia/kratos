@@ -2220,6 +2220,11 @@
       "default": false,
       "description": "This is a CLI flag and environment variable and can not be set using the config file."
     },
+    "background-cleanup": {
+      "type": "boolean",
+      "default": false,
+      "description": "This is a CLI flag and environment variable and can not be set using the config file."
+    },
     "expose-metrics-port": {
       "title": "Metrics port",
       "description": "The port the courier's metrics endpoint listens on (0/disabled by default). This is a CLI flag and environment variable and can not be set using the config file.",

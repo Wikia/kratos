@@ -136,7 +136,7 @@ func (p *Persister) Ping() error {
 
 func (p *Persister) CleanupDatabase(ctx context.Context) error {
 	currentTime := time.Now()
-	deleteLimit := p.r.Config(ctx).DatabaseCleanupLimit()
+	deleteLimit := p.r.Config(ctx).DatabaseCleanupBatchSize()
 	p.r.Logger().Printf("Cleaning up first %d records older than %s\n", deleteLimit, currentTime)
 
 	p.r.Logger().Println("Cleaning up expired sessions")

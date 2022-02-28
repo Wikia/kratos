@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ory/kratos/corp"
 
@@ -49,7 +50,8 @@ func NewConfigurationWithDefaults(t *testing.T) *config.Config {
 			config.ViperKeySelfServiceBrowserDefaultReturnTo: "https://www.ory.sh/redirect-not-set",
 			config.ViperKeyDefaultIdentitySchemaURL:          UnsetDefaultIdentitySchema,
 			config.ViperKeySecretsCipher:                     []string{"secret-thirty-two-character-long"},
-			config.ViperKeyDatabaseCleanupLimit:              5,
+			config.ViperKeyDatabaseCleanupBatchSize:          100,
+			config.ViperKeyDatabaseCleanupSleep:              30 * time.Minute,
 		}),
 		configx.SkipValidation(),
 	)

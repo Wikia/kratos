@@ -142,7 +142,8 @@ const (
 	ViperKeyHasherBcryptCost                                 = "hashers.bcrypt.cost"
 	ViperKeyCipherAlgorithm                                  = "ciphers.algorithm"
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
-	ViperKeyDatabaseCleanupLimit                             = "database.cleanup.limit"
+	ViperKeyDatabaseCleanupBatchSize                         = "database.cleanup.batch_size"
+	ViperKeyDatabaseCleanupSleep                             = "database.cleanup.sleep"
 	//fandom-start
 	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
@@ -1002,8 +1003,12 @@ func (p *Config) SelfServiceLinkMethodLifespan() time.Duration {
 	return p.p.DurationF(ViperKeyLinkLifespan, time.Hour)
 }
 
-func (p *Config) DatabaseCleanupLimit() int {
-	return p.p.IntF(ViperKeyDatabaseCleanupLimit, 5)
+func (p *Config) DatabaseCleanupBatchSize() int {
+	return p.p.IntF(ViperKeyDatabaseCleanupBatchSize, 100)
+}
+
+func (p *Config) DatabaseCleanupSleep() time.Duration {
+	return p.p.DurationF(ViperKeyDatabaseCleanupSleep, 30*time.Minute)
 }
 
 func (p *Config) SelfServiceFlowRecoveryAfterHooks(strategy string) []SelfServiceHook {

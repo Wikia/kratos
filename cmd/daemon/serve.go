@@ -276,7 +276,7 @@ func bgTasks(d driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args []s
 		go courier.Watch(ctx, d)
 	}
 
-	if d.Config(ctx).IsBackgroundCourierEnabled() {
+	if d.Config(ctx).IsBackgroundCleanupEnabled() {
 		go cleanup.BackgroundCleanup(ctx, d)
 	}
 }

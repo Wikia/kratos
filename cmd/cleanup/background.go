@@ -16,7 +16,7 @@ func BackgroundCleanup(ctx cx.Context, r driver.Registry) {
 		for {
 			select {
 			case <-time.After(r.Config(ctx).DatabaseCleanupSleep()):
-				err := r.Persister().CleanupDatabase(ctx)
+				err := r.Persister().CleanupDatabase(ctx, 30*time.Second)
 				r.Logger().Error(err)
 			case <-ctx.Done():
 				return nil

@@ -16,6 +16,9 @@ limitations under the License.
 package cleanup
 
 import (
+	"time"
+
+	"github.com/ory/kratos/driver/config"
 	"github.com/spf13/cobra"
 
 	"github.com/ory/kratos/cmd/cliclient"
@@ -47,5 +50,8 @@ Before running this command on an existing database, create a back up!
 
 	configx.RegisterFlags(c.PersistentFlags())
 	c.Flags().BoolP("read-from-env", "e", false, "If set, reads the database connection string from the environment variable DSN or config file key dsn.")
+	c.Flags().IntP(config.ViperKeyDatabaseCleanupBatchSize, "b", 100, "Set the number of records to be cleaned per run")
+	c.Flags().Duration(config.ViperKeyDatabaseCleanupSleepBackground, 30*time.Minute, "How long to wait between each cleanup run")
+	c.Flags().Duration(config.ViperKeyDatabaseCleanupSleepTables, time.Minute, "How long to wait between each table cleanup")
 	return c
 }

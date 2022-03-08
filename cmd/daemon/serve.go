@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/ory/kratos/cmd/cleanup"
+
 	"github.com/ory/kratos/selfservice/flow/recovery"
 
 	"github.com/ory/x/reqlog"
@@ -272,6 +274,10 @@ func bgTasks(d driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args []s
 
 	if d.Config(ctx).IsBackgroundCourierEnabled() {
 		go courier.Watch(ctx, d)
+	}
+
+	if d.Config(ctx).IsBackgroundCleanupEnabled() {
+		go cleanup.BackgroundCleanup(ctx, d)
 	}
 }
 

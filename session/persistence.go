@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/bxcodec/faker/v3"
 	"github.com/gofrs/uuid"
@@ -42,6 +43,9 @@ type Persister interface {
 	// Functionality is similar to DeleteSession but accepts a session token
 	// instead of a session ID.
 	DeleteSessionByToken(context.Context, string) error
+
+	// DeleteExpiredSessions deletes sessions that expired before the given time.
+	DeleteExpiredSessions(context.Context, time.Time, int) error
 
 	// RevokeSessionByToken marks a session inactive with the given token.
 	RevokeSessionByToken(ctx context.Context, token string) error

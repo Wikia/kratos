@@ -502,14 +502,15 @@ func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
 	}
 
 	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "could not read response body")
-	}
 	defer func(Body io.ReadCloser) {
 		if closeErr := Body.Close(); closeErr != nil {
 			err = closeErr
 		}
 	}(resp.Body)
+
+	if err != nil {
+		return errors.Wrap(err, "could not read response body")
+	}
 
 	hookResponse := &rawHookResponse{
 		Messages: []errorMessage{},

@@ -454,7 +454,7 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	vm.TLACode("ctx", buf.String())
 
 	// fandom-start
-	l.WithField("context", buf.String()).Debug("webhook body context")
+	l.WithSensitiveField("context", buf.String()).Debug("webhook body context")
 	// fandom-end
 
 	if res, err := vm.EvaluateAnonymousSnippet(templateURI, template.String()); err != nil {
@@ -462,7 +462,7 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 		return nil, errors.WithStack(err)
 	} else {
 		// fandom-start
-		l.WithField("context", buf.String()).WithSensitiveField("web_hook_body", res).Debug("webhook body prepared")
+		l.WithSensitiveField("context", buf.String()).WithSensitiveField("web_hook_body", res).Debug("webhook body prepared")
 		// fandom-end
 		return bytes.NewReader([]byte(res)), nil
 	}

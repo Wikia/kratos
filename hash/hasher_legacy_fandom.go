@@ -241,10 +241,14 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 
 	client := retryablehttp.NewClient()
 	resp, err := client.Do(req)
-	defer resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
+	defer func(Body io.ReadCloser) {
+		if closeErr := Body.Close(); closeErr != nil {
+			err = closeErr
+		}
+	}(resp.Body)
 	if resp.StatusCode >= http.StatusBadRequest {
 		return "", fmt.Errorf("identity-mapper call failed with response code %v", resp.StatusCode)
 	}

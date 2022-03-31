@@ -3,17 +3,17 @@ package password
 import (
 	"bufio"
 	"context"
-
-	"github.com/ory/kratos/x"
-
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ory/kratos/x"
 
 	"github.com/hashicorp/go-retryablehttp"
 
@@ -108,11 +108,18 @@ func (s *DefaultPasswordValidator) fetch(hpw []byte, apiDNSName string) error {
 	prefix := fmt.Sprintf("%X", hpw)[0:5]
 	loc := fmt.Sprintf("https://%s/range/%s", apiDNSName, prefix)
 	res, err := s.Client.Get(loc)
-	defer res.Body.Close()
 	if err != nil {
 		s.reg.Logger().WithError(err).Error("Network failure occurred")
 		return errors.Wrapf(ErrNetworkFailure, "%s", err)
 	}
+
+	defer func(Body io.ReadCloser) {
+		if closeErr := Body.Close(); closeErr != nil {
+			// fandom-start
+			s.reg.Logger().WithError(closeErr).Error("validator fetch could not close the response")
+			// fandom-end
+		}
+	}(res.Body)
 
 	if res.StatusCode != http.StatusOK {
 		return errors.Wrapf(ErrUnexpectedStatusCode, "%d", res.StatusCode)

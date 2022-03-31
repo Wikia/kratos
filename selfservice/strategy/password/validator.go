@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 
+	"github.com/ory/kratos/x"
+
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
@@ -65,6 +67,7 @@ type DefaultPasswordValidator struct {
 
 type validatorDependencies interface {
 	config.Provider
+	x.LoggingProvider
 }
 
 func NewDefaultPasswordValidatorStrategy(reg validatorDependencies) *DefaultPasswordValidator {
@@ -105,10 +108,11 @@ func (s *DefaultPasswordValidator) fetch(hpw []byte, apiDNSName string) error {
 	prefix := fmt.Sprintf("%X", hpw)[0:5]
 	loc := fmt.Sprintf("https://%s/range/%s", apiDNSName, prefix)
 	res, err := s.Client.Get(loc)
+	defer res.Body.Close()
 	if err != nil {
+		s.reg.Logger().WithError(err).Error("Network failure occurred")
 		return errors.Wrapf(ErrNetworkFailure, "%s", err)
 	}
-	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
 		return errors.Wrapf(ErrUnexpectedStatusCode, "%d", res.StatusCode)
@@ -176,6 +180,7 @@ func (s *DefaultPasswordValidator) Validate(ctx context.Context, identifier, pas
 	if !ok {
 		err := s.fetch(hpw, passwordPolicyConfig.HaveIBeenPwnedHost)
 		if (errors.Is(err, ErrNetworkFailure) || errors.Is(err, ErrUnexpectedStatusCode)) && passwordPolicyConfig.IgnoreNetworkErrors {
+
 			return nil
 		} else if err != nil {
 			return err

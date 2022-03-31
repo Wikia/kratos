@@ -241,6 +241,7 @@ func getCommunityPlatformUserId(identityId uuid.UUID) (userId string, err error)
 
 	client := retryablehttp.NewClient()
 	resp, err := client.Do(req)
+	defer resp.Body.Close()
 	if err != nil {
 		return "", err
 	}

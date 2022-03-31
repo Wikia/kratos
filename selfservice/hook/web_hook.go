@@ -478,6 +478,7 @@ func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookCo
 	conf.auth.apply(req.Request)
 
 	resp, err := client.Do(req)
+	defer resp.Body.Close()
 
 	if err != nil {
 		// fandom-start

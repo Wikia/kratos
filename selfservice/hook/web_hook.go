@@ -468,7 +468,7 @@ func createBody(l *logrusx.Logger, templateURI string, data *templateContext) (*
 	}
 }
 
-func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookConfig, body io.Reader) error {
+func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookConfig, body io.Reader) (err error) {
 	req, err := retryablehttp.NewRequest(conf.method, conf.url, body)
 	if err != nil {
 		return err
@@ -478,22 +478,31 @@ func doHttpCall(l *logrusx.Logger, client *retryablehttp.Client, conf *webHookCo
 	conf.auth.apply(req.Request)
 
 	resp, err := client.Do(req)
-
 	if err != nil {
 		// fandom-start
 		l.WithError(err).Error("webhook failed with status code")
 		// fandom-end
 		return err
-	} else if resp.StatusCode >= http.StatusBadRequest {
+	}
+
+	defer func(Body io.ReadCloser) {
+		if closeErr := Body.Close(); closeErr != nil {
+			// fandom-start
+			l.WithError(closeErr).Error("webhook could not close the response")
+			// fandom-end
+		}
+	}(resp.Body)
+
+	if resp.StatusCode >= http.StatusBadRequest {
 		if conf.canInterrupt {
 			if err := parseResponse(l, resp); err != nil {
 				return err
 			}
 		}
-		return fmt.Errorf("web hook failed with status code %v", resp.StatusCode)
+		err = fmt.Errorf("web hook failed with status code %v", resp.StatusCode)
 	}
 
-	return nil
+	return err
 }
 
 func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
@@ -502,12 +511,6 @@ func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
 	}
 
 	body, err := io.ReadAll(resp.Body)
-	defer func(Body io.ReadCloser) {
-		if closeErr := Body.Close(); closeErr != nil {
-			err = closeErr
-		}
-	}(resp.Body)
-
 	if err != nil {
 		return errors.Wrap(err, "could not read response body")
 	}

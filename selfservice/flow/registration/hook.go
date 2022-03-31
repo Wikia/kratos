@@ -15,6 +15,8 @@ import (
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/session"
+	"github.com/ory/kratos/ui/container"
+	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
 )
 
@@ -65,7 +67,9 @@ type (
 		identity.ManagementProvider
 		identity.ValidationProvider
 		session.PersistenceProvider
+		session.ManagementProvider
 		HooksProvider
+		x.CSRFTokenGeneratorProvider
 		x.LoggingProvider
 		x.WriterProvider
 	}
@@ -79,6 +83,37 @@ type (
 
 func NewHookExecutor(d executorDependencies) *HookExecutor {
 	return &HookExecutor{d: d}
+}
+
+func (e *HookExecutor) handleRegistrationError(_ http.ResponseWriter, r *http.Request, ct identity.CredentialsType, f *Flow, i *identity.Identity, flowError error) error {
+	if f != nil {
+		if i != nil {
+			var group node.Group
+			switch ct {
+			case identity.CredentialsTypePassword:
+				group = node.PasswordGroup
+			case identity.CredentialsTypeOIDC:
+				group = node.OpenIDConnectGroup
+			}
+
+			cont, err := container.NewFromStruct("", group, i.Traits, "traits")
+			if err != nil {
+				e.d.Logger().WithField("error", err).Warn("could not update flow UI")
+				return err
+			}
+
+			for _, n := range cont.Nodes {
+				// we only set the value and not the whole field because we want to keep types from the initial form generation
+				f.UI.Nodes.SetValueAttribute(n.ID(), n.Attributes.GetValue())
+			}
+		}
+
+		if f.Type == flow.TypeBrowser {
+			f.UI.SetCSRF(e.d.GenerateCSRFToken(r))
+		}
+	}
+
+	return flowError
 }
 
 func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Request, ct identity.CredentialsType, a *Flow, i *identity.Identity) error {
@@ -100,7 +135,7 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 					Debug("A ExecutePostRegistrationPrePersistHook hook aborted early.")
 				return nil
 			}
-			return err
+			return e.handleRegistrationError(w, r, ct, a, i, err)
 		}
 
 		e.d.Logger().WithRequest(r).
@@ -124,12 +159,24 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 		return err
 	}
 
+	// Verify the redirect URL before we do any other processing.
+	c := e.d.Config(r.Context())
+	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
+		x.SecureRedirectUseSourceURL(a.RequestURL),
+		x.SecureRedirectAllowURLs(c.SelfServiceBrowserWhitelistedReturnToDomains()),
+		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(r)),
+		x.SecureRedirectOverrideDefaultReturnTo(c.SelfServiceFlowRegistrationReturnTo(ct.String())),
+	)
+	if err != nil {
+		return err
+	}
+
 	e.d.Audit().
 		WithRequest(r).
 		WithField("identity_id", i.ID).
 		Info("A new identity has registered using self-service registration.")
 
-	s, err := session.NewActiveSession(i, e.d.Config(r.Context()), time.Now().UTC())
+	s, err := session.NewActiveSession(i, e.d.Config(r.Context()), time.Now().UTC(), ct)
 	if err != nil {
 		return err
 	}
@@ -152,7 +199,7 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 					Debug("A ExecutePostRegistrationPostPersistHook hook aborted early.")
 				return nil
 			}
-			return err
+			return e.handleRegistrationError(w, r, ct, a, i, err)
 		}
 
 		e.d.Logger().WithRequest(r).
@@ -171,12 +218,12 @@ func (e *HookExecutor) PostRegistrationHook(w http.ResponseWriter, r *http.Reque
 		Debug("Post registration execution hooks completed successfully.")
 
 	if a.Type == flow.TypeAPI || x.IsJSONRequest(r) {
-		e.d.Writer().Write(w, r, &APIFlowResponse{Identity: i})
+		e.d.Writer().Write(w, r, &APIFlowResponse{Identity: i, Session: s})
 		return nil
 	}
 
-	return x.SecureContentNegotiationRedirection(w, r, s.Declassify(), a.RequestURL,
-		e.d.Writer(), e.d.Config(r.Context()), x.SecureRedirectOverrideDefaultReturnTo(e.d.Config(r.Context()).SelfServiceFlowRegistrationReturnTo(ct.String())))
+	x.ContentNegotiationRedirection(w, r, s.Declassify(), e.d.Writer(), returnTo.String())
+	return nil
 }
 
 func (e *HookExecutor) PreRegistrationHook(w http.ResponseWriter, r *http.Request, a *Flow) error {

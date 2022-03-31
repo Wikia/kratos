@@ -1,3 +1,4 @@
+//go:build tools
 // +build tools
 
 package main
@@ -19,5 +20,6 @@ import (
 
 	_ "github.com/davidrjonas/semver-cli"
 
+	_ "github.com/cortesi/modd/cmd/modd"
 	_ "github.com/hashicorp/consul/api"
 )

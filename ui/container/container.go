@@ -87,6 +87,17 @@ func NewFromJSON(action string, group node.Group, raw json.RawMessage, prefix st
 	return c
 }
 
+//NewFromStruct creates a UI Container based on serialized contents of the provided struct.
+func NewFromStruct(action string, group node.Group, v interface{}, prefix string) (*Container, error) {
+	c := New(action)
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	c.UpdateNodeValuesFromJSON(data, prefix, group)
+	return c, nil
+}
+
 // NewFromJSONSchema creates a new Container and populates the fields
 // using the provided JSON Schema.
 func NewFromJSONSchema(action string, group node.Group, jsonSchemaRef, prefix string, compiler *jsonschema.Compiler) (*Container, error) {
@@ -158,7 +169,6 @@ func (c *Container) ParseError(group node.Group, err error) error {
 		return err
 	} else if e := new(schema.ValidationError); errors.As(err, &e) {
 		pointer, _ := jsonschemax.JSONPointerToDotNotation(e.InstancePtr)
-		fmt.Printf("validatoin error: %s\n", pointer)
 		for i := range e.Messages {
 			c.AddMessage(group, &e.Messages[i], pointer)
 		}
@@ -191,7 +201,6 @@ func (c *Container) ParseError(group node.Group, err error) error {
 		}
 		return nil
 	} else if e := schema.NewValidationListError(); errors.As(err, &e) {
-		fmt.Println("list error validation")
 		for _, ee := range e.Validations {
 			if err := c.ParseError(group, ee); err != nil {
 				return err

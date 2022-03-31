@@ -35,8 +35,11 @@ func MockSetSession(t *testing.T, reg mockDeps, conf *config.Config) httprouter.
 		i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
 		require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
 
-		activeSession, _ := session.NewActiveSession(i, conf, time.Now().UTC())
-		require.NoError(t, reg.SessionManager().CreateAndIssueCookie(context.Background(), w, r, activeSession))
+		activeSession, _ := session.NewActiveSession(i, conf, time.Now().UTC(), identity.CredentialsTypePassword)
+		if aal := r.URL.Query().Get("set_aal"); len(aal) > 0 {
+			activeSession.AuthenticatorAssuranceLevel = identity.AuthenticatorAssuranceLevel(aal)
+		}
+		require.NoError(t, reg.SessionManager().UpsertAndIssueCookie(context.Background(), w, r, activeSession))
 
 		w.WriteHeader(http.StatusOK)
 	}
@@ -59,7 +62,7 @@ func MockMakeAuthenticatedRequest(t *testing.T, reg mockDeps, conf *config.Confi
 	router.GET(set, MockSetSession(t, reg, conf))
 
 	client := NewClientWithCookies(t)
-	MockHydrateCookieClient(t, client, "http://"+req.URL.Host+set)
+	MockHydrateCookieClient(t, client, "http://"+req.URL.Host+set+"?"+req.URL.Query().Encode())
 
 	res, err := client.Do(req)
 	require.NoError(t, errors.WithStack(err))
@@ -78,22 +81,40 @@ func NewClientWithCookies(t *testing.T) *http.Client {
 	return &http.Client{Jar: cj}
 }
 
-func MockHydrateCookieClient(t *testing.T, c *http.Client, u string) {
+func NewNoRedirectClientWithCookies(t *testing.T) *http.Client {
+	cj, err := cookiejar.New(&cookiejar.Options{})
+	require.NoError(t, err)
+	return &http.Client{
+		Jar: cj,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+func MockHydrateCookieClient(t *testing.T, c *http.Client, u string) *http.Cookie {
+	var sessionCookie *http.Cookie
 	res, err := c.Get(u)
 	require.NoError(t, err)
 	defer res.Body.Close()
 	assert.EqualValues(t, http.StatusOK, res.StatusCode)
 
 	var found bool
-	for _, c := range res.Cookies() {
-		if c.Name == config.DefaultSessionCookieName {
+	for _, rc := range res.Cookies() {
+		if rc.Name == config.DefaultSessionCookieName {
 			found = true
+			sessionCookie = rc
 		}
 	}
 	require.True(t, found)
+	return sessionCookie
 }
 
 func MockSessionCreateHandlerWithIdentity(t *testing.T, reg mockDeps, i *identity.Identity) (httprouter.Handle, *session.Session) {
+	return MockSessionCreateHandlerWithIdentityAndAMR(t, reg, i, []identity.CredentialsType{"password"})
+}
+
+func MockSessionCreateHandlerWithIdentityAndAMR(t *testing.T, reg mockDeps, i *identity.Identity, methods []identity.CredentialsType) (httprouter.Handle, *session.Session) {
 	var sess session.Session
 	require.NoError(t, faker.FakeData(&sess))
 	// require AuthenticatedAt to be time.Now() as we always compare it to the current time
@@ -101,6 +122,10 @@ func MockSessionCreateHandlerWithIdentity(t *testing.T, reg mockDeps, i *identit
 	sess.IssuedAt = time.Now().UTC()
 	sess.ExpiresAt = time.Now().UTC().Add(time.Hour * 24)
 	sess.Active = true
+	for _, method := range methods {
+		sess.CompletedLoginFor(method)
+	}
+	sess.SetAuthenticatorAssuranceLevel()
 
 	if reg.Config(context.Background()).Source().String(config.ViperKeyDefaultIdentitySchemaURL) == internal.UnsetDefaultIdentitySchema {
 		reg.Config(context.Background()).MustSet(config.ViperKeyDefaultIdentitySchemaURL, "file://./stub/fake-session.schema.json")
@@ -112,7 +137,7 @@ func MockSessionCreateHandlerWithIdentity(t *testing.T, reg mockDeps, i *identit
 	require.NoError(t, err)
 	sess.Identity = inserted
 
-	require.NoError(t, reg.SessionPersister().CreateSession(context.Background(), &sess))
+	require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), &sess))
 	require.Len(t, inserted.Credentials, len(i.Credentials))
 
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

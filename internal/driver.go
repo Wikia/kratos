@@ -2,7 +2,9 @@ package internal
 
 import (
 	"context"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/ory/kratos/corp"
 
@@ -33,6 +35,7 @@ func init() {
 
 func NewConfigurationWithDefaults(t *testing.T) *config.Config {
 	c := config.MustNew(t, logrusx.New("", ""),
+		os.Stderr,
 		configx.WithValues(map[string]interface{}{
 			"log.level":                                      "trace",
 			config.ViperKeyDSN:                               dbal.SQLiteInMemory,
@@ -46,6 +49,10 @@ func NewConfigurationWithDefaults(t *testing.T) *config.Config {
 			config.ViperKeyCourierSMTPURL:                    "smtp://foo:bar@baz.com/",
 			config.ViperKeySelfServiceBrowserDefaultReturnTo: "https://www.ory.sh/redirect-not-set",
 			config.ViperKeyDefaultIdentitySchemaURL:          UnsetDefaultIdentitySchema,
+			config.ViperKeySecretsCipher:                     []string{"secret-thirty-two-character-long"},
+			config.ViperKeyDatabaseCleanupBatchSize:          100,
+			config.ViperKeyDatabaseCleanupSleepBackground:    30 * time.Minute,
+			config.ViperKeyDatabaseCleanupSleepTables:        1 * time.Minute,
 		}),
 		configx.SkipValidation(),
 	)

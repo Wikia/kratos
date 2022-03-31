@@ -31,7 +31,7 @@ func TestVerifier(t *testing.T) {
 	for k, hf := range map[string]func(*hook.Verifier, *identity.Identity, flow.Flow) error{
 		"settings": func(h *hook.Verifier, i *identity.Identity, f flow.Flow) error {
 			return h.ExecuteSettingsPostPersistHook(
-				httptest.NewRecorder(), u, f.(*settings.Flow), i)
+				httptest.NewRecorder(), u, f.(*settings.Flow), i, "ExecuteSettingsPostPersistHook")
 		},
 		"register": func(h *hook.Verifier, i *identity.Identity, f flow.Flow) error {
 			return h.ExecutePostRegistrationPostPersistHook(
@@ -59,9 +59,11 @@ func TestVerifier(t *testing.T) {
 			actual, err = reg.IdentityPool().FindVerifiableAddressByValue(context.Background(), identity.VerifiableAddressTypeEmail, "baz@ory.sh")
 			require.NoError(t, err)
 			assert.EqualValues(t, "baz@ory.sh", actual.Value)
+
+			verifiedAt := sqlxx.NullTime(time.Now())
 			actual.Status = identity.VerifiableAddressStatusCompleted
 			actual.Verified = true
-			actual.VerifiedAt = sqlxx.NullTime(time.Now())
+			actual.VerifiedAt = &verifiedAt
 			require.NoError(t, reg.PrivilegedIdentityPool().UpdateVerifiableAddress(context.Background(), actual))
 
 			i, err = reg.IdentityPool().GetIdentity(context.Background(), i.ID)

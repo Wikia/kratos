@@ -1,6 +1,7 @@
 package hook
 
 import (
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,10 +10,18 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 
+	"github.com/sirupsen/logrus/hooks/test"
+
+	"github.com/ory/kratos/schema"
+	"github.com/ory/kratos/text"
+
+	"github.com/ory/kratos/ui/node"
+	"github.com/ory/x/httpx"
+
 	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/flow/registration"
 	"github.com/ory/kratos/selfservice/flow/settings"
@@ -35,17 +44,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type resilientClientProvider struct {}
-func (r *resilientClientProvider) GetResilientClient() *retryablehttp.Client {
+type resilientClientProvider struct {
+	log *logrusx.Logger
+}
+
+func newResilientClient() *resilientClientProvider {
+	return &resilientClientProvider{
+		log: logrusx.New("kratos", "test"),
+	}
+}
+
+func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ ...httpx.ResilientOptions) *retryablehttp.Client {
 	return retryablehttp.NewClient()
 }
 
 func (r *resilientClientProvider) Logger() *logrusx.Logger {
-	return nil
+	return r.log
 }
 
 func (r *resilientClientProvider) Audit() *logrusx.Logger {
-	return nil
+	return r.log
 }
 
 func TestNoopAuthStrategy(t *testing.T) {
@@ -106,47 +124,95 @@ func TestApiKeyInCookieStrategy(t *testing.T) {
 	assert.Equal(t, "my-api-key-value", cookies[0].Value)
 }
 
-func TestJsonNetSupport(t *testing.T) {
-	f := login.Flow{ID: x.NewUUID()}
-	i := identity.NewIdentity("")
+//go:embed stub/test_body.jsonnet
+var testBodyJSONNet []byte
 
-	headers := http.Header{}
-	headers.Add("Some-Header", "Some-Value")
-	headers.Add("Cookie", "c1=v1")
-	headers.Add("Cookie", "c2=v2")
-	data := &templateContext{
-		Flow:           &f,
-		RequestHeaders: headers,
-		RequestMethod:  "POST",
-		RequestUrl:     "https://test.kratos.ory.sh/some-test-path",
-		Identity:       i,
+func TestJsonNetSupport(t *testing.T) {
+	f := &login.Flow{ID: x.NewUUID()}
+	i := identity.NewIdentity("")
+	l := logrusx.New("kratos", "test")
+
+	for _, tc := range []struct {
+		desc, template string
+		data           *templateContext
+	}{
+		{
+			desc:     "simple file URI",
+			template: "file://./stub/test_body.jsonnet",
+			data: &templateContext{
+				Flow: f,
+				RequestHeaders: http.Header{
+					"Cookie":      []string{"c1=v1", "c2=v2"},
+					"Some-Header": []string{"Some-Value"},
+				},
+				RequestMethod: "POST",
+				RequestUrl:    "https://test.kratos.ory.sh/some-test-path",
+				Identity:      i,
+			},
+		},
+		{
+			desc:     "legacy filepath without scheme",
+			template: "./stub/test_body.jsonnet",
+			data: &templateContext{
+				Flow: f,
+				RequestHeaders: http.Header{
+					"Cookie":      []string{"c1=v1", "c2=v2"},
+					"Some-Header": []string{"Some-Value"},
+				},
+				RequestMethod: "POST",
+				RequestUrl:    "https://test.kratos.ory.sh/some-test-path",
+				Identity:      i,
+			},
+		},
+		{
+			desc:     "base64 encoded template URI",
+			template: "base64://" + base64.StdEncoding.EncodeToString(testBodyJSONNet),
+			data: &templateContext{
+				Flow: f,
+				RequestHeaders: http.Header{
+					"Cookie":           []string{"foo=bar"},
+					"My-Custom-Header": []string{"Cumstom-Value"},
+				},
+				RequestMethod: "PUT",
+				RequestUrl:    "https://test.kratos.ory.sh/other-test-path",
+				Identity:      i,
+			},
+		},
+	} {
+		t.Run("case="+tc.desc, func(t *testing.T) {
+			b, err := createBody(l, tc.template, tc.data)
+			require.NoError(t, err)
+			body, err := io.ReadAll(b)
+			require.NoError(t, err)
+
+			expected, err := json.Marshal(map[string]interface{}{
+				"flow_id":     tc.data.Flow.GetID(),
+				"identity_id": tc.data.Identity.ID,
+				"headers":     tc.data.RequestHeaders,
+				"method":      tc.data.RequestMethod,
+				"url":         tc.data.RequestUrl,
+			})
+			require.NoError(t, err)
+
+			assert.JSONEq(t, string(expected), string(body))
+		})
 	}
 
-	b, err := createBody("./stub/test_body.jsonnet", data)
-	assert.NoError(t, err)
+	t.Run("case=warns about legacy usage", func(t *testing.T) {
+		hook := test.Hook{}
+		l := logrusx.New("kratos", "test", logrusx.WithHook(&hook))
 
-	buf := new(strings.Builder)
-	io.Copy(buf, b)
+		_, _ = createBody(l, "./foo", nil)
 
-	expected := fmt.Sprintf(`
-		{
-			"flow_id": "%s",
-			"identity_id": "%s",
-			"headers": {
-				"Cookie": ["%s", "%s"],
-				"Some-Header": ["%s"]
-			},
-			"method": "%s",
-			"url": "%s"
-		}`,
-		f.ID, i.ID,
-		data.RequestHeaders.Values("Cookie")[0],
-		data.RequestHeaders.Values("Cookie")[1],
-		data.RequestHeaders.Get("Some-Header"),
-		data.RequestMethod,
-		data.RequestUrl)
+		require.Len(t, hook.Entries, 1)
+		assert.Contains(t, hook.LastEntry().Message, "support for filepaths without a 'file://' scheme will be dropped")
+	})
 
-	assert.JSONEq(t, expected, buf.String())
+	t.Run("case=return non nil body reader on empty templateURI", func(t *testing.T) {
+		body, err := createBody(l, "", nil)
+		assert.NotNil(t, body)
+		assert.Nil(t, err)
+	})
 }
 
 func TestWebHookConfig(t *testing.T) {
@@ -156,6 +222,7 @@ func TestWebHookConfig(t *testing.T) {
 		url          string
 		body         string
 		rawConfig    string
+		canInterrupt bool
 		authStrategy AuthStrategy
 	}{
 		{
@@ -168,6 +235,21 @@ func TestWebHookConfig(t *testing.T) {
 				"method": "POST",
 				"body": "/path/to/my/jsonnet1.file"
 			}`,
+			canInterrupt: false,
+			authStrategy: &noopAuthStrategy{},
+		},
+		{
+			strategy: "empty_blocking",
+			method:   "POST",
+			url:      "https://test.kratos.ory.sh/my_hook1",
+			body:     "/path/to/my/jsonnet1.file",
+			rawConfig: `{
+				"url": "https://test.kratos.ory.sh/my_hook1",
+				"method": "POST",
+				"body": "/path/to/my/jsonnet1.file",
+				"canInterrupt": true
+			}`,
+			canInterrupt: true,
 			authStrategy: &noopAuthStrategy{},
 		},
 		{
@@ -187,6 +269,7 @@ func TestWebHookConfig(t *testing.T) {
 					}
 				}
 			}`,
+			canInterrupt: false,
 			authStrategy: &basicAuthStrategy{},
 		},
 		{
@@ -207,6 +290,7 @@ func TestWebHookConfig(t *testing.T) {
 					}
 				}
 			}`,
+			canInterrupt: false,
 			authStrategy: &apiKeyStrategy{},
 		},
 		{
@@ -227,6 +311,7 @@ func TestWebHookConfig(t *testing.T) {
 					}
 				}
 			}`,
+			canInterrupt: false,
 			authStrategy: &apiKeyStrategy{},
 		},
 	} {
@@ -236,7 +321,7 @@ func TestWebHookConfig(t *testing.T) {
 
 			assert.Equal(t, tc.url, conf.url)
 			assert.Equal(t, tc.method, conf.method)
-			assert.Equal(t, tc.body, conf.templatePath)
+			assert.Equal(t, tc.body, conf.templateURI)
 			assert.NotNil(t, conf.auth)
 			assert.IsTypef(t, tc.authStrategy, conf.auth, "Auth should be of the expected type")
 		})
@@ -266,6 +351,13 @@ func TestWebHooks(t *testing.T) {
 	webHookHttpCodeEndPoint := func(code int) httprouter.Handle {
 		return func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 			w.WriteHeader(code)
+		}
+	}
+
+	webHookHttpCodeWithBodyEndPoint := func(code int, body []byte) httprouter.Handle {
+		return func(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+			w.WriteHeader(code)
+			_, _ = w.Write(body)
 		}
 	}
 
@@ -329,7 +421,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Login Hook",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
-				return wh.ExecuteLoginPostHook(nil, req, f.(*login.Flow), s)
+				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentity(req, f, s)
@@ -379,7 +471,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentity(req, f, s)
@@ -463,7 +555,7 @@ func TestWebHooks(t *testing.T) {
 								"body": "%s",
 								"auth": %s
 							}`, ts.URL+path, method, "./stub/test_body.jsonnet", auth.createAuthConfig()))
-							wh := NewWebHook(&resilientClientProvider{}, conf)
+							wh := NewWebHook(newResilientClient(), conf)
 
 							err := tc.callWebHook(wh, req, f, s, identity.CredentialsTypePassword)
 							if method == "GARBAGE" {
@@ -498,6 +590,220 @@ func TestWebHooks(t *testing.T) {
 		})
 	}
 
+	webHookResponse := []byte(
+		`{
+			"Messages": [{
+				"InstancePtr": "#/traits/username",
+				"Message": "validation error",
+				"DetailedMessages": [{
+					"ID": 1234,
+					"Text": "error message",
+					"Type": "validation"
+				}]
+			}]
+		}`,
+	)
+
+	webhookError := schema.NewValidationListError()
+	webhookError.WithError("#/traits/username", "validation error", text.Messages{{ID: 1234, Type: "validation", Text: "error message"}})
+
+	for _, tc := range []struct {
+		uc              string
+		callWebHook     func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error
+		webHookResponse func() (int, []byte)
+		createFlow      func() flow.Flow
+		expectedError   error
+	}{
+		{
+			uc:         "Pre Login Hook - no block",
+			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+				return wh.ExecuteLoginPreHook(nil, req, f.(*login.Flow))
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Pre Login Hook - block",
+			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+				return wh.ExecuteLoginPreHook(nil, req, f.(*login.Flow))
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Post Login Hook - no block",
+			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Post Login Hook - block",
+			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Pre Registration Hook - no block",
+			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+				return wh.ExecuteRegistrationPreHook(nil, req, f.(*registration.Flow))
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Pre Registration Hook - block",
+			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+				return wh.ExecuteRegistrationPreHook(nil, req, f.(*registration.Flow))
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Post Registration Hook - no block",
+			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, identity.CredentialsTypePassword)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Post Registration Hook - block",
+			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, identity.CredentialsTypePassword)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Post Recovery Hook - no block",
+			createFlow: func() flow.Flow { return &recovery.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostRecoveryHook(nil, req, f.(*recovery.Flow), s)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Post Recovery Hook - block",
+			createFlow: func() flow.Flow { return &recovery.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostRecoveryHook(nil, req, f.(*recovery.Flow), s)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Post Verification Hook - no block",
+			createFlow: func() flow.Flow { return &verification.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostVerificationHook(nil, req, f.(*verification.Flow), s.Identity)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Post Verification Hook - block",
+			createFlow: func() flow.Flow { return &verification.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecutePostVerificationHook(nil, req, f.(*verification.Flow), s.Identity)
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+		{
+			uc:         "Post Settings Hook - no block",
+			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusOK, []byte{}
+			},
+			expectedError: nil,
+		},
+		{
+			uc:         "Post Settings Hook - block",
+			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
+			callWebHook: func(wh *WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
+			},
+			webHookResponse: func() (int, []byte) {
+				return http.StatusBadRequest, webHookResponse
+			},
+			expectedError: webhookError,
+		},
+	} {
+		t.Run("uc="+tc.uc, func(t *testing.T) {
+			for _, method := range []string{"CONNECT", "DELETE", "GET", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"} {
+				t.Run("method="+method, func(t *testing.T) {
+					f := tc.createFlow()
+					req := &http.Request{
+						Header:     map[string][]string{"Some-Header": {"Some-Value"}},
+						RequestURI: "https://www.ory.sh/some_end_point",
+						Method:     http.MethodPost,
+					}
+					s := &session.Session{ID: x.NewUUID(), Identity: &identity.Identity{ID: x.NewUUID()}}
+					ts := newServer(webHookHttpCodeWithBodyEndPoint(tc.webHookResponse()))
+					conf := json.RawMessage(fmt.Sprintf(`{
+								"url": "%s",
+								"method": "%s",
+								"body": "%s",
+								"canInterrupt": true
+							}`, ts.URL+path, method, "file://./stub/test_body.jsonnet"))
+
+					wh := NewWebHook(newResilientClient(), conf)
+
+					err := tc.callWebHook(wh, req, f, s)
+					if tc.expectedError == nil {
+						assert.NoError(t, err)
+						return
+					}
+
+					var validationError *schema.ValidationListError
+					if assert.ErrorAs(t, err, &validationError) {
+						assert.Equal(t, validationError, tc.expectedError)
+					}
+				})
+			}
+		})
+	}
+
 	t.Run("Must error when config is erroneous", func(t *testing.T) {
 		req := &http.Request{
 			Header:     map[string][]string{"Some-Header": {"Some-Value"}},
@@ -505,11 +811,8 @@ func TestWebHooks(t *testing.T) {
 			Method:     http.MethodPost,
 		}
 		f := &login.Flow{ID: x.NewUUID()}
-		conf := json.RawMessage(fmt.Sprintf(`{
-					"url": "/foo",
-					"method": "BAR"
-				`)) // closing } is missing
-		wh := NewWebHook(&resilientClientProvider{}, conf)
+		conf := json.RawMessage("not valid json")
+		wh := NewWebHook(newResilientClient(), conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -528,7 +831,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/bad_template.jsonnet"))
-		wh := NewWebHook(&resilientClientProvider{}, conf)
+		wh := NewWebHook(newResilientClient(), conf)
 
 		err := wh.ExecuteLoginPreHook(nil, req, f)
 		assert.Error(t, err)
@@ -568,7 +871,7 @@ func TestWebHooks(t *testing.T) {
 					"method": "%s",
 					"body": "%s"
 				}`, ts.URL+path, "POST", "./stub/test_body.jsonnet"))
-			wh := NewWebHook(&resilientClientProvider{}, conf)
+			wh := NewWebHook(newResilientClient(), conf)
 
 			err := wh.ExecuteLoginPreHook(nil, req, f)
 			if tc.mustSuccess {

@@ -59,7 +59,9 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
 	}
 
 	// Force case-insensitivity for identifiers
-	if ct == identity.CredentialsTypePassword {
+	// fandom-start - temporary fix during identifier migration
+	if ct == identity.CredentialsTypePassword && !p.r.Config(ctx).IdentityCaseSensitiveIdentifier() {
+		// fandom-end
 		match = strings.ToLower(match)
 	}
 
@@ -67,15 +69,14 @@ func (p *Persister) FindByCredentialsIdentifier(ctx context.Context, ct identity
 	if err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(`SELECT
     ic.identity_id
 FROM %s ic
-         INNER JOIN %s ict on ic.identity_credential_type_id = ict.id
          INNER JOIN %s ici on ic.id = ici.identity_credential_id
 WHERE ici.identifier = ?
   AND ic.nid = ?
   AND ici.nid = ?
-  AND ict.name = ?`,
+  AND ici.identity_credential_type_id = (SELECT id FROM %s WHERE name = ?)`,
 		corp.ContextualizeTableName(ctx, "identity_credentials"),
-		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 		corp.ContextualizeTableName(ctx, "identity_credential_identifiers"),
+		corp.ContextualizeTableName(ctx, "identity_credential_types"),
 	),
 		match,
 		nid,
@@ -135,7 +136,7 @@ func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.I
 
 		for _, ids := range cred.Identifiers {
 			// Force case-insensitivity for identifiers
-			if cred.Type == identity.CredentialsTypePassword {
+			if cred.Type == identity.CredentialsTypePassword && !p.r.Config(ctx).IdentityCaseSensitiveIdentifier() {
 				ids = strings.ToLower(ids)
 			}
 
@@ -144,9 +145,10 @@ func (p *Persister) createIdentityCredentials(ctx context.Context, i *identity.I
 			}
 
 			if err := c.Create(&identity.CredentialIdentifier{
-				Identifier:            ids,
-				IdentityCredentialsID: cred.ID,
-				NID:                   corp.ContextualizeNID(ctx, p.nid),
+				Identifier:                ids,
+				IdentityCredentialsID:     cred.ID,
+				IdentityCredentialsTypeID: ct.ID,
+				NID:                       corp.ContextualizeNID(ctx, p.nid),
 			}); err != nil {
 				return sqlcon.HandleError(err)
 			}
@@ -213,7 +215,8 @@ func (p *Persister) CreateIdentity(ctx context.Context, i *identity.Identity) er
 		i.SchemaID = config.DefaultIdentityTraitsSchemaID
 	}
 
-	i.StateChangedAt = sqlxx.NullTime(time.Now())
+	stateChangedAt := sqlxx.NullTime(time.Now())
+	i.StateChangedAt = &stateChangedAt
 	if i.State == "" {
 		i.State = identity.StateActive
 	}
@@ -252,7 +255,7 @@ func (p *Persister) ListIdentities(ctx context.Context, page, perPage int) ([]id
 
 	/* #nosec G201 TableName is static */
 	if err := sqlcon.HandleError(p.GetConnection(ctx).Where("nid = ?", corp.ContextualizeNID(ctx, p.nid)).
-		Eager("VerifiableAddresses", "RecoveryAddresses").
+		EagerPreload("VerifiableAddresses", "RecoveryAddresses").
 		Paginate(page, perPage).Order("id DESC").
 		All(&is)); err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ func (e *Verifier) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter,
 	return e.do(r, s.Identity, f)
 }
 
-func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, i *identity.Identity) error {
+func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, i *identity.Identity, settingsType string) error {
 	return e.do(r, i, a)
 }
 
@@ -68,7 +68,7 @@ func (e *Verifier) do(r *http.Request, i *identity.Identity, f flow.Flow) error 
 			return err
 		}
 
-		if err := e.r.LinkSender().SendVerificationTokenTo(r.Context(), verificationFlow, address, token); err != nil {
+		if err := e.r.LinkSender().SendVerificationTokenTo(r.Context(), verificationFlow, i, address, token); err != nil {
 			return err
 		}
 	}

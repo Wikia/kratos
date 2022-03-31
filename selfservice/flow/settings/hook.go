@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ory/kratos/text"
+	"github.com/ory/kratos/ui/container"
 	"github.com/ory/kratos/ui/node"
 
 	"github.com/ory/kratos/schema"
@@ -23,11 +24,11 @@ import (
 
 type (
 	PostHookPrePersistExecutor interface {
-		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
+		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
 	PostHookPrePersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
 	PostHookPostPersistExecutor    interface {
-		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
+		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
 	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
 	HooksProvider                   interface {
@@ -43,6 +44,7 @@ type (
 		HooksProvider
 		FlowPersistenceProvider
 
+		x.CSRFTokenGeneratorProvider
 		x.LoggingProvider
 		x.WriterProvider
 	}
@@ -94,6 +96,37 @@ func WithCallback(cb func(ctxUpdate *UpdateContext) error) func(o *postSettingsH
 	}
 }
 
+func (e *HookExecutor) handleSettingsError(_ http.ResponseWriter, r *http.Request, settingsType string, f *Flow, i *identity.Identity, flowError error) error {
+	if f != nil {
+		if i != nil {
+			var group node.Group
+			switch settingsType {
+			case "password":
+				group = node.PasswordGroup
+			case "oidc":
+				group = node.OpenIDConnectGroup
+			}
+
+			cont, err := container.NewFromStruct("", group, i.Traits, "traits")
+			if err != nil {
+				e.d.Logger().WithField("error", err).Warn("could not update flow UI")
+				return err
+			}
+
+			for _, n := range cont.Nodes {
+				// we only set the value and not the whole field because we want to keep types from the initial form generation
+				f.UI.Nodes.SetValueAttribute(n.ID(), n.Attributes.GetValue())
+			}
+		}
+
+		if f.Type == flow.TypeBrowser {
+			f.UI.SetCSRF(e.d.GenerateCSRFToken(r))
+		}
+	}
+
+	return flowError
+}
+
 func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, settingsType string, ctxUpdate *UpdateContext, i *identity.Identity, opts ...PostSettingsHookOption) error {
 	e.d.Logger().
 		WithRequest(r).
@@ -101,9 +134,23 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		WithField("flow_method", settingsType).
 		Debug("Running PostSettingsPrePersistHooks.")
 
-	config := new(postSettingsHookOptions)
+	// Verify the redirect URL before we do any other processing.
+	c := e.d.Config(r.Context())
+	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
+		x.SecureRedirectUseSourceURL(ctxUpdate.Flow.RequestURL),
+		x.SecureRedirectAllowURLs(c.SelfServiceBrowserWhitelistedReturnToDomains()),
+		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(r)),
+		x.SecureRedirectOverrideDefaultReturnTo(
+			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,
+				ctxUpdate.Flow.AppendTo(e.d.Config(r.Context()).SelfServiceFlowSettingsUI()))),
+	)
+	if err != nil {
+		return err
+	}
+
+	hookOptions := new(postSettingsHookOptions)
 	for _, f := range opts {
-		f(config)
+		f(hookOptions)
 	}
 
 	for k, executor := range e.d.PostSettingsPrePersistHooks(r.Context(), settingsType) {
@@ -115,13 +162,13 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			"flow_method":       settingsType,
 		}
 
-		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i); err != nil {
+		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().WithRequest(r).WithFields(logFields).
 					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
 				return nil
 			}
-			return err
+			return e.handleSettingsError(w, r, settingsType, ctxUpdate.Flow, i, err)
 		}
 
 		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully.")
@@ -150,8 +197,8 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 
 	ctxUpdate.UpdateIdentity(i)
 	ctxUpdate.Flow.State = StateSuccess
-	if config.cb != nil {
-		if err := config.cb(ctxUpdate); err != nil {
+	if hookOptions.cb != nil {
+		if err := hookOptions.cb(ctxUpdate); err != nil {
 			return err
 		}
 	}
@@ -169,7 +216,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	}
 
 	for k, executor := range e.d.PostSettingsPostPersistHooks(r.Context(), settingsType) {
-		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i); err != nil {
+		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
 			if errors.Is(err, ErrHookAbortRequest) {
 				e.d.Logger().
 					WithRequest(r).
@@ -181,7 +228,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 					Debug("A ExecuteSettingsPostPersistHook hook aborted early.")
 				return nil
 			}
-			return err
+			return e.handleSettingsError(w, r, settingsType, ctxUpdate.Flow, i, err)
 		}
 
 		e.d.Logger().WithRequest(r).
@@ -205,12 +252,10 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 			return err
 		}
 
-		e.d.Writer().Write(w, r, &APIFlowResponse{Flow: updatedFlow, Identity: i})
+		e.d.Writer().Write(w, r, updatedFlow)
 		return nil
 	}
 
-	return x.SecureContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), ctxUpdate.Flow.RequestURL, e.d.Writer(), e.d.Config(r.Context()),
-		x.SecureRedirectOverrideDefaultReturnTo(
-			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,
-				ctxUpdate.Flow.AppendTo(e.d.Config(r.Context()).SelfServiceFlowSettingsUI()))))
+	x.ContentNegotiationRedirection(w, r, ctxUpdate.GetIdentityToUpdate().CopyWithoutCredentials(), e.d.Writer(), returnTo.String())
+	return nil
 }

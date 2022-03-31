@@ -12,14 +12,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/selfservice/flow"
+
+	"github.com/gofrs/uuid"
+
 	"github.com/ory/x/urlx"
 
 	kratos "github.com/ory/kratos-client-go"
-
-	"github.com/ory/x/ioutilx"
+	"github.com/ory/kratos/hash"
+	"github.com/ory/kratos/selfservice/strategy/password"
 
 	"github.com/ory/x/assertx"
 	"github.com/ory/x/errorsx"
+	"github.com/ory/x/ioutilx"
 	"github.com/ory/x/sqlxx"
 
 	"github.com/stretchr/testify/assert"
@@ -40,11 +45,12 @@ func TestCompleteLogin(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	conf.MustSet(config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword),
 		map[string]interface{}{"enabled": true})
-	publicTS, _ := testhelpers.NewKratosServer(t, reg)
+	router := x.NewRouterPublic()
+	publicTS, _ := testhelpers.NewKratosServerWithRouters(t, reg, router, x.NewRouterAdmin())
 
 	errTS := testhelpers.NewErrorTestServer(t, reg)
 	uiTS := testhelpers.NewLoginUIFlowEchoServer(t, reg)
-	redirTS := newReturnTs(t, reg)
+	redirTS := testhelpers.NewRedirSessionEchoTS(t, reg)
 
 	// Overwrite these two:
 	conf.MustSet(config.ViperKeySelfServiceErrorUI, errTS.URL+"/error-ts")
@@ -61,14 +67,24 @@ func TestCompleteLogin(t *testing.T) {
 
 	createIdentity := func(identifier, password string) {
 		p, _ := reg.Hasher().Generate(context.Background(), []byte(password))
+		iId := x.NewUUID()
 		require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), &identity.Identity{
-			ID:     x.NewUUID(),
+			ID:     iId,
 			Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
 			Credentials: map[identity.CredentialsType]identity.Credentials{
 				identity.CredentialsTypePassword: {
 					Type:        identity.CredentialsTypePassword,
 					Identifiers: []string{identifier},
 					Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+				},
+			},
+			VerifiableAddresses: []identity.VerifiableAddress{
+				{
+					ID:         x.NewUUID(),
+					Value:      identifier,
+					Verified:   false,
+					CreatedAt:  time.Now(),
+					IdentityID: iId,
 				},
 			},
 		}))
@@ -105,6 +121,24 @@ func TestCompleteLogin(t *testing.T) {
 			assert.NotEmpty(t, gjson.Get(body, "id").String(), "%s", body)
 			assert.Contains(t, gjson.Get(body, "ui.messages.0.text").String(), "invalid URL escape", "%s", body)
 		})
+	})
+
+	t.Run("case=should fail because password can not handle AAL2", func(t *testing.T) {
+		f := testhelpers.InitializeLoginFlowViaAPI(t, apiClient, publicTS, false)
+
+		update, err := reg.LoginFlowPersister().GetLoginFlow(context.Background(), uuid.FromStringOrNil(f.Id))
+		require.NoError(t, err)
+		update.RequestedAAL = identity.AuthenticatorAssuranceLevel2
+		require.NoError(t, reg.LoginFlowPersister().UpdateLoginFlow(context.Background(), update))
+
+		req, err := http.NewRequest("POST", f.Ui.Action, bytes.NewBufferString(`{"method":"password"}`))
+		require.NoError(t, err)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Content-Type", "application/json")
+
+		actual, res := testhelpers.MockMakeAuthenticatedRequest(t, reg, conf, router.Router, req)
+		assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+		assert.Equal(t, text.NewErrorValidationLoginNoStrategyFound().Text, gjson.GetBytes(actual, "ui.messages.0.text").String())
 	})
 
 	t.Run("should return an error because the request does not exist", func(t *testing.T) {
@@ -157,9 +191,9 @@ func TestCompleteLogin(t *testing.T) {
 
 			time.Sleep(time.Millisecond * 60)
 			actual, res := testhelpers.LoginMakeRequest(t, true, false, f, apiClient, testhelpers.EncodeFormAsJSON(t, true, values))
-			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteGetFlow)
-			assert.NotEqual(t, f.Id, gjson.Get(actual, "id").String(), "%s", actual)
-			assert.Contains(t, gjson.Get(actual, "ui.messages.0.text").String(), "expired", "%s", actual)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			assert.NotEqual(t, "00000000-0000-0000-0000-000000000000", gjson.Get(actual, "use_flow_id").String())
+			assertx.EqualAsJSONExcept(t, flow.NewFlowExpiredError(time.Now()), json.RawMessage(actual), []string{"use_flow_id", "since"}, "expired", "%s", actual)
 		})
 
 		t.Run("type=browser", func(t *testing.T) {
@@ -179,9 +213,9 @@ func TestCompleteLogin(t *testing.T) {
 
 			time.Sleep(time.Millisecond * 60)
 			actual, res := testhelpers.LoginMakeRequest(t, false, true, f, apiClient, testhelpers.EncodeFormAsJSON(t, true, values))
-			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteGetFlow)
-			assert.NotEqual(t, f.Id, gjson.Get(actual, "id").String(), "%s", actual)
-			assert.Contains(t, gjson.Get(actual, "ui.messages.0.text").String(), "expired", "%s", actual)
+			assert.Contains(t, res.Request.URL.String(), publicTS.URL+login.RouteSubmitFlow)
+			assert.NotEqual(t, "00000000-0000-0000-0000-000000000000", gjson.Get(actual, "use_flow_id").String())
+			assertx.EqualAsJSONExcept(t, flow.NewFlowExpiredError(time.Now()), json.RawMessage(actual), []string{"use_flow_id", "since"}, "expired", "%s", actual)
 		})
 	})
 
@@ -257,9 +291,9 @@ func TestCompleteLogin(t *testing.T) {
 		})
 	})
 
-	var expectValidationError = func(t *testing.T, isAPI, forced, isSPA bool, values func(url.Values)) string {
+	var expectValidationError = func(t *testing.T, isAPI, refresh, isSPA bool, values func(url.Values)) string {
 		return testhelpers.SubmitLoginForm(t, isAPI, nil, publicTS, values,
-			isSPA, forced,
+			isSPA, refresh,
 			testhelpers.ExpectStatusCode(isAPI || isSPA, http.StatusBadRequest, http.StatusOK),
 			testhelpers.ExpectURL(isAPI || isSPA, publicTS.URL+login.RouteSubmitFlow, conf.SelfServiceFlowLoginUI().String()))
 	}
@@ -360,8 +394,8 @@ func TestCompleteLogin(t *testing.T) {
 			assert.Contains(t, gjson.Get(body, "ui.action").String(), publicTS.URL+login.RouteSubmitFlow, "%s", body)
 
 			ensureFieldsExist(t, []byte(body))
-			assert.Equal(t, "length must be >= 1, but got 0", gjson.Get(body, "ui.nodes.#(attributes.name==password).messages.0.text").String(), "%s", body)
-			assert.Equal(t, "length must be >= 1, but got 0", gjson.Get(body, "ui.nodes.#(attributes.name==password_identifier).messages.0.text").String(), "%s", body)
+			assert.Equal(t, "Property password is missing.", gjson.Get(body, "ui.nodes.#(attributes.name==password).messages.0.text").String(), "%s", body)
+			assert.Equal(t, "Property password_identifier is missing.", gjson.Get(body, "ui.nodes.#(attributes.name==password_identifier).messages.0.text").String(), "%s", body)
 			assert.Len(t, gjson.Get(body, "ui.nodes").Array(), 4)
 
 			// This must not include the password!
@@ -460,7 +494,7 @@ func TestCompleteLogin(t *testing.T) {
 
 					body, err := ioutil.ReadAll(res.Body)
 					require.NoError(t, err)
-					assert.True(t, gjson.GetBytes(body, "forced").Bool())
+					assert.True(t, gjson.GetBytes(body, "refresh").Bool())
 					assert.Equal(t, identifier, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password_identifier).attributes.value").String(), "%s", body)
 					assert.Empty(t, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password).attributes.value").String(), "%s", body)
 				})
@@ -497,7 +531,7 @@ func TestCompleteLogin(t *testing.T) {
 					defer res.Body.Close()
 					body := ioutilx.MustReadAll(res.Body)
 
-					assert.True(t, gjson.GetBytes(body, "forced").Bool())
+					assert.True(t, gjson.GetBytes(body, "refresh").Bool())
 					assert.Equal(t, identifier, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password_identifier).attributes.value").String(), "%s", body)
 					assert.Empty(t, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password).attributes.value").String(), "%s", body)
 				})
@@ -531,9 +565,19 @@ func TestCompleteLogin(t *testing.T) {
 					defer res.Body.Close()
 					body := ioutilx.MustReadAll(res.Body)
 
-					assert.True(t, gjson.GetBytes(body, "forced").Bool())
+					assert.True(t, gjson.GetBytes(body, "refresh").Bool())
 					assert.Equal(t, identifier, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password_identifier).attributes.value").String(), "%s", body)
 					assert.Empty(t, gjson.GetBytes(body, "ui.nodes.#(attributes.name==password).attributes.value").String(), "%s", body)
+				})
+
+				t.Run("show verification confirmation when refresh is set to true", func(t *testing.T) {
+					res, err := c.Do(testhelpers.NewHTTPGetJSONRequest(t, publicTS.URL+login.RouteInitAPIFlow+"?refresh=true"))
+					require.NoError(t, err)
+					defer res.Body.Close()
+					body := ioutilx.MustReadAll(res.Body)
+
+					assert.True(t, gjson.GetBytes(body, "refresh").Bool())
+					assert.Contains(t, gjson.GetBytes(body, "ui.messages.0.text").String(), "verifying that", "%s", body)
 				})
 			})
 		})
@@ -594,7 +638,7 @@ func TestCompleteLogin(t *testing.T) {
 		})
 	})
 
-	t.Run("should be a new session with forced flag", func(t *testing.T) {
+	t.Run("should be a new session with refresh flag", func(t *testing.T) {
 		identifier, pwd := x.NewUUID().String(), "password"
 		createIdentity(identifier, pwd)
 
@@ -612,7 +656,7 @@ func TestCompleteLogin(t *testing.T) {
 
 		require.Contains(t, res.Request.URL.Path, "return-ts", "%s", res.Request.URL.String())
 		assert.Equal(t, identifier, gjson.Get(body2, "identity.traits.subject").String(), "%s", body2)
-		assert.NotEqual(t, gjson.Get(body1, "id").String(), gjson.Get(body2, "id").String(), "%s\n\n%s\n", body1, body2)
+		assert.Equal(t, gjson.Get(body1, "id").String(), gjson.Get(body2, "id").String(), "%s\n\n%s\n", body1, body2)
 	})
 
 	t.Run("should login same identity regardless of identifier capitalization", func(t *testing.T) {
@@ -631,5 +675,99 @@ func TestCompleteLogin(t *testing.T) {
 		body2, res := testhelpers.LoginMakeRequest(t, false, false, f, browserClient, values)
 
 		assert.Equal(t, identifier, gjson.Get(body2, "identity.traits.subject").String(), "%s", body2)
+	})
+
+	t.Run("should fail as email is not yet verified", func(t *testing.T) {
+		conf.MustSet(config.ViperKeySelfServiceLoginAfter+".password.hooks", []map[string]interface{}{
+			{"hook": "require_verified_address"},
+		})
+
+		identifier, pwd := x.NewUUID().String(), "password"
+		createIdentity(identifier, pwd)
+
+		var values = func(v url.Values) {
+			v.Set("method", "password")
+			v.Set("password_identifier", identifier)
+			v.Set("password", pwd)
+		}
+
+		var check = func(t *testing.T, body string) {
+			assert.NotEmpty(t, gjson.Get(body, "id").String(), "%s", body)
+			assert.Contains(t, gjson.Get(body, "ui.action").String(), publicTS.URL+login.RouteSubmitFlow, "%s", body)
+
+			ensureFieldsExist(t, []byte(body))
+			assert.Equal(t,
+				errorsx.Cause(schema.NewAddressNotVerifiedError()).(*schema.ValidationError).Messages[0].Text,
+				gjson.Get(body, "ui.messages.0.text").String(),
+				"%s", body,
+			)
+		}
+
+		t.Run("type=browser", func(t *testing.T) {
+			check(t, expectValidationError(t, false, false, false, values))
+		})
+
+		t.Run("type=api", func(t *testing.T) {
+			check(t, expectValidationError(t, true, false, false, values))
+		})
+
+	})
+
+	t.Run("should upgrade password not primary hashing algorithm", func(t *testing.T) {
+		identifier, pwd := x.NewUUID().String(), "password"
+		h := &hash.Pbkdf2{
+			Algorithm:  "sha256",
+			Iterations: 100000,
+			SaltLength: 32,
+			KeyLength:  32,
+		}
+		p, _ := h.Generate(context.Background(), []byte(pwd))
+
+		iId := x.NewUUID()
+		require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), &identity.Identity{
+			ID:     iId,
+			Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+			Credentials: map[identity.CredentialsType]identity.Credentials{
+				identity.CredentialsTypePassword: {
+					Type:        identity.CredentialsTypePassword,
+					Identifiers: []string{identifier},
+					Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+				},
+			},
+			VerifiableAddresses: []identity.VerifiableAddress{
+				{
+					ID:         x.NewUUID(),
+					Value:      identifier,
+					Verified:   true,
+					CreatedAt:  time.Now(),
+					IdentityID: iId,
+				},
+			},
+		}))
+
+		var values = func(v url.Values) {
+			v.Set("password_identifier", identifier)
+			v.Set("password", pwd)
+		}
+
+		browserClient := testhelpers.NewClientWithCookies(t)
+
+		body := testhelpers.SubmitLoginForm(t, false, browserClient, publicTS, values,
+			false, false, http.StatusOK, redirTS.URL)
+
+		assert.Equal(t, identifier, gjson.Get(body, "identity.traits.subject").String(), "%s", body)
+
+		// check if password hash algorithm is upgraded
+		_, c, err := reg.PrivilegedIdentityPool().FindByCredentialsIdentifier(context.Background(), identity.CredentialsTypePassword, identifier)
+		require.NoError(t, err)
+		var o password.CredentialsConfig
+		require.NoError(t, json.NewDecoder(bytes.NewBuffer(c.Config)).Decode(&o))
+		assert.True(t, reg.Hasher().Understands([]byte(o.HashedPassword)), "%s", o.HashedPassword)
+		assert.True(t, hash.IsBcryptHash([]byte(o.HashedPassword)), "%s", o.HashedPassword)
+
+		// retry after upgraded
+		body = testhelpers.SubmitLoginForm(t, false, browserClient, publicTS, values,
+			false, true, http.StatusOK, redirTS.URL)
+		assert.Equal(t, identifier, gjson.Get(body, "identity.traits.subject").String(), "%s", body)
 	})
 }

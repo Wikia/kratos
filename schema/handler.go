@@ -1,13 +1,17 @@
 package schema
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/x/urlx"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
@@ -41,7 +45,8 @@ const SchemasPath string = "schemas"
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	h.r.CSRFHandler().IgnoreGlobs(fmt.Sprintf("/%s/*", SchemasPath))
-	public.GET(fmt.Sprintf("/%s/:id", SchemasPath), h.get)
+	public.GET(fmt.Sprintf("/%s/:id", SchemasPath), h.getByID)
+	public.GET(fmt.Sprintf("/%s", SchemasPath), h.getAll)
 }
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -64,7 +69,7 @@ type getJsonSchema struct {
 	ID string `json:"id"`
 }
 
-// swagger:route GET /schemas/{id} v0alpha1 getJsonSchema
+// swagger:route GET /schemas/{id} v0alpha2 getJsonSchema
 //
 // Get a JSON Schema
 //
@@ -77,34 +82,131 @@ type getJsonSchema struct {
 //       200: jsonSchema
 //       404: jsonError
 //       500: jsonError
-func (h *Handler) get(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (h *Handler) getByID(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.IdentityTraitsSchemas(r.Context()).GetByID(ps.ByName("id"))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrNotFound.WithDebugf("%+v", err)))
 		return
 	}
-	var src io.ReadCloser
 
-	if s.URL.Scheme == "file" {
-		src, err = os.Open(s.URL.Host + s.URL.Path)
-		if err != nil {
-			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
-			return
-		}
-		defer src.Close()
-	} else {
-		resp, err := http.Get(s.URL.String())
-		if err != nil {
-			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
-			return
-		}
-		defer resp.Body.Close()
-		src = resp.Body
+	src, err := ReadSchema(s)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
+		return
 	}
+	defer src.Close()
 
 	w.Header().Add("Content-Type", "application/json")
 	if _, err := io.Copy(w, src); err != nil {
 		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
 		return
 	}
+}
+
+// Raw identity Schema list
+//
+// swagger:model identitySchemas
+type IdentitySchemas []identitySchema
+
+// swagger:model identitySchema
+type identitySchema struct {
+	// The ID of the Identity JSON Schema
+	ID string `json:"id"`
+	// The actual Identity JSON Schema
+	Schema json.RawMessage `json:"schema"`
+}
+
+// nolint:deadcode,unused
+// swagger:parameters listIdentitySchemas
+type listIdentitySchemas struct {
+	// Items per Page
+	//
+	// This is the number of items per page.
+	//
+	// required: false
+	// in: query
+	// default: 100
+	// min: 1
+	// max: 500
+	PerPage int `json:"per_page"`
+
+	// Pagination Page
+	//
+	// required: false
+	// in: query
+	// default: 0
+	// min: 0
+	Page int `json:"page"`
+}
+
+// swagger:route GET /schemas v0alpha2 listIdentitySchemas
+//
+// Get all Identity Schemas
+//
+//     Produces:
+//     - application/json
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       200: identitySchemas
+//       500: jsonError
+func (h *Handler) getAll(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	page, itemsPerPage := x.ParsePagination(r)
+
+	schemas := h.r.IdentityTraitsSchemas(r.Context()).List(page, itemsPerPage)
+	total := h.r.IdentityTraitsSchemas(r.Context()).Total()
+
+	var ss IdentitySchemas
+
+	for _, schema := range schemas {
+		s, err := h.r.IdentityTraitsSchemas(r.Context()).GetByID(schema.ID)
+		if err != nil {
+			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrNotFound.WithDebugf("%+v", err)))
+			return
+		}
+
+		src, err := ReadSchema(s)
+		if err != nil {
+			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
+			return
+		}
+		defer src.Close()
+
+		raw, err := ioutil.ReadAll(src)
+		if err != nil {
+			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))
+			return
+		}
+
+		ss = append(ss, identitySchema{
+			ID:     s.ID,
+			Schema: raw,
+		})
+	}
+
+	x.PaginationHeader(w, urlx.AppendPaths(h.r.Config(r.Context()).SelfPublicURL(r), fmt.Sprintf("/%s", SchemasPath)), int64(total), page, itemsPerPage)
+	h.r.Writer().Write(w, r, ss)
+}
+
+func ReadSchema(schema *Schema) (src io.ReadCloser, err error) {
+	if schema.URL.Scheme == "file" {
+		src, err = os.Open(schema.URL.Host + schema.URL.Path)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+	} else if schema.URL.Scheme == "base64" {
+		data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(schema.RawURL, "base64://"))
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		src = io.NopCloser(strings.NewReader(string(data)))
+	} else {
+		resp, err := http.Get(schema.URL.String())
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		src = resp.Body
+	}
+	return src, nil
 }

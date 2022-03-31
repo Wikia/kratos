@@ -3,19 +3,21 @@ package password
 import (
 	"bufio"
 	"context"
-	"time"
-
-	"github.com/hashicorp/go-retryablehttp"
-
-	"github.com/ory/kratos/driver/config"
-
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/ory/kratos/x"
+
+	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/ory/kratos/driver/config"
 
 	"github.com/arbovm/levenshtein"
 
@@ -65,6 +67,7 @@ type DefaultPasswordValidator struct {
 
 type validatorDependencies interface {
 	config.Provider
+	x.LoggingProvider
 }
 
 func NewDefaultPasswordValidatorStrategy(reg validatorDependencies) *DefaultPasswordValidator {
@@ -106,9 +109,17 @@ func (s *DefaultPasswordValidator) fetch(hpw []byte, apiDNSName string) error {
 	loc := fmt.Sprintf("https://%s/range/%s", apiDNSName, prefix)
 	res, err := s.Client.Get(loc)
 	if err != nil {
+		s.reg.Logger().WithError(err).Error("Network failure occurred")
 		return errors.Wrapf(ErrNetworkFailure, "%s", err)
 	}
-	defer res.Body.Close()
+
+	defer func(Body io.ReadCloser) {
+		if closeErr := Body.Close(); closeErr != nil {
+			// fandom-start
+			s.reg.Logger().WithError(closeErr).Error("validator fetch could not close the response")
+			// fandom-end
+		}
+	}(res.Body)
 
 	if res.StatusCode != http.StatusOK {
 		return errors.Wrapf(ErrUnexpectedStatusCode, "%d", res.StatusCode)
@@ -176,6 +187,7 @@ func (s *DefaultPasswordValidator) Validate(ctx context.Context, identifier, pas
 	if !ok {
 		err := s.fetch(hpw, passwordPolicyConfig.HaveIBeenPwnedHost)
 		if (errors.Is(err, ErrNetworkFailure) || errors.Is(err, ErrUnexpectedStatusCode)) && passwordPolicyConfig.IgnoreNetworkErrors {
+
 			return nil
 		} else if err != nil {
 			return err

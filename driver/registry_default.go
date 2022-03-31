@@ -7,9 +7,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ory/kratos/credentials"
+
+	"github.com/ory/nosurf"
+
+	"github.com/ory/kratos/selfservice/strategy/webauthn"
+
+	"github.com/ory/kratos/selfservice/strategy/lookup"
+
+	"github.com/ory/kratos/selfservice/strategy/totp"
+
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
 	"github.com/luna-duclos/instrumentedsql/opentracing"
+
 	"github.com/ory/x/httpx"
 
 	"github.com/ory/kratos/corp"
@@ -18,6 +29,7 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 
+	"github.com/ory/kratos/cipher"
 	"github.com/ory/kratos/continuity"
 	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/schema"
@@ -62,11 +74,11 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
-	rc  *retryablehttp.Client
+	rc  map[string]*retryablehttp.Client
 
 	injectedSelfserviceHooks map[string]func(config.SelfServiceHook) interface{}
 
-	nosurf         x.CSRFHandler
+	nosurf         nosurf.Handler
 	trc            *tracing.Tracer
 	pmm            *prometheus.MetricsManager
 	writer         herodot.Writer
@@ -78,6 +90,9 @@ type RegistryDefault struct {
 	hookVerifier         *hook.Verifier
 	hookSessionIssuer    *hook.SessionIssuer
 	hookSessionDestroyer *hook.SessionDestroyer
+	hookAddressVerifier  *hook.AddressVerifier
+
+	credentialsHandler *credentials.Handler
 
 	identityHandler   *identity.Handler
 	identityValidator *identity.Validator
@@ -92,6 +107,8 @@ type RegistryDefault struct {
 
 	passwordHasher    hash.Hasher
 	passwordValidator password2.Validator
+
+	crypter cipher.Cipher
 
 	errorHandler *errorx.Handler
 	errorManager *errorx.Manager
@@ -166,6 +183,8 @@ func (m *RegistryDefault) RegisterAdminRoutes(ctx context.Context, router *x.Rou
 	m.IdentityHandler().RegisterAdminRoutes(router)
 	m.SelfServiceErrorHandler().RegisterAdminRoutes(router)
 
+	m.CredentialsHandler().RegisterAdminRoutes(router)
+
 	m.RecoveryHandler().RegisterAdminRoutes(router)
 	m.AllRecoveryStrategies().RegisterAdminRoutes(router)
 	m.SessionHandler().RegisterAdminRoutes(router)
@@ -184,7 +203,9 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 }
 
 func NewRegistryDefault() *RegistryDefault {
-	return &RegistryDefault{}
+	return &RegistryDefault{
+		rc: map[string]*retryablehttp.Client{},
+	}
 }
 
 func (m *RegistryDefault) WithLogger(l *logrusx.Logger) Registry {
@@ -206,20 +227,18 @@ func (m *RegistryDefault) HealthHandler(_ context.Context) *healthx.Handler {
 				"database": func(_ *http.Request) error {
 					return m.Ping()
 				},
-				// fandom-start: disable migrations check which fails on non-local DBs
-				//"migrations": func(r *http.Request) error {
-				//	status, err := m.Persister().MigrationStatus(r.Context())
-				//	if err != nil {
-				//		return err
-				//	}
-				//
-				//	if status.HasPending() {
-				//		return errors.Errorf("migrations have not yet been fully applied")
-				//	}
-				//
-				//	return nil
-				//},
-				// fandom-end
+				"migrations": func(r *http.Request) error {
+					status, err := m.Persister().MigrationStatus(r.Context())
+					if err != nil {
+						return err
+					}
+
+					if status.HasPending() {
+						return errors.Errorf("migrations have not yet been fully applied")
+					}
+
+					return nil
+				},
 			})
 	}
 
@@ -234,11 +253,11 @@ func (m *RegistryDefault) MetricsHandler() *prometheus.Handler {
 	return m.metricsHandler
 }
 
-func (m *RegistryDefault) WithCSRFHandler(c x.CSRFHandler) {
+func (m *RegistryDefault) WithCSRFHandler(c nosurf.Handler) {
 	m.nosurf = c
 }
 
-func (m *RegistryDefault) CSRFHandler() x.CSRFHandler {
+func (m *RegistryDefault) CSRFHandler() nosurf.Handler {
 	if m.nosurf == nil {
 		panic("csrf handler is not set")
 	}
@@ -259,6 +278,9 @@ func (m *RegistryDefault) selfServiceStrategies() []interface{} {
 			oidc.NewStrategy(m),
 			profile.NewStrategy(m),
 			link.NewStrategy(m),
+			totp.NewStrategy(m),
+			webauthn.NewStrategy(m),
+			lookup.NewStrategy(m),
 		}
 	}
 
@@ -351,6 +373,13 @@ func (m *RegistryDefault) IdentityHandler() *identity.Handler {
 	return m.identityHandler
 }
 
+func (m *RegistryDefault) CredentialsHandler() *credentials.Handler {
+	if m.credentialsHandler == nil {
+		m.credentialsHandler = credentials.NewHandler(m)
+	}
+	return m.credentialsHandler
+}
+
 func (m *RegistryDefault) SchemaHandler() *schema.Handler {
 	if m.schemaHandler == nil {
 		m.schemaHandler = schema.NewHandler(m)
@@ -363,6 +392,21 @@ func (m *RegistryDefault) SessionHandler() *session.Handler {
 		m.sessionHandler = session.NewHandler(m)
 	}
 	return m.sessionHandler
+}
+
+func (m *RegistryDefault) Cipher() cipher.Cipher {
+	if m.crypter == nil {
+		switch m.c.CipherAlgorithm() {
+		case "xchacha20-poly1305":
+			m.crypter = cipher.NewCryptChaCha20(m)
+		case "aes":
+			m.crypter = cipher.NewCryptAES(m)
+		default:
+			m.crypter = cipher.NewNoop(m)
+			m.l.Logger.Warning("No encryption configuration found. Default algorithm (noop) will be use that mean sensitive data will be recorded in plaintext")
+		}
+	}
+	return m.crypter
 }
 
 func (m *RegistryDefault) Hasher() hash.Hasher {
@@ -486,7 +530,6 @@ func (m *RegistryDefault) Init(ctx context.Context, opts ...RegistryOption) erro
 			if m.Tracer(ctx).IsLoaded() {
 				opts = []instrumentedsql.Opt{
 					instrumentedsql.WithTracer(opentracing.NewTracer(true)),
-					instrumentedsql.WithOmitArgs(),
 				}
 			}
 
@@ -646,14 +689,18 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	m.rwl.Lock()
 	defer m.rwl.Unlock()
 	if m.pmm == nil {
-		m.pmm = prometheus.NewMetricsManager("kratos", m.buildVersion, m.buildHash, m.buildDate)
+		m.pmm = prometheus.NewMetricsManagerWithPrefix("kratos", prometheus.HTTPMetrics, m.buildVersion, m.buildHash, m.buildDate)
 	}
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetResilientClient() *retryablehttp.Client {
-	if m.rc == nil {
-		m.rc = httpx.NewResilientClient(httpx.ResilientClientWithLogger(m.Logger()))
+func (m *RegistryDefault) GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	var rc *retryablehttp.Client
+	if cl, ok := m.rc[name]; ok {
+		rc = cl
+	} else {
+		rc = httpx.NewResilientClient(opts...)
+		m.rc[name] = rc
 	}
-	return m.rc
+	return rc
 }

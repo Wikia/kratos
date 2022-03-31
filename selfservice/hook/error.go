@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/ory/kratos/selfservice/flow/verification"
+	"github.com/ory/kratos/ui/node"
 
 	"github.com/ory/kratos/selfservice/flow/recovery"
 
@@ -44,15 +45,15 @@ func (e Error) err(path string, abort error) error {
 	return nil
 }
 
-func (e Error) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity) error {
+func (e Error) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity, settingsType string) error {
 	return e.err("ExecuteSettingsPrePersistHook", settings.ErrHookAbortRequest)
 }
 
-func (e Error) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity) error {
+func (e Error) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity, settingsType string) error {
 	return e.err("ExecuteSettingsPostPersistHook", settings.ErrHookAbortRequest)
 }
 
-func (e Error) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, a *login.Flow, s *session.Session) error {
+func (e Error) ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, g node.Group, a *login.Flow, s *session.Session) error {
 	return e.err("ExecuteLoginPostHook", login.ErrHookAbortFlow)
 }
 

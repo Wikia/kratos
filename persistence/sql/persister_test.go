@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/x/xsql"
 
 	"github.com/go-errors/errors"
@@ -156,6 +157,13 @@ func TestPersister(t *testing.T) {
 			t.Run("contract=identity.TestPool", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 				identity.TestPool(ctx, conf, p)(t)
+			})
+			t.Run("contract=identity.TestPool (case sensitive)", func(t *testing.T) {
+				pop.SetLogger(pl(t))
+
+				caseConf := reg.Config(context.Background())
+				caseConf.MustSet(config.ViperKeyIdentityCaseSensitiveIdentifier, true)
+				identity.TestPool(ctx, caseConf, p)(t)
 			})
 			t.Run("contract=registration.TestFlowPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))

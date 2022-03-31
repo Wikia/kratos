@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"strings"
+
+	"github.com/ory/kratos/cipher"
 
 	"github.com/ory/kratos/text"
 
@@ -88,6 +89,8 @@ type dependencies interface {
 	settings.HookExecutorProvider
 
 	continuity.ManagementProvider
+
+	cipher.Provider
 }
 
 func isForced(req interface{}) bool {
@@ -107,9 +110,12 @@ type Strategy struct {
 }
 
 type authCodeContainer struct {
-	FlowID string     `json:"flow_id"`
-	State  string     `json:"state"`
-	Form   url.Values `json:"form"`
+	FlowID string          `json:"flow_id"`
+	State  string          `json:"state"`
+	Traits json.RawMessage `json:"traits"`
+	// fandom-start
+	ExtraFields map[string]string `json:"extra_fields"`
+	// fandom-end
 }
 
 func (s *Strategy) CountActiveCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
@@ -148,7 +154,7 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 		// Hardcoded path to Apple provider, I don't have a better way of doing it right now.
 		// Also this exempt disables CSRF checks for both GET and POST requests. Unfortunately
 		// CSRF handler does not allow to define a rule based on the request method, at least not yet.
-		s.d.CSRFHandler().ExemptPath(RouteBase + "/callback/apple")
+		s.d.CSRFHandler().IgnorePath(RouteBase + "/callback/apple")
 
 		// When handler is called using POST method, the cookies are not attached to the request
 		// by the browser. So here we just redirect the request to the same location rewriting the
@@ -167,12 +173,12 @@ func (s *Strategy) redirectToGET(w http.ResponseWriter, r *http.Request, _ httpr
 		q := dest.Query()
 		for key, values := range r.Form {
 			for _, value := range values {
-				q.Add(key, value)
+				q.Set(key, value)
 			}
 		}
 		dest.RawQuery = q.Encode()
 	}
-	dest.Path = filepath.Join(publicUrl.Path + dest.Path)
+	dest.Path = filepath.Join(publicUrl.Path, dest.Path)
 
 	http.Redirect(w, r, dest.String(), http.StatusFound)
 }
@@ -277,7 +283,7 @@ func (s *Strategy) alreadyAuthenticated(w http.ResponseWriter, r *http.Request, 
 		if _, ok := req.(*settings.Flow); ok {
 			// ignore this if it's a settings flow
 		} else if !isForced(req) {
-			http.Redirect(w, r, s.d.Config(r.Context()).SelfServiceBrowserDefaultReturnTo().String(), http.StatusFound)
+			http.Redirect(w, r, s.d.Config(r.Context()).SelfServiceBrowserDefaultReturnTo().String(), http.StatusSeeOther)
 			return true
 		}
 	}
@@ -331,7 +337,7 @@ func (s *Strategy) handleCallback(w http.ResponseWriter, r *http.Request, ps htt
 
 	switch a := req.(type) {
 	case *login.Flow:
-		if ff, err := s.processLogin(w, r, a, claims, provider, cntnr); err != nil {
+		if ff, err := s.processLogin(w, r, a, token, claims, provider, cntnr); err != nil {
 			if ff != nil {
 				s.forwardError(w, r, ff, err)
 				return
@@ -340,7 +346,7 @@ func (s *Strategy) handleCallback(w http.ResponseWriter, r *http.Request, ps htt
 		}
 		return
 	case *registration.Flow:
-		if ff, err := s.processRegistration(w, r, a, claims, provider, cntnr); err != nil {
+		if ff, err := s.processRegistration(w, r, a, token, claims, provider, cntnr); err != nil {
 			if ff != nil {
 				s.forwardError(w, r, ff, err)
 				return
@@ -354,7 +360,7 @@ func (s *Strategy) handleCallback(w http.ResponseWriter, r *http.Request, ps htt
 			s.forwardError(w, r, a, s.handleError(w, r, a, pid, nil, err))
 			return
 		}
-		if err := s.linkProvider(w, r, &settings.UpdateContext{Session: sess, Flow: a}, claims, provider); err != nil {
+		if err := s.linkProvider(w, r, &settings.UpdateContext{Session: sess, Flow: a}, token, claims, provider); err != nil {
 			s.forwardError(w, r, a, s.handleError(w, r, a, pid, nil, err))
 			return
 		}

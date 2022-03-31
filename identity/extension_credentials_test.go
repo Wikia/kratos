@@ -44,11 +44,13 @@ func TestSchemaExtensionCredentials(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
 			c := jsonschema.NewCompiler()
-			runner, err := schema.NewExtensionRunner(schema.ExtensionRunnerIdentityMetaSchema)
+			runner, err := schema.NewExtensionRunner()
 			require.NoError(t, err)
 
 			i := new(identity.Identity)
-			e := identity.NewSchemaExtensionCredentials(i)
+			// fandom-start
+			e := identity.NewSchemaExtensionCredentials(i, false)
+			// fandom-end
 			if tc.existing != nil {
 				i.SetCredentials(identity.CredentialsTypePassword, *tc.existing)
 			}

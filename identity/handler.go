@@ -1,25 +1,33 @@
 package identity
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/ory/kratos/cipher"
 
 	"github.com/ory/herodot"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
-	"github.com/ory/kratos/driver/config"
-	"github.com/ory/kratos/x"
-
 	"github.com/ory/x/jsonx"
 	"github.com/ory/x/sqlxx"
 	"github.com/ory/x/urlx"
+
+	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/x"
 )
 
 const RouteCollection = "/identities"
 const RouteItem = RouteCollection + "/:id"
+
+// fandom-start - add API to validate email before saving user in UCP
+const RouteValidate = RouteCollection + "/validate"
+
+// fandom-end
 
 type (
 	handlerDependencies interface {
@@ -29,6 +37,7 @@ type (
 		x.WriterProvider
 		config.Provider
 		x.CSRFProvider
+		cipher.Provider
 	}
 	HandlerProvider interface {
 		IdentityHandler() *Handler
@@ -37,6 +46,10 @@ type (
 		r handlerDependencies
 	}
 )
+
+func (h *Handler) Config(ctx context.Context) *config.Config {
+	return h.r.Config(ctx)
+}
 
 func NewHandler(r handlerDependencies) *Handler {
 	return &Handler{r: r}
@@ -57,6 +70,9 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(RouteItem, h.delete)
 
 	admin.POST(RouteCollection, h.create)
+	// fandom-start - add API to validate email before saving user in UCP
+	admin.POST(RouteValidate, h.validate)
+	// fandom-end
 	admin.PUT(RouteItem, h.update)
 }
 
@@ -88,7 +104,7 @@ type adminListIdentities struct {
 	Page int `json:"page"`
 }
 
-// swagger:route GET /identities v0alpha1 adminListIdentities
+// swagger:route GET /identities v0alpha2 adminListIdentities
 //
 // List Identities
 //
@@ -133,9 +149,18 @@ type adminGetIdentity struct {
 	// required: true
 	// in: path
 	ID string `json:"id"`
+
+	// DeclassifyCredentials will declassify one or more identity's credentials
+	//
+	// Currently, only `oidc` is supported. This will return the initial OAuth 2.0 Access,
+	// Refresh and (optionally) OpenID Connect ID Token.
+	//
+	// required: false
+	// in: query
+	DeclassifyCredentials []string `json:"include_credential"`
 }
 
-// swagger:route GET /identities/{id} v0alpha1 adminGetIdentity
+// swagger:route GET /identities/{id} v0alpha2 adminGetIdentity
 //
 // Get an Identity
 //
@@ -163,7 +188,21 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request, ps httprouter.Para
 		return
 	}
 
-	h.r.Writer().Write(w, r, IdentityWithCredentialsMetadataInJSON(*i))
+	if declassify := r.URL.Query().Get("include_credential"); declassify == "oidc" {
+		emit, err := i.WithDeclassifiedCredentialsOIDC(r.Context(), h.r)
+		if err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+		h.r.Writer().Write(w, r, WithCredentialsInJSON(*emit))
+		return
+	} else if len(declassify) > 0 {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("Invalid value `%s` for parameter `include_credential`.", declassify)))
+		return
+
+	}
+
+	h.r.Writer().Write(w, r, WithCredentialsMetadataInJSON(*i))
 }
 
 // swagger:parameters adminCreateIdentity
@@ -186,9 +225,14 @@ type AdminCreateIdentityBody struct {
 	//
 	// required: true
 	Traits json.RawMessage `json:"traits"`
+
+	// State is the identity's state.
+	//
+	// required: false
+	State State `json:"state"`
 }
 
-// swagger:route POST /identities v0alpha1 adminCreateIdentity
+// swagger:route POST /identities v0alpha2 adminCreateIdentity
 //
 // Create an Identity
 //
@@ -220,7 +264,16 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 		return
 	}
 
-	i := &Identity{SchemaID: cr.SchemaID, Traits: []byte(cr.Traits), State: StateActive, StateChangedAt: sqlxx.NullTime(time.Now())}
+	stateChangedAt := sqlxx.NullTime(time.Now())
+	state := StateActive
+	if cr.State != "" {
+		if err := cr.State.IsValid(); err != nil {
+			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err)))
+			return
+		}
+		state = cr.State
+	}
+	i := &Identity{SchemaID: cr.SchemaID, Traits: []byte(cr.Traits), State: state, StateChangedAt: &stateChangedAt}
 	if err := h.r.IdentityManager().Create(r.Context(), i); err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
@@ -267,7 +320,7 @@ type AdminUpdateIdentityBody struct {
 	State State `json:"state"`
 }
 
-// swagger:route PUT /identities/{id} v0alpha1 adminUpdateIdentity
+// swagger:route PUT /identities/{id} v0alpha2 adminUpdateIdentity
 //
 // Update an Identity
 //
@@ -315,11 +368,14 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 	if ur.State != "" && identity.State != ur.State {
 		if err := ur.State.IsValid(); err != nil {
-			h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err))
+			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err)))
+			return
 		}
 
+		stateChangedAt := sqlxx.NullTime(time.Now())
+
 		identity.State = ur.State
-		identity.StateChangedAt = sqlxx.NullTime(time.Now())
+		identity.StateChangedAt = &stateChangedAt
 	}
 
 	identity.Traits = []byte(ur.Traits)
@@ -335,6 +391,55 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	h.r.Writer().Write(w, r, identity)
 }
 
+// fandom-start - add API to validate email before saving user in UCP
+
+// swagger:route POST /identities/validate v0alpha2 AdminUpdateIdentityBody
+//
+// Validates provided traits and state
+//
+// This endpoint validates traits against provided schema_id.
+// The full identity payload (except credentials) is expected. This endpoint does not support patching.
+//
+// Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+//
+//     Consumes:
+//     - application/json
+//
+//     Produces:
+//     - application/json
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       200: identity is valid
+//       400: jsonError
+//       500: jsonError
+func (h *Handler) validate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var ur AdminUpdateIdentityBody
+	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := ur.State.IsValid(); err != nil {
+		h.r.Writer().WriteErrorCode(w, r, http.StatusBadRequest, herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err))
+		return
+	}
+
+	identity := Identity{
+		SchemaID: ur.SchemaID,
+		State:    ur.State,
+		Traits:   []byte(ur.Traits),
+	}
+	if err := h.r.IdentityManager().validate(r.Context(), &identity, &managerOptions{}); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	h.r.Writer().Write(w, r, "Identity is valid")
+}
+
+// fandom-end
+
 // swagger:parameters adminDeleteIdentity
 // nolint:deadcode,unused
 type adminDeleteIdentity struct {
@@ -345,7 +450,7 @@ type adminDeleteIdentity struct {
 	ID string `json:"id"`
 }
 
-// swagger:route DELETE /identities/{id} v0alpha1 adminDeleteIdentity
+// swagger:route DELETE /identities/{id} v0alpha2 adminDeleteIdentity
 //
 // Delete an Identity
 //

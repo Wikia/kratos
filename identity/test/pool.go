@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -82,6 +83,19 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			require.Equal(t, expected.Traits, actual.Traits)
 			require.Equal(t, expected.ID, actual.ID)
 		}
+
+		// fandom-start
+		var randomAlphaString = func(n int) string {
+			var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+			s := make([]rune, n)
+			for i := range s {
+				s[i] = letters[rand.Intn(len(letters))]
+			}
+			return string(s)
+
+		}
+		// fandom-end
 
 		t.Run("case=should create and set missing ID", func(t *testing.T) {
 			i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
@@ -187,7 +201,13 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			require.NoError(t, p.CreateIdentity(ctx, initial))
 			createdIDs = append(createdIDs, initial.ID)
 
-			for _, ids := range []string{"foo@bar.com", "fOo@bar.com", "FOO@bar.com", "foo@Bar.com"} {
+			// fandom-start
+			cases := []string{"foo@bar.com"}
+			if !conf.IdentityCaseSensitiveIdentifier() {
+				cases = append(cases, "fOo@bar.com", "FOO@bar.com", "foo@Bar.com")
+			}
+			// fandom-end
+			for _, ids := range cases {
 				expected := passwordIdentity("", ids)
 				err := p.CreateIdentity(ctx, expected)
 				require.ErrorIs(t, err, sqlcon.ErrUniqueViolation, "%+v", err)
@@ -442,9 +462,12 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			})
 		})
 
-		t.Run("case=find identity by its credentials case insensitive", func(t *testing.T) {
-			identifier := x.NewUUID().String()
-			expected := passwordIdentity("", strings.ToUpper(identifier))
+		t.Run("case=find identity by its credentials case (in)sensitive", func(t *testing.T) {
+			// fandom-start
+			identifier := randomAlphaString(15)
+			identifier = strings.ToLower(identifier[:len(identifier)/2]) + strings.ToUpper(identifier[len(identifier)/2:])
+			expected := passwordIdentity("", identifier)
+			// fandom-end
 			expected.Traits = identity.Traits(`{}`)
 
 			require.NoError(t, p.CreateIdentity(ctx, expected))
@@ -453,8 +476,15 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			actual, creds, err := p.FindByCredentialsIdentifier(ctx, identity.CredentialsTypePassword, identifier)
 			require.NoError(t, err)
 
+			// fandom-start
+			if !conf.IdentityCaseSensitiveIdentifier() {
+				identifier = strings.ToLower(identifier)
+			}
+			// fandom-end
 			assert.EqualValues(t, expected.Credentials[identity.CredentialsTypePassword].ID, creds.ID)
-			assert.EqualValues(t, []string{strings.ToLower(identifier)}, creds.Identifiers)
+			// fandom-start
+			assert.EqualValues(t, []string{identifier}, creds.Identifiers)
+			// fandom-end
 			assert.JSONEq(t, string(expected.Credentials[identity.CredentialsTypePassword].Config), string(creds.Config))
 
 			expected.Credentials = nil
@@ -753,8 +783,8 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			require.NoError(t, p.GetConnection(ctx).RawQuery("INSERT INTO identity_credentials (id, identity_id, nid, identity_credential_type_id, created_at, updated_at, config) VALUES (?, ?, ?, ?, ?, ?, '{}')", cid2, iid, nid2, m[0].ID, time.Now(), time.Now()).Exec())
 
 			ici1, ici2 := x.NewUUID(), x.NewUUID()
-			require.NoError(t, p.GetConnection(ctx).RawQuery("INSERT INTO identity_credential_identifiers (id, identity_credential_id, nid, identifier, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", ici1, cid1, nid1, "nid1", time.Now(), time.Now()).Exec())
-			require.NoError(t, p.GetConnection(ctx).RawQuery("INSERT INTO identity_credential_identifiers (id, identity_credential_id, nid, identifier, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", ici2, cid2, nid2, "nid2", time.Now(), time.Now()).Exec())
+			require.NoError(t, p.GetConnection(ctx).RawQuery("INSERT INTO identity_credential_identifiers (id, identity_credential_id, nid, identifier, created_at, updated_at, identity_credential_type_id) VALUES (?, ?, ?, ?, ?, ?, ?)", ici1, cid1, nid1, "nid1", time.Now(), time.Now(), m[0].ID).Exec())
+			require.NoError(t, p.GetConnection(ctx).RawQuery("INSERT INTO identity_credential_identifiers (id, identity_credential_id, nid, identifier, created_at, updated_at, identity_credential_type_id) VALUES (?, ?, ?, ?, ?, ?, ?)", ici2, cid2, nid2, "nid2", time.Now(), time.Now(), m[0].ID).Exec())
 
 			_, err := p.GetIdentity(ctx, nid1)
 			require.ErrorIs(t, err, sqlcon.ErrNoRows)

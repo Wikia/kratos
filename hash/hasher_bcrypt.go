@@ -1,18 +1,14 @@
 package hash
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/ory/kratos/schema"
+
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/ory/kratos/driver/config"
-	"github.com/ory/kratos/schema"
 )
-
-var BcryptAlgorithmId = []byte("bcrypt")
 
 type Bcrypt struct {
 	c BcryptConfiguration
@@ -28,25 +24,15 @@ func NewHasherBcrypt(c BcryptConfiguration) *Bcrypt {
 
 func (h *Bcrypt) Generate(ctx context.Context, password []byte) ([]byte, error) {
 	if err := validateBcryptPasswordLength(password); err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword(password, int(h.c.Config(ctx).HasherBcrypt().Cost))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 
-	var b bytes.Buffer
-	if _, err := fmt.Fprintf(
-		&b,
-		"$%s%s", // BCrypt hash has already '$' prefix so no need to add it here between ID and hash
-		BcryptAlgorithmId,
-		hash,
-	); err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return b.Bytes(), nil
+	return hash, nil
 }
 
 func validateBcryptPasswordLength(password []byte) error {
@@ -60,4 +46,8 @@ func validateBcryptPasswordLength(password []byte) error {
 		)
 	}
 	return nil
+}
+
+func (h *Bcrypt) Understands(hash []byte) bool {
+	return IsBcryptHash(hash)
 }

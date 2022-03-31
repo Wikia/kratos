@@ -6,16 +6,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ory/kratos/corp"
-	"github.com/ory/kratos/identity"
-
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 
-	"github.com/ory/x/sqlcon"
-
+	"github.com/ory/kratos/corp"
+	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/strategy/link"
+	"github.com/ory/x/sqlcon"
 )
 
 var _ recovery.FlowPersister = new(Persister)
@@ -76,9 +74,10 @@ func (p *Persister) UseRecoveryToken(ctx context.Context, token string) (*link.R
 
 		var ra identity.RecoveryAddress
 		if err := tx.Where("id = ? AND nid = ?", rt.RecoveryAddressID, nid).First(&ra); err != nil {
-			return sqlcon.HandleError(err)
+			if !errors.Is(sqlcon.HandleError(err), sqlcon.ErrNoRows) {
+				return err
+			}
 		}
-
 		rt.RecoveryAddress = &ra
 
 		/* #nosec G201 TableName is static */
@@ -93,4 +92,19 @@ func (p *Persister) UseRecoveryToken(ctx context.Context, token string) (*link.R
 func (p *Persister) DeleteRecoveryToken(ctx context.Context, token string) error {
 	/* #nosec G201 TableName is static */
 	return p.GetConnection(ctx).RawQuery(fmt.Sprintf("DELETE FROM %s WHERE token=? AND nid = ?", new(link.RecoveryToken).TableName(ctx)), token, corp.ContextualizeNID(ctx, p.nid)).Exec()
+}
+
+func (p *Persister) DeleteExpiredRecoveryFlows(ctx context.Context, expiresAt time.Time, limit int) error {
+	// #nosec G201
+	err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %s WHERE expires_at <= ? LIMIT ?",
+		new(recovery.Flow).TableName(ctx),
+	),
+		expiresAt,
+		limit,
+	).Exec()
+	if err != nil {
+		return sqlcon.HandleError(err)
+	}
+	return nil
 }

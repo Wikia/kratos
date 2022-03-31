@@ -66,10 +66,16 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 
 // swagger:model selfServiceLogoutUrl
 type selfServiceLogoutUrl struct {
-	// LogoutURL can be opened in a browser to
+	// LogoutURL can be opened in a browser to sign the user out.
 	//
 	// format: uri
+	// required: true
 	LogoutURL string `json:"logout_url"`
+
+	// LogoutToken can be used to perform logout using AJAX.
+	//
+	// required: true
+	LogoutToken string `json:"logout_token"`
 }
 
 // swagger:parameters createSelfServiceLogoutFlowUrlForBrowsers
@@ -85,7 +91,7 @@ type createSelfServiceLogoutFlowUrlForBrowsers struct {
 	Cookie string `json:"cookie"`
 }
 
-// swagger:route GET /self-service/logout/browser v0alpha1 createSelfServiceLogoutFlowUrlForBrowsers
+// swagger:route GET /self-service/logout/browser v0alpha2 createSelfServiceLogoutFlowUrlForBrowsers
 //
 // Create a Logout URL for Browsers
 //
@@ -117,6 +123,7 @@ func (h *Handler) createSelfServiceLogoutUrlForBrowsers(w http.ResponseWriter, r
 	}
 
 	h.d.Writer().Write(w, r, &selfServiceLogoutUrl{
+		LogoutToken: sess.LogoutToken,
 		LogoutURL: urlx.CopyWithQuery(urlx.AppendPaths(h.d.Config(r.Context()).SelfPublicURL(r), RouteSubmitFlow),
 			url.Values{"token": {sess.LogoutToken}}).String(),
 	})
@@ -141,7 +148,7 @@ type submitSelfServiceLogoutFlowWithoutBrowserBody struct {
 	SessionToken string `json:"session_token"`
 }
 
-// swagger:route DELETE /self-service/logout/api v0alpha1 submitSelfServiceLogoutFlowWithoutBrowser
+// swagger:route DELETE /self-service/logout/api v0alpha2 submitSelfServiceLogoutFlowWithoutBrowser
 //
 // Perform Logout for APIs, Services, Apps, ...
 //
@@ -198,9 +205,14 @@ type submitSelfServiceLogoutFlow struct {
 	//
 	// in: query
 	Token string `json:"token"`
+
+	// The URL to return to after the logout was completed.
+	//
+	// in: query
+	ReturnTo string `json:"return_to"`
 }
 
-// swagger:route GET /self-service/logout v0alpha1 submitSelfServiceLogoutFlow
+// swagger:route GET /self-service/logout v0alpha2 submitSelfServiceLogoutFlow
 //
 // Complete Self-Service Logout
 //
@@ -248,7 +260,7 @@ func (h *Handler) submitLogout(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
-	if err := h.d.SessionPersister().RevokeSessionByToken(r.Context(), sess.Token); err != nil {
+	if err := h.d.SessionManager().PurgeFromRequest(r.Context(), w, r); err != nil {
 		h.d.SelfServiceErrorManager().Forward(r.Context(), w, r, err)
 		return
 	}

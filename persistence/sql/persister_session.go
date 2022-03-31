@@ -2,7 +2,9 @@ package sql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -35,9 +37,18 @@ func (p *Persister) GetSession(ctx context.Context, sid uuid.UUID) (*session.Ses
 	return &s, nil
 }
 
-func (p *Persister) CreateSession(ctx context.Context, s *session.Session) error {
+func (p *Persister) UpsertSession(ctx context.Context, s *session.Session) error {
 	s.NID = corp.ContextualizeNID(ctx, p.nid)
-	return p.GetConnection(ctx).Create(s) // This must not be eager or identities will be created / updated
+
+	if err := p.Connection(ctx).Find(new(session.Session), s.ID); errors.Is(err, sql.ErrNoRows) {
+		// This must not be eager or identities will be created / updated
+		return errors.WithStack(p.GetConnection(ctx).Create(s))
+	} else if err != nil {
+		return errors.WithStack(err)
+	}
+
+	// This must not be eager or identities will be created / updated
+	return p.GetConnection(ctx).Update(s)
 }
 
 func (p *Persister) DeleteSession(ctx context.Context, sid uuid.UUID) error {
@@ -95,6 +106,21 @@ func (p *Persister) DeleteSessionByToken(ctx context.Context, token string) erro
 	}
 	if count == 0 {
 		return errors.WithStack(sqlcon.ErrNoRows)
+	}
+	return nil
+}
+
+func (p *Persister) DeleteExpiredSessions(ctx context.Context, expiresAt time.Time, limit int) error {
+	// #nosec G201
+	err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %s WHERE expires_at <= ? LIMIT ?",
+		corp.ContextualizeTableName(ctx, "sessions"),
+	),
+		expiresAt,
+		limit,
+	).Exec()
+	if err != nil {
+		return sqlcon.HandleError(err)
 	}
 	return nil
 }

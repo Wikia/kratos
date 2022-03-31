@@ -28,7 +28,7 @@ func NewValidator(d validatorDependencies) *Validator {
 }
 
 func (v *Validator) ValidateWithRunner(ctx context.Context, i *Identity, runners ...schema.Extension) error {
-	runner, err := schema.NewExtensionRunner(schema.ExtensionRunnerIdentityMetaSchema, runners...)
+	runner, err := schema.NewExtensionRunner(runners...)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,9 @@ func (v *Validator) ValidateWithRunner(ctx context.Context, i *Identity, runners
 
 func (v *Validator) Validate(ctx context.Context, i *Identity) error {
 	return v.ValidateWithRunner(ctx, i,
-		NewSchemaExtensionCredentials(i),
+		// fandom-start
+		NewSchemaExtensionCredentials(i, v.d.Config(ctx).IdentityCaseSensitiveIdentifier()),
+		// fandom-end
 		NewSchemaExtensionVerification(i, v.d.Config(ctx).SelfServiceFlowVerificationRequestLifespan()),
 		NewSchemaExtensionRecovery(i),
 	)

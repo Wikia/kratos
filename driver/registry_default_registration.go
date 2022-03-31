@@ -8,8 +8,17 @@ import (
 	"github.com/ory/kratos/selfservice/flow/registration"
 )
 
+func filter(hooks []config.SelfServiceHook, persistencePhase config.PersistencePhase) (ret []config.SelfServiceHook) {
+	for _, h := range hooks {
+		if len(h.PersistencePhase) == 0 || h.PersistencePhase == config.All || h.PersistencePhase == persistencePhase {
+			ret = append(ret, h)
+		}
+	}
+	return
+}
+
 func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPrePersistExecutor) {
-	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), config.PrePersist)) {
 		if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -25,7 +34,7 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 		initialHookCount = 1
 	}
 
-	for _, v := range m.getHooks(string(credentialsType), m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType))) {
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), config.PostPersist)) {
 		if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -34,7 +43,7 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 	if len(b) == initialHookCount {
 		// since we don't want merging hooks defined in a specific strategy and global hooks
 		// global hooks are added only if no strategy specific hooks are defined
-		for _, v := range m.getHooks(config.HookGlobal, m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(config.HookGlobal)) {
+		for _, v := range m.getHooks(config.HookGlobal, filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(config.HookGlobal), config.PostPersist)) {
 			if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
 				b = append(b, hook)
 			}

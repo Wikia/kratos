@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -155,6 +156,14 @@ func TestInitFlow(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 			assertx.EqualAsJSON(t, registration.ErrAlreadyLoggedIn, json.RawMessage(gjson.GetBytes(body, "error").Raw), "%s", body)
 		})
+		t.Run("case=relative redirect when self-service registration ui is a relative URL", func(t *testing.T) {
+			reg.Config(context.Background()).MustSet(config.ViperKeySelfServiceRegistrationUI, "/registration-ts")
+			assert.Regexp(
+				t,
+				"^/registration-ts.*$",
+				testhelpers.GetSelfServiceRedirectLocation(t, publicTS.URL+registration.RouteInitBrowserFlow),
+			)
+		})
 	})
 }
 
@@ -212,5 +221,29 @@ func TestGetFlow(t *testing.T) {
 		res, body := x.EasyGet(t, client, public.URL+registration.RouteGetFlow+"?id="+f.ID.String())
 		assert.EqualValues(t, http.StatusGone, res.StatusCode)
 		assert.Equal(t, public.URL+registration.RouteInitBrowserFlow, gjson.GetBytes(body, "error.details.redirect_to").String(), "%s", body)
+	})
+
+	t.Run("case=expired with return_to", func(t *testing.T) {
+		conf.MustSet(config.ViperKeyURLsWhitelistedReturnToDomains, []string{"https://www.ory.sh/"})
+		client := testhelpers.NewClientWithCookies(t)
+		setupRegistrationUI(t, client)
+		body := x.EasyGetBody(t, client, public.URL+registration.RouteInitBrowserFlow+"?return_to=https://www.ory.sh")
+
+		// Expire the flow
+		f, err := reg.RegistrationFlowPersister().GetRegistrationFlow(context.Background(), uuid.FromStringOrNil(gjson.GetBytes(body, "id").String()))
+		require.NoError(t, err)
+		f.ExpiresAt = time.Now().Add(-time.Second)
+		require.NoError(t, reg.RegistrationFlowPersister().UpdateRegistrationFlow(context.Background(), f))
+
+		// submit the flow but it is expired
+		u := public.URL + registration.RouteSubmitFlow + "?flow=" + f.ID.String()
+		res, err := client.PostForm(u, url.Values{"method": {"password"}, "csrf_token": {f.CSRFToken}, "password": {"password"}, "traits.email": {"email@ory.sh"}})
+		resBody, err := ioutil.ReadAll(res.Body)
+		require.NoError(t, err)
+		require.NoError(t, res.Body.Close())
+
+		f, err = reg.RegistrationFlowPersister().GetRegistrationFlow(context.Background(), uuid.FromStringOrNil(gjson.GetBytes(resBody, "id").String()))
+		require.NoError(t, err)
+		assert.Equal(t, public.URL+registration.RouteInitBrowserFlow+"?return_to=https://www.ory.sh", f.RequestURL)
 	})
 }

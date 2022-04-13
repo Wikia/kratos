@@ -149,7 +149,7 @@ const (
 	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
 	ViperKeyIdentityCaseSensitiveIdentifier = "identity.case_sensitive_identifier"
-	ViperKeyPublicStripPaths                = "serve.public.port"
+	ViperKeyPublicStripPaths                = "serve.public.strip_paths"
 	//fandom-end
 	ViperKeyPasswordHaveIBeenPwnedHost    = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled = "selfservice.methods.password.config.haveibeenpwned_enabled"

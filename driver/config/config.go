@@ -149,6 +149,7 @@ const (
 	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
 	ViperKeyIdentityCaseSensitiveIdentifier = "identity.case_sensitive_identifier"
+	ViperKeyPublicStripPaths                = "serve.public.port"
 	//fandom-end
 	ViperKeyPasswordHaveIBeenPwnedHost    = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled = "selfservice.methods.password.config.haveibeenpwned_enabled"
@@ -763,6 +764,10 @@ func (p *Config) baseURL(keyURL, keyHost, keyPort string, defaultPort int) *url.
 
 func (p *Config) DisablePublicHealthRequestLog() bool {
 	return p.p.Bool(ViperKeyDisablePublicHealthRequestLog)
+}
+
+func (p *Config) StripPublicPaths() []string {
+	return p.p.Strings(ViperKeyPublicStripPaths)
 }
 
 type DomainAlias struct {

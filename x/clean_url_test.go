@@ -13,7 +13,11 @@ import (
 )
 
 func TestCleanPath(t *testing.T) {
-	n := negroni.New(CleanPath)
+	n := negroni.New()
+	n.UseFunc(CleanPath([]string{
+		"/prefix1",
+		"/prefix2",
+	}))
 	n.UseHandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(r.URL.String()))
 	})
@@ -23,6 +27,8 @@ func TestCleanPath(t *testing.T) {
 	for k, tc := range [][]string{
 		{"//foo", "/foo"},
 		{"//foo//bar", "/foo/bar"},
+		{"/prefix1/foo//bar", "/foo/bar"},
+		{"/prefix2/foo//bar", "/foo/bar"},
 	} {
 		t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
 			res, err := ts.Client().Get(ts.URL + tc[0])

@@ -98,7 +98,10 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 	router := x.NewRouterPublic()
 	csrf := x.NewCSRFHandler(router, r)
 
-	n.UseFunc(x.CleanPath) // Prevent double slashes from breaking CSRF.
+	n.UseFunc(x.CleanPath(r.Config(ctx).StripPublicPaths())) // Prevent double slashes from breaking CSRF.
+	if r.Config(ctx).DisablePublicHealthRequestLog() {
+		publicLogger.ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath)
+	}
 	r.WithCSRFHandler(csrf)
 	n.UseHandler(r.CSRFHandler())
 

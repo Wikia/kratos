@@ -1675,6 +1675,22 @@
               ],
               "default": 4433
             },
+            "strip_paths": {
+              "title": "Path prefixes that should be stripped",
+              "description": "List of prefixes that should be stripped.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uri-reference"
+              },
+              "examples": [
+                [
+                  "/prefix1",
+                  "/remove-prefix"
+                ]
+              ],
+              "uniqueItems": true
+            },
             "socket": {
               "$ref": "#/definitions/socket"
             },

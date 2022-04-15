@@ -14,7 +14,6 @@ func CleanPath(stripPaths []string) func(rw http.ResponseWriter, r *http.Request
 		for _, prefix := range stripPaths {
 			if strings.HasPrefix(r.URL.Path, prefix) {
 				r.URL.Path = strings.Replace(r.URL.Path, prefix, "", 1)
-				fmt.Println(r.URL.Path)
 				break
 			}
 		}

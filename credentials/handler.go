@@ -8,14 +8,15 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ory/kratos/hash"
+	"github.com/ory/kratos/selfservice/strategy/password"
+
 	"github.com/gofrs/uuid"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/selfservice/strategy/oidc"
-	"github.com/ory/kratos/selfservice/strategy/password"
-
-	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
 	"github.com/ory/kratos/driver/config"
@@ -31,6 +32,7 @@ type (
 		identity.PoolProvider
 		identity.PrivilegedPoolProvider
 		identity.ManagementProvider
+		hash.HashProvider
 		x.WriterProvider
 		config.Provider
 		x.CSRFProvider
@@ -62,6 +64,13 @@ type AdminUpdateIdentityCredentialsBody struct {
 type ImportCredentialsBody struct {
 	Type   identity.CredentialsType `json:"type"`
 	Config json.RawMessage          `json:"config"`
+}
+
+type ImportPasswordCredentialsConfig struct {
+	// HashedPassword is a hash-representation of the password.
+	HashedPassword string `json:"hashed_password"`
+	// Password is plaintext of the password.
+	Password string `json:"password"`
 }
 
 type RemoveCredentialsBody struct {
@@ -206,11 +215,18 @@ func (h *Handler) createCredentials(ctx context.Context, identityId uuid.UUID, n
 		}
 		return h.newCredentials(ids, newConfig, newCreds)
 	} else if newCreds.Type == identity.CredentialsTypePassword {
-		var newConfig password.CredentialsConfig
+		var newConfig ImportPasswordCredentialsConfig
 		if err := json.Unmarshal(newCreds.Config, &newConfig); err != nil {
 			return nil, err
 		}
-		return h.newCredentials([]string{}, newConfig, newCreds)
+		if newConfig.HashedPassword == "" && newConfig.Password != "" {
+			hpw, err := h.r.Hasher().Generate(ctx, []byte(newConfig.Password))
+			if err != nil {
+				return nil, err
+			}
+			newConfig.HashedPassword = string(hpw)
+		}
+		return h.newCredentials([]string{}, password.CredentialsConfig{HashedPassword: newConfig.HashedPassword}, newCreds)
 	} else {
 		return nil, errors.WithStack(ErrUnexpectedProviderType)
 	}
@@ -272,11 +288,18 @@ func (h *Handler) updateCredentials(ctx context.Context, identityId uuid.UUID, o
 		return nil
 	} else if newCreds.Type == identity.CredentialsTypePassword {
 		// for password just override with the new one - no need to compare with the existing contents
-		var newConfig password.CredentialsConfig
+		var newConfig ImportPasswordCredentialsConfig
 		if err := json.Unmarshal(newCreds.Config, &newConfig); err != nil {
 			return err
 		}
-		if err := h.replaceConfig(oldCreds, newConfig); err != nil {
+		if newConfig.HashedPassword == "" && newConfig.Password != "" {
+			hpw, err := h.r.Hasher().Generate(ctx, []byte(newConfig.Password))
+			if err != nil {
+				return err
+			}
+			newConfig.HashedPassword = string(hpw)
+		}
+		if err := h.replaceConfig(oldCreds, password.CredentialsConfig{HashedPassword: newConfig.HashedPassword}); err != nil {
 			return err
 		}
 		return nil

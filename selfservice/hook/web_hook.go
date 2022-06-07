@@ -255,6 +255,13 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 }
 
 func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.Group, flow *login.Flow, session *session.Session) error {
+	// fandom-start
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	// fandom-end
 	return e.execute(&templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
@@ -262,6 +269,9 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 		RequestUrl:     req.RequestURI,
 		Identity:       session.Identity,
 		HookType:       "LoginPostHook",
+		// fandom-start
+		Fields: req.Form,
+		// fandom-end
 	})
 }
 

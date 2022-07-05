@@ -109,7 +109,7 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 
 			s := make([]rune, n)
 			for i := range s {
-				s[i] = letters[rand.Intn(len(letters))]
+				s[i] = letters[rand.Intn(len(letters))] //nolint:gosec
 			}
 			return string(s)
 
@@ -511,11 +511,17 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			createdIDs = append(createdIDs, expected.ID)
 
 			t.Run("case sensitive", func(t *testing.T) {
-				for _, ct := range []identity.CredentialsType{
+				caseSensitiveCred := []identity.CredentialsType{
 					identity.CredentialsTypeOIDC,
 					identity.CredentialsTypeTOTP,
 					identity.CredentialsTypeLookup,
-				} {
+				}
+
+				if conf.IdentityCaseSensitiveIdentifier() {
+					caseSensitiveCred = append(caseSensitiveCred, identity.CredentialsTypePassword)
+				}
+
+				for _, ct := range caseSensitiveCred {
 					t.Run(ct.String(), func(t *testing.T) {
 						_, _, err := p.FindByCredentialsIdentifier(ctx, ct, caseInsensitiveWithSpaces)
 						require.Error(t, err)
@@ -529,10 +535,14 @@ func TestPool(ctx context.Context, conf *config.Config, p interface {
 			})
 
 			t.Run("case insensitive", func(t *testing.T) {
-				for _, ct := range []identity.CredentialsType{
-					identity.CredentialsTypePassword,
+				caseInsensitiveCred := []identity.CredentialsType{
 					identity.CredentialsTypeWebAuthn,
-				} {
+				}
+
+				if !conf.IdentityCaseSensitiveIdentifier() {
+					caseInsensitiveCred = append(caseInsensitiveCred, identity.CredentialsTypePassword)
+				}
+				for _, ct := range caseInsensitiveCred {
 					t.Run(ct.String(), func(t *testing.T) {
 						for _, cs := range []string{caseSensitive, caseInsensitiveWithSpaces} {
 							actual, creds, err := p.FindByCredentialsIdentifier(ctx, ct, cs)

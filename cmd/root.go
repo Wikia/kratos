@@ -3,8 +3,9 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/ory/kratos/cmd/cleanup"
 	"os"
+
+	"github.com/ory/kratos/cmd/cleanup"
 
 	"github.com/ory/kratos/driver/config"
 

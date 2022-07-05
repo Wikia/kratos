@@ -56,9 +56,9 @@ const (
 
 const (
 	AdminRouteIdentity           = "/identities"
-	AdminRouteIdentitiesSession = AdminRouteIdentity + "/:id/session"
+	AdminRouteIdentitiesSession  = AdminRouteIdentity + "/:id/session"
 	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/:id/sessions"
-	AdminRouteSessionExtend      = RouteCollection + "/extend"
+	AdminRouteSessionExtend      = "/token/extend"
 	AdminRouteSessionExtendId    = RouteSession + "/extend"
 )
 
@@ -67,7 +67,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(AdminRouteIdentitiesSessions, h.adminDeleteIdentitySessions)
 	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
 	admin.PATCH(AdminRouteSessionExtend, h.adminCurrentSessionExtend)
-	admin.PATCH(AdminRouteIdentitiesSession, h.session)
+	admin.GET(AdminRouteIdentitiesSession, h.session)
 
 	admin.DELETE(RouteCollection, x.RedirectToPublicRoute(h.r))
 	admin.DELETE(RouteSession, x.RedirectToPublicRoute(h.r))
@@ -86,7 +86,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	h.r.CSRFHandler().IgnorePath(RouteCollection)
 	h.r.CSRFHandler().IgnoreGlob(RouteCollection + "/*")
 	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/sessions")
-	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/session")
+	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/session")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
@@ -218,7 +218,10 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 			h.r.Writer().WriteError(w, r, err)
 			return
 		}
-		h.r.SessionManager().IssueCookie(r.Context(), w, r, s)
+		if err := h.r.SessionManager().IssueCookie(r.Context(), w, r, s); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
 	}
 
 	// s.Devices = nil
@@ -543,7 +546,7 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 		return
 	}
 
-	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword)
+	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return

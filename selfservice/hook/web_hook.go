@@ -2,7 +2,7 @@ package hook
 
 import (
 	"context"
-	"crypto/md5" // #nosec
+	"crypto/md5" //nolint:gosec
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,18 +10,11 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ory/x/fetcher"
-	"github.com/ory/x/httpx"
-	"github.com/ory/x/logrusx"
-
-	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-
-	"github.com/ory/kratos/ui/node"
 
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/request"
@@ -34,7 +27,9 @@ import (
 	"github.com/ory/kratos/selfservice/flow/verification"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
+	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/otelx"
 )
 
@@ -86,6 +81,14 @@ type (
 	rawHookResponse struct {
 		Messages []errorMessage
 	}
+
+	httpConfig struct {
+		sum     string
+		retries int
+		minWait time.Duration
+		maxWait time.Duration
+		timeout time.Duration
+	}
 )
 
 func NewWebHook(r webHookDependencies, c json.RawMessage) *WebHook {
@@ -103,7 +106,7 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 	})
 }
 
-func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.Group, flow *login.Flow, session *session.Session) error {
+func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.UiNodeGroup, flow *login.Flow, session *session.Session) error {
 	// fandom-start
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
@@ -168,8 +171,9 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 			return errors.WithStack(err)
 		}
 	}
+	ctx, _ := e.deps.Tracer(req.Context()).Tracer().Start(req.Context(), "selfservice.hook.ExecutePostRegistrationPrePersistHook")
 	// fandom-end
-	return e.execute(&templateContext{
+	return e.execute(ctx, &templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
@@ -228,6 +232,45 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 	})
 }
 
+func newHttpConfig(r json.RawMessage) (*httpConfig, error) {
+	type rawHttpConfig struct {
+		Retries int
+		Timeout string
+		MinWait string `json:"min_wait"`
+		MaxWait string `json:"max_wait"`
+	}
+	var rc rawHttpConfig
+	err := json.Unmarshal(r, &rc)
+	if err != nil {
+		return nil, err
+	}
+
+	timeout := time.Minute
+	retryWaitMin := 1 * time.Second
+	retryWaitMax := 30 * time.Second
+	retryMax := 4
+	if t, err := time.ParseDuration(rc.Timeout); err != nil {
+		timeout = t
+	}
+	if t, err := time.ParseDuration(rc.MinWait); err != nil {
+		retryWaitMin = t
+	}
+	if t, err := time.ParseDuration(rc.MaxWait); err != nil {
+		retryWaitMin = t
+	}
+	if rc.Retries > 0 {
+		retryMax = rc.Retries
+	}
+
+	return &httpConfig{
+		sum:     fmt.Sprintf("%x", md5.Sum(r)), //nolint:gosec
+		retries: retryMax,
+		timeout: timeout,
+		minWait: retryWaitMin,
+		maxWait: retryWaitMax,
+	}, nil
+}
+
 // fandom-end
 
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
@@ -239,7 +282,8 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
 	// fandom-end
-	return e.execute(&templateContext{
+	ctx, _ := e.deps.Tracer(req.Context()).Tracer().Start(req.Context(), "selfservice.hook.ExecuteSettingsPostPersistHook")
+	return e.execute(ctx, &templateContext{
 		Flow:           flow,
 		RequestHeaders: req.Header,
 		RequestMethod:  req.Method,
@@ -262,8 +306,20 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	}
 	span.SetAttributes(otelx.StringAttrs(attrs)...)
 	defer span.End()
+	conf, err := newHttpConfig(e.conf)
+	if err != nil {
+		return fmt.Errorf("failed to parse http config: %w", err)
+	}
 
-	builder, err := request.NewBuilder(e.conf, e.deps.HTTPClient(ctx), e.deps.Logger())
+	client := e.deps.NamedHTTPClient(
+		ctx,
+		data.HookType+conf.sum,
+		httpx.ResilientClientWithMaxRetry(conf.retries),
+		httpx.ResilientClientWithConnectionTimeout(conf.timeout),
+		httpx.ResilientClientWithMinxRetryWait(conf.minWait),
+		httpx.ResilientClientWithMaxRetryWait(conf.maxWait),
+	)
+	builder, err := request.NewBuilder(e.conf, client, e.deps.Logger())
 	if err != nil {
 		return err
 	}
@@ -276,23 +332,23 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	}
 
 	errChan := make(chan error, 1)
-	go func() {
+	go func(client *retryablehttp.Client) {
 		defer close(errChan)
 
-		resp, err := e.deps.HTTPClient(ctx).Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			errChan <- err
 			return
 		}
 
 		if resp.StatusCode >= http.StatusBadRequest {
-			errChan <- fmt.Errorf("web hook failed with status code %v", resp.StatusCode)
+			errChan <- e.parseResponse(resp)
 			span.SetStatus(codes.Error, fmt.Sprintf("web hook failed with status code %v", resp.StatusCode))
 			return
 		}
 
 		errChan <- nil
-	}()
+	}(client)
 
 	if gjson.GetBytes(e.conf, "response.ignore").Bool() {
 		go func() {
@@ -305,7 +361,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	return <-errChan
 }
 
-func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
+func (e *WebHook) parseResponse(resp *http.Response) (err error) {
 	if resp == nil {
 		return fmt.Errorf("empty response provided from the webhook")
 	}
@@ -320,7 +376,7 @@ func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
 	}
 
 	// fandom-start
-	l.WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
+	e.deps.Logger().WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
 	// fandom-end
 
 	if err = json.Unmarshal(body, &hookResponse); err != nil {
@@ -343,11 +399,10 @@ func parseResponse(l *logrusx.Logger, resp *http.Response) (err error) {
 
 	if !validationErr.HasErrors() {
 		// fandom-start
-		l.WithField("validations", validationErr).Debug("webhook: parsed validations")
+		e.deps.Logger().WithField("validations", validationErr).Debug("webhook: parsed validations")
 		// fandom-end
 		return errors.New("error while parsing hook response: got no validation errors")
 	}
 
 	return errors.WithStack(validationErr)
 }
-

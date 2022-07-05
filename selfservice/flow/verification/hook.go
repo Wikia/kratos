@@ -67,7 +67,7 @@ func NewHookExecutor(d executorDependencies) *HookExecutor {
 func (e *HookExecutor) handleVerificationError(_ http.ResponseWriter, r *http.Request, f *Flow, i *identity.Identity, flowError error) error {
 	if f != nil {
 		if i != nil {
-			cont, err := container.NewFromStruct("", node.RecoveryLinkGroup, i.Traits, "traits")
+			cont, err := container.NewFromStruct("", node.LinkGroup, i.Traits, "traits")
 			if err != nil {
 				e.d.Logger().WithField("error", err).Warn("could not update flow UI")
 				return err

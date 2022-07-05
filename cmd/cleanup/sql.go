@@ -18,8 +18,9 @@ package cleanup
 import (
 	"time"
 
-	"github.com/ory/kratos/driver/config"
 	"github.com/spf13/cobra"
+
+	"github.com/ory/kratos/driver/config"
 
 	"github.com/ory/kratos/cmd/cliclient"
 	"github.com/ory/x/configx"

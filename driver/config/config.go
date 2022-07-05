@@ -170,14 +170,12 @@ const (
 	ViperKeyWebAuthnPasswordless                             = "selfservice.methods.webauthn.config.passwordless"
 	ViperKeyClientHTTPNoPrivateIPRanges                      = "clients.http.disallow_private_ip_ranges"
 	ViperKeyVersion                                          = "version"
-	//fandom-start
 	ViperKeyDatabaseCleanupBatchSize                         = "database.cleanup.batch_size"
 	ViperKeyDatabaseCleanupSleepBackground                   = "database.cleanup.sleep.background"
 	ViperKeyDatabaseCleanupSleepTables                       = "database.cleanup.sleep.tables"
-	ViperKeyHasherLegacyFandomCost          = "hashers.legacyfandom.cost"
-	ViperKeyHasherLegacyFandomAESKey        = "hashers.legacyfandom.key"
-	ViperKeyIdentityCaseSensitiveIdentifier = "identity.case_sensitive_identifier"
-	//fandom-end
+	ViperKeyHasherLegacyFandomCost                           = "hashers.legacyfandom.cost"
+	ViperKeyHasherLegacyFandomAESKey                         = "hashers.legacyfandom.key"
+	ViperKeyIdentityCaseSensitiveIdentifier                  = "identity.case_sensitive_identifier"
 )
 
 const (
@@ -200,8 +198,8 @@ type PersistencePhase string
 
 const (
 	All         PersistencePhase = "all"
-	PrePersist                   = "pre-persist"
-	PostPersist                  = "post-persist"
+	PrePersist  PersistencePhase = "pre-persist"
+	PostPersist PersistencePhase = "post-persist"
 )
 
 //fandom-end

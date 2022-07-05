@@ -10,13 +10,9 @@ import (
 
 	"github.com/ory/kratos/credentials"
 
-	"github.com/hashicorp/go-retryablehttp"
-
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/otelx"
 	otelsql "github.com/ory/x/otelx/sql"
-
-	"github.com/gobuffalo/pop/v6"
 
 	"github.com/ory/nosurf"
 
@@ -26,10 +22,7 @@ import (
 
 	"github.com/ory/kratos/selfservice/strategy/totp"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
-
-	"github.com/ory/x/httpx"
 
 	"github.com/ory/kratos/corp"
 
@@ -48,7 +41,9 @@ import (
 	"github.com/ory/kratos/x"
 
 	"github.com/cenkalti/backoff"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gorilla/sessions"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 
 	"github.com/ory/x/dbal"
@@ -719,22 +714,26 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+func (m *RegistryDefault) NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
 	var rc *retryablehttp.Client
 	if cl, ok := m.rc[name]; ok {
 		rc = cl
 	} else {
-		rc = httpx.NewResilientClient(opts...)
+		rc = m.HTTPClient(ctx, opts...)
 		m.rc[name] = rc
 	}
 	return rc
 }
 
 func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
-	opts = append(opts,
-		httpx.ResilientClientWithLogger(m.Logger()),
-		httpx.ResilientClientWithMaxRetry(2),
-		httpx.ResilientClientWithConnectionTimeout(30*time.Second))
+	opts = append(
+		[]httpx.ResilientOptions{
+			httpx.ResilientClientWithLogger(m.Logger()),
+			httpx.ResilientClientWithMaxRetry(2),
+			httpx.ResilientClientWithConnectionTimeout(30 * time.Second),
+		},
+		opts...,
+	)
 
 	tracer := m.Tracer(ctx)
 	if tracer.IsLoaded() {

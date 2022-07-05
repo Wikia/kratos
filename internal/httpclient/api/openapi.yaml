@@ -2477,7 +2477,7 @@ paths:
       summary: Get Verification Flow
       tags:
       - v0alpha2
-  /sessions/refresh:
+  /admin/token/extend:
     get:
       description: |-
         This endpoint is useful for:
@@ -2508,48 +2508,6 @@ paths:
       summary: |-
         Calling this endpoint refreshes a current user session.
         If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
-  /sessions/refresh/{id}:
-    patch:
-      description: |-
-        This endpoint is useful for:
-
-        Session refresh
-      operationId: adminSessionRefresh
-      parameters:
-      - description: ID is the session's ID.
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/session'
-          description: session
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      security:
-      - oryAccessToken: []
-      summary: |-
-        Calling this endpoint refreshes a given session.
-        If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
-      tags:
-      - v0alpha2
   /sessions:
     delete:
       description: |-

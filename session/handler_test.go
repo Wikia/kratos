@@ -13,13 +13,12 @@ import (
 	"time"
 
 	"github.com/bxcodec/faker/v3"
-
 	"github.com/tidwall/gjson"
-
-	"github.com/ory/kratos/identity"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+
+	"github.com/ory/kratos/identity"
 
 	"github.com/ory/kratos/corpx"
 	"github.com/ory/x/sqlcon"
@@ -714,49 +713,6 @@ func TestHandlerRefreshSessionBySessionID(t *testing.T) {
 	})
 }
 
-func TestHandlerRefreshSessionByIdentityID(t *testing.T) {
-	conf, reg := internal.NewFastRegistryWithMocks(t)
-	_, ts, _, _ := testhelpers.NewKratosServerWithCSRFAndRouters(t, reg)
-
-	// set this intermediate because kratos needs some valid url for CRUDE operations
-	conf.MustSet(config.ViperKeyPublicBaseURL, "http://example.com")
-	testhelpers.SetDefaultIdentitySchema(t, conf, "file://./stub/identity.schema.json")
-	conf.MustSet(config.ViperKeyPublicBaseURL, ts.URL)
-
-	t.Run("case=should return 200 after refreshing one session", func(t *testing.T) {
-		client := testhelpers.NewClientWithCookies(t)
-		i := identity.NewIdentity("")
-		require.NoError(t, reg.IdentityManager().Create(context.Background(), i))
-		s := &Session{Identity: i, ExpiresAt: time.Now().Add(5 * time.Minute)}
-		require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), s))
-
-		req, _ := http.NewRequest("PATCH", ts.URL+"/sessions/refresh/"+s.ID.String(), nil)
-		res, err := client.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, res.StatusCode)
-
-		s, err = reg.SessionPersister().GetSession(context.Background(), s.ID)
-		require.Nil(t, err)
-	})
-
-	t.Run("case=should return 400 when bad UUID is sent", func(t *testing.T) {
-		client := testhelpers.NewClientWithCookies(t)
-		req, _ := http.NewRequest("PATCH", ts.URL+"/sessions/refresh/BADUUID", nil)
-		res, err := client.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
-	})
-
-	t.Run("case=should return 404 when calling with missing UUID", func(t *testing.T) {
-		client := testhelpers.NewClientWithCookies(t)
-		someID, _ := uuid.NewV4()
-		req, _ := http.NewRequest("PATCH", ts.URL+"/sessions/refresh/"+someID.String(), nil)
-		res, err := client.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusNotFound, res.StatusCode)
-	})
-}
-
 func TestHandlerRefreshCurrentSession(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 
@@ -769,11 +725,7 @@ func TestHandlerRefreshCurrentSession(t *testing.T) {
 
 	adminTS.URL = strings.Replace(adminTS.URL, "127.0.0.1", "localhost", -1)
 	reg.Config(context.Background()).MustSet(config.ViperKeyAdminBaseURL, adminTS.URL)
-	testhelpers.SetDefaultIdentitySchema(t, conf, "file://./stub/identity.schema.json")
-	testhelpers.SetIdentitySchemas(t, conf, map[string]string{
-		"customer": "file://./stub/handler/customer.schema.json",
-		"employee": "file://./stub/handler/employee.schema.json",
-	})
+	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/identity.schema.json")
 	//conf.MustSet(config.ViperKeyPublicBaseURL, mockServerURL.String())
 
 	client := testhelpers.NewClientWithCookies(t)
@@ -807,8 +759,9 @@ func TestHandlerRefreshCurrentSession(t *testing.T) {
 	}
 
 	t.Run("case=should return 200 after successful session refresh and return valid session and token", func(t *testing.T) {
-		res := session(t, adminTS, "/sessions/refresh", http.StatusOK)
+		res := session(t, adminTS, "/admin/token/extend", http.StatusOK)
 		s, err := reg.SessionPersister().GetSession(context.Background(), res.ID)
+
 		require.Empty(t, err)
 		require.True(t, res.ExpiresAt.After(originalCookie.Expires))
 		require.True(t, s.Active)
@@ -819,16 +772,12 @@ func TestSessionRequest(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 
 	// Start kratos server
-	publicTS, adminTS := testhelpers.NewKratosServerWithCSRF(t, reg)
+	publicTS, adminTS, _, _ := testhelpers.NewKratosServerWithCSRFAndRouters(t, reg)
 
 	mockServerURL := urlx.ParseOrPanic(publicTS.URL)
 
 	conf.MustSet(config.ViperKeyAdminBaseURL, adminTS.URL)
-	testhelpers.SetDefaultIdentitySchema(t, conf, "file://./stub/identity.schema.json")
-	testhelpers.SetIdentitySchemas(t, conf, map[string]string{
-		"customer": "file://./stub/handler/customer.schema.json",
-		"employee": "file://./stub/handler/employee.schema.json",
-	})
+	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/identity.schema.json")
 	conf.MustSet(config.ViperKeyPublicBaseURL, mockServerURL.String())
 
 	session := func(t *testing.T, base *httptest.Server, href string, expectCode int) AdminIdentitySessionResponse {
@@ -850,12 +799,12 @@ func TestSessionRequest(t *testing.T) {
 	}
 
 	t.Run("case=should return 200 after successful session creation and return valid session and token", func(t *testing.T) {
-		for name, ts := range map[string]*httptest.Server{"public": publicTS, "admin": adminTS} {
+		for name, ts := range map[string]*httptest.Server{"admin": adminTS} {
 			t.Run("endpoint="+name, func(t *testing.T) {
 				i := identity.NewIdentity("")
 				require.NoError(t, reg.IdentityManager().Create(context.Background(), i))
 
-				res := session(t, ts, "/identities/"+i.ID.String()+"/session", http.StatusOK)
+				res := session(t, ts, "/admin/identities/"+i.ID.String()+"/session", http.StatusOK)
 				s, err := reg.SessionPersister().GetSession(context.Background(), res.Session.ID)
 				require.Empty(t, err)
 				require.Equal(t, i.ID.String(), s.Identity.ID.String())

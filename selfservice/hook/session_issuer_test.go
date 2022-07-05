@@ -82,7 +82,7 @@ func TestSessionIssuer(t *testing.T) {
 			f := &registration.Flow{Type: flow.TypeBrowser}
 
 			require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
-			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s)
+			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s, identity.CredentialsTypePassword)
 			require.True(t, errors.Is(err, registration.ErrHookAbortFlow), "%+v", err)
 
 			got, err := reg.SessionPersister().GetSession(context.Background(), s.ID)

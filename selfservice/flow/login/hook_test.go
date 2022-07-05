@@ -48,7 +48,7 @@ func TestLoginExecutor(t *testing.T) {
 					}
 				})
 
-				var group node.Group
+				var group node.UiNodeGroup
 				switch strategy {
 				case identity.CredentialsTypePassword.String():
 					group = node.PasswordGroup

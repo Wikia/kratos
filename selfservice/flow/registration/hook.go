@@ -88,7 +88,7 @@ func NewHookExecutor(d executorDependencies) *HookExecutor {
 func (e *HookExecutor) handleRegistrationError(_ http.ResponseWriter, r *http.Request, ct identity.CredentialsType, f *Flow, i *identity.Identity, flowError error) error {
 	if f != nil {
 		if i != nil {
-			var group node.Group
+			var group node.UiNodeGroup
 			switch ct {
 			case identity.CredentialsTypePassword:
 				group = node.PasswordGroup

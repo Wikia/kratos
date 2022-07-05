@@ -200,7 +200,7 @@ func TestHandler(t *testing.T) {
 
 			snapshotx.SnapshotTExceptMatchingKeys(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), append(ignoreDefault, "hashed_password"))
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 
 		t.Run("with pkbdf2 password", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestHandler(t *testing.T) {
 
 			snapshotx.SnapshotTExceptMatchingKeys(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), append(ignoreDefault, "hashed_password"))
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 
 		t.Run("with bcrypt2 password", func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestHandler(t *testing.T) {
 
 			snapshotx.SnapshotTExceptMatchingKeys(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), append(ignoreDefault, "hashed_password"))
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 
 		t.Run("with argon2i password", func(t *testing.T) {
@@ -236,7 +236,7 @@ func TestHandler(t *testing.T) {
 
 			snapshotx.SnapshotTExceptMatchingKeys(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), append(ignoreDefault, "hashed_password"))
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 
 		t.Run("with argon2id password", func(t *testing.T) {
@@ -248,7 +248,7 @@ func TestHandler(t *testing.T) {
 
 			snapshotx.SnapshotTExceptMatchingKeys(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), append(ignoreDefault, "hashed_password"))
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 	})
 

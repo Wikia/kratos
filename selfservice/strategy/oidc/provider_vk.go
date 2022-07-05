@@ -3,9 +3,12 @@ package oidc
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/ory/x/httpx"
 
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
@@ -15,16 +18,16 @@ import (
 
 type ProviderVK struct {
 	config *Configuration
-	public *url.URL
+	reg    dependencies
 }
 
 func NewProviderVK(
 	config *Configuration,
-	public *url.URL,
+	reg dependencies,
 ) *ProviderVK {
 	return &ProviderVK{
 		config: config,
-		public: public,
+		reg:    reg,
 	}
 }
 
@@ -32,7 +35,7 @@ func (g *ProviderVK) Config() *Configuration {
 	return g.config
 }
 
-func (g *ProviderVK) oauth2() *oauth2.Config {
+func (g *ProviderVK) oauth2(ctx context.Context) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     g.config.ClientID,
 		ClientSecret: g.config.ClientSecret,
@@ -41,7 +44,7 @@ func (g *ProviderVK) oauth2() *oauth2.Config {
 			TokenURL: "https://oauth.vk.com/access_token",
 		},
 		Scopes:      g.config.Scope,
-		RedirectURL: g.config.Redir(g.public),
+		RedirectURL: g.config.Redir(g.reg.Config(ctx).OIDCRedirectURIBase()),
 	}
 }
 
@@ -50,24 +53,18 @@ func (g *ProviderVK) AuthCodeURLOptions(r ider) []oauth2.AuthCodeOption {
 }
 
 func (g *ProviderVK) OAuth2(ctx context.Context) (*oauth2.Config, error) {
-	return g.oauth2(), nil
+	return g.oauth2(ctx), nil
 }
 
-func (g *ProviderVK) Claims(ctx context.Context, exchange *oauth2.Token) (*Claims, error) {
+func (g *ProviderVK) Claims(ctx context.Context, exchange *oauth2.Token, query url.Values) (*Claims, error) {
 
 	o, err := g.OAuth2(ctx)
 	if err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 
-	client := o.Client(ctx, exchange)
-
-	u, err := url.Parse("https://api.vk.com/method/users.get?fields=photo_200,nickname,bdate,sex&access_token=" + exchange.AccessToken + "&v=5.103")
-	if err != nil {
-		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
-	}
-
-	req, err := http.NewRequest("GET", u.String(), nil)
+	client := g.reg.HTTPClient(ctx, httpx.ResilientClientWithClient(o.Client(ctx, exchange)))
+	req, err := retryablehttp.NewRequest("GET", "https://api.vk.com/method/users.get?fields=photo_200,nickname,bdate,sex&access_token="+exchange.AccessToken+"&v=5.103", nil)
 	if err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
@@ -112,7 +109,7 @@ func (g *ProviderVK) Claims(ctx context.Context, exchange *oauth2.Token) (*Claim
 	}
 
 	return &Claims{
-		Issuer:     u.String(),
+		Issuer:     "https://api.vk.com/method/users.get",
 		Subject:    strconv.Itoa(user.Id),
 		GivenName:  user.FirstName,
 		FamilyName: user.LastName,

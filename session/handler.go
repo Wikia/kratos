@@ -2,7 +2,10 @@ package session
 
 import (
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/ory/x/pointerx"
 
 	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
@@ -46,44 +49,60 @@ func NewHandler(
 }
 
 const (
-	RouteCollection         = "/sessions"
-	RouteWhoami             = RouteCollection + "/whoami"
-	RouteSessionRefresh     = RouteCollection + "/refresh"
-	RouteSessionRefreshId   = RouteSessionRefresh + "/:id"
-	RouteIdentity           = "/identities"
-	RouteIdentityManagement = RouteIdentity + "/:id/sessions"
-	RouteIdentitySession    = RouteIdentity + "/:id/session"
+	RouteCollection = "/sessions"
+	RouteWhoami     = RouteCollection + "/whoami"
+	RouteSession    = RouteCollection + "/:id"
+)
+
+const (
+	AdminRouteIdentity           = "/identities"
+	AdminRouteIdentitiesSession = AdminRouteIdentity + "/:id/session"
+	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/:id/sessions"
+	AdminRouteSessionExtend      = RouteCollection + "/extend"
+	AdminRouteSessionExtendId    = RouteSession + "/extend"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
-	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
-		http.MethodDelete} {
+	admin.GET(AdminRouteIdentitiesSessions, h.adminListIdentitySessions)
+	admin.DELETE(AdminRouteIdentitiesSessions, h.adminDeleteIdentitySessions)
+	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
+	admin.PATCH(AdminRouteSessionExtend, h.adminCurrentSessionExtend)
+	admin.PATCH(AdminRouteIdentitiesSession, h.session)
+
+	admin.DELETE(RouteCollection, x.RedirectToPublicRoute(h.r))
+	admin.DELETE(RouteSession, x.RedirectToPublicRoute(h.r))
+	admin.GET(RouteCollection, x.RedirectToPublicRoute(h.r))
+
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut} {
 		// Redirect to public endpoint
 		admin.Handle(m, RouteWhoami, x.RedirectToPublicRoute(h.r))
 	}
-	admin.DELETE(RouteIdentityManagement, h.deleteIdentitySessions)
-	admin.PATCH(RouteSessionRefresh, h.adminCurrentSessionRefresh)
-	admin.PATCH(RouteSessionRefreshId, h.adminSessionRefresh)
-	admin.GET(RouteIdentitySession, h.session)
 }
 
 func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	// We need to completely ignore the whoami/logout path so that we do not accidentally set
 	// some cookie.
 	h.r.CSRFHandler().IgnorePath(RouteWhoami)
-	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/sessions")
+	h.r.CSRFHandler().IgnorePath(RouteCollection)
+	h.r.CSRFHandler().IgnoreGlob(RouteCollection + "/*")
+	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/sessions")
 	h.r.CSRFHandler().IgnoreGlob(RouteIdentity + "/*/session")
 
-	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
-		http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
+	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
-		public.Handle(m, RouteIdentityManagement, x.RedirectToAdminRoute(h.r))
-		public.Handle(m, RouteIdentitySession, x.RedirectToAdminRoute(h.r))
+		public.Handle(m, AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
+		public.Handle(m, AdminRouteIdentitiesSession, x.RedirectToAdminRoute(h.r))
 	}
+
+	public.DELETE(RouteCollection, h.revokeSessions)
+	public.DELETE(RouteSession, h.revokeSession)
+	public.GET(RouteCollection, h.listSessions)
+
+	public.DELETE(AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
 }
 
 // nolint:deadcode,unused
-// swagger:parameters toSession
+// swagger:parameters toSession revokeSessions listSessions
 type toSession struct {
 	// Set the Session Token when calling from non-browser clients. A session token has a format of `MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj`.
 	//
@@ -106,7 +125,8 @@ type toSession struct {
 //
 // Uses the HTTP Headers in the GET request to determine (e.g. by using checking the cookies) who is authenticated.
 // Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
-// Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
+// Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header
+// in the response.
 //
 // It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 // By default session refresh on this endpoint is disabled.
@@ -220,7 +240,7 @@ type adminDeleteIdentitySessions struct {
 	ID string `json:"id"`
 }
 
-// swagger:route DELETE /identities/{id}/sessions v0alpha2 adminDeleteIdentitySessions
+// swagger:route DELETE /admin/identities/{id}/sessions v0alpha2 adminDeleteIdentitySessions
 //
 // Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 //
@@ -239,7 +259,7 @@ type adminDeleteIdentitySessions struct {
 //       401: jsonError
 //       404: jsonError
 //       500: jsonError
-func (h *Handler) deleteIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (h *Handler) adminDeleteIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	iID, err := uuid.FromString(ps.ByName("id"))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
@@ -251,6 +271,211 @@ func (h *Handler) deleteIdentitySessions(w http.ResponseWriter, r *http.Request,
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// swagger:parameters adminListIdentitySessions
+// nolint:deadcode,unused
+type adminListIdentitySessions struct {
+	// Active is a boolean flag that filters out sessions based on the state. If no value is provided, all sessions are returned.
+	//
+	// required: false
+	// in: query
+	Active bool `json:"active"`
+
+	adminDeleteIdentitySessions
+	x.PaginationParams
+}
+
+// swagger:route GET /admin/identities/{id}/sessions v0alpha2 adminListIdentitySessions
+//
+// This endpoint returns all sessions that belong to the given Identity.
+//
+// This endpoint is useful for:
+//
+// - Listing all sessions that belong to an Identity in an administrative context.
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: sessionList
+//       400: jsonError
+//       401: jsonError
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) adminListIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	iID, err := uuid.FromString(ps.ByName("id"))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
+		return
+	}
+
+	activeRaw := r.URL.Query().Get("active")
+	activeBool, err := strconv.ParseBool(activeRaw)
+	if activeRaw != "" && err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError("could not parse parameter active"))
+		return
+	}
+
+	var active *bool
+	if activeRaw != "" {
+		active = &activeBool
+	}
+
+	page, perPage := x.ParsePagination(r)
+	sess, err := h.r.SessionPersister().ListSessionsByIdentity(r.Context(), iID, active, page, perPage, uuid.Nil)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, sess)
+}
+
+// swagger:model revokedSessions
+type revokeSessions struct {
+	// The number of sessions that were revoked.
+	Count int `json:"count"`
+}
+
+// swagger:route DELETE /sessions v0alpha2 revokeSessions
+//
+// Calling this endpoint invalidates all except the current session that belong to the logged-in user.
+// Session data are not deleted.
+//
+// This endpoint is useful for:
+//
+// - To forcefully logout the current user from all other devices and sessions
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       200: revokedSessions
+//       400: jsonError
+//       401: jsonError
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) revokeSessions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
+		return
+	}
+
+	n, err := h.r.SessionPersister().RevokeSessionsIdentityExcept(r.Context(), s.IdentityID, s.ID)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().WriteCode(w, r, http.StatusOK, &revokeSessions{Count: n})
+}
+
+// swagger:parameters revokeSession
+// nolint:deadcode,unused
+type revokeSession struct {
+	// ID is the session's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route DELETE /sessions/{id} v0alpha2 revokeSession
+//
+// Calling this endpoint invalidates the specified session. The current session cannot be revoked.
+// Session data are not deleted.
+//
+// This endpoint is useful for:
+//
+// - To forcefully logout the current user from another device or session
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       204: emptyResponse
+//       400: jsonError
+//       401: jsonError
+//       500: jsonError
+func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	sid := ps.ByName("id")
+	if sid == "whoami" {
+		// Special case where we actually want to handle the whomai endpoint.
+		h.whoami(w, r, ps)
+		return
+	}
+
+	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
+		return
+	}
+
+	sessionID, err := uuid.FromString(sid)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
+		return
+	}
+	if sessionID == s.ID {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError("cannot revoke current session").WithDebug("use the logout flow instead"))
+		return
+	}
+
+	if err := h.r.SessionPersister().RevokeSession(r.Context(), s.Identity.ID, sessionID); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().WriteCode(w, r, http.StatusNoContent, nil)
+}
+
+// swagger:parameters listSessions
+// nolint:deadcode,unused
+type listSessions struct {
+	x.PaginationParams
+}
+
+// swagger:model sessionList
+// nolint:deadcode,unused
+type sessionList []*Session
+
+// swagger:route GET /sessions v0alpha2 listSessions
+//
+// This endpoints returns all other active sessions that belong to the logged-in user.
+// The current session can be retrieved by calling the `/sessions/whoami` endpoint.
+//
+// This endpoint is useful for:
+//
+// - Displaying all other sessions that belong to the logged-in user
+//
+//     Schemes: http, https
+//
+//     Responses:
+//       200: sessionList
+//       400: jsonError
+//       401: jsonError
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
+		return
+	}
+
+	page, perPage := x.ParsePagination(r)
+	sess, err := h.r.SessionPersister().ListSessionsByIdentity(r.Context(), s.IdentityID, pointerx.Bool(true), page, perPage, s.ID)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, sess)
 }
 
 // fandom-start
@@ -294,7 +519,7 @@ type AdminIdentitySessionResponse struct {
 	Identity *identity.Identity `json:"identity"`
 }
 
-// swagger:route GET /identities/{id}/session v0alpha2 adminIdentitySession
+// swagger:route GET /admin/identities/{id}/session v0alpha2 adminIdentitySession
 //
 // Calling this endpoint issues a session for a given identity.
 //
@@ -347,47 +572,7 @@ type adminSessionRefresh struct {
 	ID string `json:"id"`
 }
 
-// swagger:route PATCH /sessions/refresh/{id} v0alpha2 adminSessionRefresh
-//
-// Calling this endpoint refreshes a given session.
-// If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
-//
-// This endpoint is useful for:
-//
-// - Session refresh
-//
-//     Schemes: http, https
-//
-//     Security:
-//       oryAccessToken:
-//
-//     Responses:
-//       200: session
-//       404: jsonError
-//       500: jsonError
-func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	iID, err := uuid.FromString(ps.ByName("id"))
-	if err != nil {
-		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID"))
-		return
-	}
-	s, err := h.r.SessionPersister().GetSession(r.Context(), iID)
-	if err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-	c := h.r.Config(r.Context())
-	if s.CanBeRefreshed(c) {
-		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
-			h.r.Writer().WriteError(w, r, err)
-			return
-		}
-	}
-
-	h.r.Writer().Write(w, r, s)
-}
-
-// swagger:route GET /sessions/refresh v0alpha2
+// swagger:route GET /admin/sessions/extend v0alpha2
 //
 // Calling this endpoint refreshes a current user session.
 // If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
@@ -405,7 +590,7 @@ func (h *Handler) adminSessionRefresh(w http.ResponseWriter, r *http.Request, ps
 //       200: successfulAdminIdentitySession
 //       404: jsonError
 //       500: jsonError
-func (h *Handler) adminCurrentSessionRefresh(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (h *Handler) adminCurrentSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
@@ -441,6 +626,57 @@ func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated http
 	}
 }
 
+// swagger:parameters adminExtendSession
+// nolint:deadcode,unused
+type adminExtendSession struct {
+	// ID is the session's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route PATCH /admin/sessions/{id}/extend v0alpha2 adminExtendSession
+//
+// Calling this endpoint extends the given session ID. If `session.earliest_possible_extend` is set it
+// will only extend the session after the specified time has passed.
+//
+// Retrieve the session ID from the `/sessions/whoami` endpoint / `toSession` SDK method.
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: session
+//       400: jsonError
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) adminSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	iID, err := uuid.FromString(ps.ByName("id"))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithError(err.Error()).WithDebug("could not parse UUID")))
+		return
+	}
+
+	s, err := h.r.SessionPersister().GetSession(r.Context(), iID)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	c := h.r.Config(r.Context())
+	if s.CanBeRefreshed(c) {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(c)); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+	}
+
+	h.r.Writer().Write(w, r, s)
+}
+
 func (h *Handler) IsNotAuthenticated(wrap httprouter.Handle, onAuthenticated httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 		if _, err := h.r.SessionManager().FetchFromRequest(r.Context(), r); err != nil {
@@ -463,7 +699,7 @@ func (h *Handler) IsNotAuthenticated(wrap httprouter.Handle, onAuthenticated htt
 
 func RedirectOnAuthenticated(d interface{ config.Provider }) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-		returnTo, err := x.SecureRedirectTo(r, d.Config(r.Context()).SelfServiceBrowserDefaultReturnTo(), x.SecureRedirectAllowSelfServiceURLs(d.Config(r.Context()).SelfPublicURL(r)))
+		returnTo, err := x.SecureRedirectTo(r, d.Config(r.Context()).SelfServiceBrowserDefaultReturnTo(), x.SecureRedirectAllowSelfServiceURLs(d.Config(r.Context()).SelfPublicURL()))
 		if err != nil {
 			http.Redirect(w, r, d.Config(r.Context()).SelfServiceBrowserDefaultReturnTo().String(), http.StatusFound)
 			return

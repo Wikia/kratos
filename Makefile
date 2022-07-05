@@ -16,7 +16,6 @@ GO_DEPENDENCIES = github.com/ory/go-acc \
 				  github.com/golang/mock/mockgen \
 				  github.com/go-swagger/go-swagger/cmd/swagger \
 				  golang.org/x/tools/cmd/goimports \
-				  github.com/mikefarah/yq \
 				  github.com/mattn/goveralls \
 				  github.com/cortesi/modd/cmd/modd
 
@@ -29,30 +28,37 @@ $(foreach dep, $(GO_DEPENDENCIES), $(eval $(call make-go-dependency, $(dep))))
 $(call make-lint-dependency)
 
 .bin/clidoc:
+		echo "deprecated usage, use docs/cli instead"
 		go build -o .bin/clidoc ./cmd/clidoc/.
 
-docs/cli: .bin/clidoc
-		clidoc .
+.PHONY: .bin/yq
+.bin/yq:
+		go build -o .bin/yq github.com/mikefarah/yq/v4
+
+.PHONY: docs/cli
+docs/cli:
+		go run ./cmd/clidoc/. .
+
+.PHONY: docs/api
+docs/api:
+		npx @redocly/openapi-cli preview-docs spec/api.json
+
+.PHONY: docs/swagger
+docs/swagger:
+		npx @redocly/openapi-cli preview-docs spec/swagger.json
 
 .bin/ory: Makefile
-		bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b .bin ory v0.1.0
+		bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b .bin ory v0.1.33
 		touch -a -m .bin/ory
 
 node_modules: package.json Makefile
 		npm ci
 
-docs/node_modules: docs/package.json
-		cd docs; npm ci
-
 .bin/golangci-lint: Makefile
-		bash <(curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh) -d -b .bin v1.28.3
+		bash <(curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh) -d -b .bin v1.44.2
 
 .bin/hydra: Makefile
-		bash <(curl https://raw.githubusercontent.com/ory/hydra/master/install.sh) -d -b .bin v1.9.0-alpha.1
-
-.PHONY: docs
-docs: docs/node_modules
-		cd docs; npm run build
+		bash <(curl https://raw.githubusercontent.com/ory/meta/master/install.sh) -d -b .bin hydra v1.11.0
 
 .PHONY: lint
 lint: .bin/golangci-lint
@@ -114,26 +120,25 @@ sdk: .bin/swagger .bin/ory node_modules
 
 .PHONY: quickstart
 quickstart:
-		docker pull oryd/kratos:latest-sqlite
+		docker pull oryd/kratos:latest
 		docker pull oryd/kratos-selfservice-ui-node:latest
 		docker-compose -f quickstart.yml -f quickstart-standalone.yml up --build --force-recreate
 
 .PHONY: quickstart-dev
 quickstart-dev:
-		docker build -f .docker/Dockerfile-build -t oryd/kratos:latest-sqlite .
+		docker build -f .docker/Dockerfile-build -t oryd/kratos:latest .
 		docker-compose -f quickstart.yml -f quickstart-standalone.yml -f quickstart-latest.yml $(QUICKSTART_OPTIONS) up --build --force-recreate
 
 # Formats the code
 .PHONY: format
-format: .bin/goimports docs/node_modules node_modules
+format: .bin/goimports node_modules
 		goimports -w -local github.com/ory .
-		cd docs; npm run format
 		npm run format
 
 # Build local docker image
 .PHONY: docker
 docker:
-		docker build -f .docker/Dockerfile-build --build-arg=COMMIT=$(VCS_REF) --build-arg=BUILD_DATE=$(BUILD_DATE) -t oryd/kratos:latest-sqlite .
+		DOCKER_BUILDKIT=1 docker build -f .docker/Dockerfile-build --build-arg=COMMIT=$(VCS_REF) --build-arg=BUILD_DATE=$(BUILD_DATE) -t oryd/kratos:latest .
 
 # Runs the documentation tests
 .PHONY: test-docs
@@ -151,19 +156,14 @@ test-e2e: node_modules test-resetdb
 .PHONY: migrations-sync
 migrations-sync: .bin/ory
 		ory dev pop migration sync persistence/sql/migrations/templates persistence/sql/migratest/testdata
-
-.PHONY: migrations-render
-migrations-render: .bin/ory
-		ory dev pop migration render persistence/sql/migrations/templates persistence/sql/migrations/sql
-
-.PHONY: migrations-render-replace
-migrations-render-replace: .bin/ory
-		ory dev pop migration render -r persistence/sql/migrations/templates persistence/sql/migrations/sql
-
-.PHONY: migratest-refresh
-migratest-refresh:
-		cd persistence/sql/migratest; UPDATE_SNAPSHOTS=true go test -p 1 -tags sqlite -short .
+		script/add-down-migrations.sh
 
 .PHONY: test-update-snapshots
 test-update-snapshots:
 		UPDATE_SNAPSHOTS=true go test -p 4 -tags sqlite -short ./...
+
+.PHONY: post-release
+post-release: .bin/yq
+		cat quickstart.yml | yq '.services.kratos.image = "oryd/kratos:'$$DOCKER_TAG'"' | sponge quickstart.yml
+		cat quickstart.yml | yq '.services.kratos-migrate.image = "oryd/kratos:'$$DOCKER_TAG'"' | sponge quickstart.yml
+		cat quickstart.yml | yq '.services.kratos-selfservice-ui-node.image = "oryd/kratos-selfservice-ui-node:'$$DOCKER_TAG'"' | sponge quickstart.yml

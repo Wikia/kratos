@@ -3,33 +3,27 @@ package password
 import (
 	"bufio"
 	"context"
+	stderrs "errors"
+
 	/* #nosec G505 sha1 is used for k-anonymity */
 	"crypto/sha1"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ory/kratos/x"
-
+	"github.com/arbovm/levenshtein"
 	"github.com/dgraph-io/ristretto"
 	"github.com/hashicorp/go-retryablehttp"
-
-	"github.com/ory/kratos/driver/config"
-
-	"github.com/arbovm/levenshtein"
-
-	"github.com/ory/x/httpx"
-
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
-	"github.com/ory/x/stringsx"
+	"github.com/ory/kratos/driver/config"
+	"github.com/ory/x/httpx"
 )
 
-const hashCacheItemTTL = time.Minute
+const hashCacheItemTTL = time.Hour
 
 // Validator implements a validation strategy for passwords. One example is that the password
 // has to have at least 6 characters and at least one lower and one uppercase password.
@@ -44,9 +38,12 @@ type ValidationProvider interface {
 	PasswordValidator() Validator
 }
 
-var _ Validator = new(DefaultPasswordValidator)
-var ErrNetworkFailure = errors.New("unable to check if password has been leaked because an unexpected network error occurred")
-var ErrUnexpectedStatusCode = errors.New("unexpected status code")
+var (
+	_                       Validator = new(DefaultPasswordValidator)
+	ErrNetworkFailure                 = stderrs.New("unable to check if password has been leaked because an unexpected network error occurred")
+	ErrUnexpectedStatusCode           = stderrs.New("unexpected status code")
+	ErrTooManyBreaches                = stderrs.New("the password has been found in data breaches and must no longer be used")
+)
 
 // DefaultPasswordValidator implements Validator. It is based on best
 // practices as defined in the following blog posts:
@@ -68,24 +65,24 @@ type DefaultPasswordValidator struct {
 
 type validatorDependencies interface {
 	config.Provider
-	x.LoggingProvider
 }
 
-func NewDefaultPasswordValidatorStrategy(reg validatorDependencies) *DefaultPasswordValidator {
+func NewDefaultPasswordValidatorStrategy(reg validatorDependencies) (*DefaultPasswordValidator, error) {
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 10 * 10000,
-		MaxCost:     60 * 10000, // BCrypt hash size is 60 bytes
-		BufferItems: 64,
+		NumCounters:        10 * 10000,
+		MaxCost:            60 * 10000, // BCrypt hash size is 60 bytes
+		BufferItems:        64,
+		IgnoreInternalCost: true,
 	})
 	// sanity check - this should never happen unless above configuration variables are invalid
 	if err != nil {
-		panic(err)
+		return nil, errors.Wrap(err, "error while setting up validator cache")
 	}
 	return &DefaultPasswordValidator{
 		Client:                    httpx.NewResilientClient(httpx.ResilientClientWithConnectionTimeout(time.Second)),
 		reg:                       reg,
 		hashes:                    cache,
-		minIdentifierPasswordDist: 5, maxIdentifierPasswordSubstrThreshold: 0.5}
+		minIdentifierPasswordDist: 5, maxIdentifierPasswordSubstrThreshold: 0.5}, nil
 }
 
 func b20(src []byte) string {
@@ -114,68 +111,67 @@ func lcsLength(a, b string) int {
 	return greatestLength
 }
 
-func (s *DefaultPasswordValidator) fetch(hpw []byte, apiDNSName string) error {
+func (s *DefaultPasswordValidator) fetch(hpw []byte, apiDNSName string) (int64, error) {
 	prefix := fmt.Sprintf("%X", hpw)[0:5]
 	loc := fmt.Sprintf("https://%s/range/%s", apiDNSName, prefix)
 	res, err := s.Client.Get(loc)
 	if err != nil {
-		s.reg.Logger().WithError(err).Error("Network failure occurred")
-		return errors.Wrapf(ErrNetworkFailure, "%s", err)
+		return 0, errors.Wrapf(ErrNetworkFailure, "%s", err)
 	}
-
-	defer func(Body io.ReadCloser) {
-		if closeErr := Body.Close(); closeErr != nil {
-			// fandom-start
-			s.reg.Logger().WithError(closeErr).Error("validator fetch could not close the response")
-			// fandom-end
-		}
-	}(res.Body)
+	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return errors.Wrapf(ErrUnexpectedStatusCode, "%d", res.StatusCode)
+		return 0, errors.Wrapf(ErrUnexpectedStatusCode, "%d", res.StatusCode)
 	}
 
-	s.hashes.SetWithTTL(b20(hpw), int64(0), 1, hashCacheItemTTL)
-	s.hashes.Wait()
+	var thisCount int64
 
 	sc := bufio.NewScanner(res.Body)
 	for sc.Scan() {
 		row := sc.Text()
-		result := stringsx.Splitx(strings.TrimSpace(row), ":")
+		result := strings.Split(strings.TrimSpace(row), ":")
 
-		if len(result) != 2 {
-			return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Expected password hash from remote to contain two parts separated by a double dot but got: %v (%s)", result, row))
-		}
-
-		count, err := strconv.ParseInt(result[1], 10, 64)
-		if err != nil {
-			return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Expected password hash to contain a count formatted as int but got: %s", result[1]))
+		// We assume a count of 1. HIBP API sometimes responds without the
+		// colon, so we just assume that the leak count is one.
+		//
+		// See https://github.com/ory/kratos/issues/2145
+		count := int64(1)
+		if len(result) == 2 {
+			count, err = strconv.ParseInt(result[1], 10, 64)
+			if err != nil {
+				return 0, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Expected password hash to contain a count formatted as int but got: %s", result[1]))
+			}
 		}
 
 		s.hashes.SetWithTTL(prefix+result[0], count, 1, hashCacheItemTTL)
-		s.hashes.Wait()
+		if prefix+result[0] == b20(hpw) {
+			thisCount = count
+		}
 	}
 
 	if err := sc.Err(); err != nil {
-		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to initialize string scanner: %s", err))
+		return 0, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to initialize string scanner: %s", err))
 	}
 
-	return nil
+	s.hashes.SetWithTTL(b20(hpw), thisCount, 1, hashCacheItemTTL)
+	return thisCount, nil
 }
 
 func (s *DefaultPasswordValidator) Validate(ctx context.Context, identifier, password string) error {
-	if len(password) < 6 {
-		return errors.Errorf("password length must be at least 6 characters but only got %d", len(password))
-	}
-
-	compIdentifier, compPassword := strings.ToLower(identifier), strings.ToLower(password)
-	dist := levenshtein.Distance(compIdentifier, compPassword)
-	lcs := float32(lcsLength(compIdentifier, compPassword)) / float32(len(compPassword))
-	if dist < s.minIdentifierPasswordDist || lcs > s.maxIdentifierPasswordSubstrThreshold {
-		return errors.Errorf("the password is too similar to the user identifier")
-	}
-
 	passwordPolicyConfig := s.reg.Config(ctx).PasswordPolicyConfig()
+
+	if len(password) < int(passwordPolicyConfig.MinPasswordLength) {
+		return errors.Errorf("password length must be at least %d characters but only got %d", passwordPolicyConfig.MinPasswordLength, len(password))
+	}
+
+	if passwordPolicyConfig.IdentifierSimilarityCheckEnabled && len(identifier) > 0 {
+		compIdentifier, compPassword := strings.ToLower(identifier), strings.ToLower(password)
+		dist := levenshtein.Distance(compIdentifier, compPassword)
+		lcs := float32(lcsLength(compIdentifier, compPassword)) / float32(len(compPassword))
+		if dist < s.minIdentifierPasswordDist || lcs > s.maxIdentifierPasswordSubstrThreshold {
+			return errors.Errorf("the password is too similar to the user identifier")
+		}
+	}
 
 	if !passwordPolicyConfig.HaveIBeenPwnedEnabled {
 		return nil
@@ -190,20 +186,18 @@ func (s *DefaultPasswordValidator) Validate(ctx context.Context, identifier, pas
 
 	c, ok := s.hashes.Get(b20(hpw))
 	if !ok {
-		err := s.fetch(hpw, passwordPolicyConfig.HaveIBeenPwnedHost)
+		var err error
+		c, err = s.fetch(hpw, passwordPolicyConfig.HaveIBeenPwnedHost)
 		if (errors.Is(err, ErrNetworkFailure) || errors.Is(err, ErrUnexpectedStatusCode)) && passwordPolicyConfig.IgnoreNetworkErrors {
-
 			return nil
 		} else if err != nil {
 			return err
 		}
-
-		return s.Validate(ctx, identifier, password)
 	}
 
 	v, ok := c.(int64)
 	if ok && v > int64(s.reg.Config(ctx).PasswordPolicyConfig().MaxBreaches) {
-		return errors.New("the password has been found in data breaches and must no longer be used")
+		return errors.WithStack(ErrTooManyBreaches)
 	}
 
 	return nil

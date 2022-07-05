@@ -3,12 +3,11 @@ package x
 import (
 	"context"
 
-	"github.com/ory/x/tracing"
-
 	"github.com/gorilla/sessions"
 
 	"github.com/ory/herodot"
 	"github.com/ory/x/logrusx"
+	"github.com/ory/x/otelx"
 )
 
 type LoggingProvider interface {
@@ -21,12 +20,12 @@ type WriterProvider interface {
 }
 
 type CookieProvider interface {
-	CookieManager(ctx context.Context) sessions.Store
-	ContinuityCookieManager(ctx context.Context) sessions.Store
+	CookieManager(ctx context.Context) sessions.StoreExact
+	ContinuityCookieManager(ctx context.Context) sessions.StoreExact
 }
 
 type TracingProvider interface {
-	Tracer(ctx context.Context) *tracing.Tracer
+	Tracer(ctx context.Context) *otelx.Tracer
 }
 
 type SimpleLogger struct {

@@ -3,8 +3,8 @@ package driver
 import (
 	"context"
 
+	"github.com/ory/x/otelx"
 	prometheus "github.com/ory/x/prometheusx"
-	"github.com/ory/x/tracing"
 
 	"github.com/gorilla/sessions"
 	"github.com/pkg/errors"
@@ -50,23 +50,25 @@ type Registry interface {
 	WithCSRFHandler(c nosurf.Handler)
 	WithCSRFTokenGenerator(cg x.CSRFToken)
 
-	HealthHandler(ctx context.Context) *healthx.Handler
-	CookieManager(ctx context.Context) sessions.Store
 	MetricsHandler() *prometheus.Handler
-	ContinuityCookieManager(ctx context.Context) sessions.Store
+	HealthHandler(ctx context.Context) *healthx.Handler
+	CookieManager(ctx context.Context) sessions.StoreExact
+	ContinuityCookieManager(ctx context.Context) sessions.StoreExact
 
 	RegisterRoutes(ctx context.Context, public *x.RouterPublic, admin *x.RouterAdmin)
 	RegisterPublicRoutes(ctx context.Context, public *x.RouterPublic)
 	RegisterAdminRoutes(ctx context.Context, admin *x.RouterAdmin)
 	PrometheusManager() *prometheus.MetricsManager
-	Tracer(context.Context) *tracing.Tracer
+	Tracer(context.Context) *otelx.Tracer
 
 	config.Provider
+	CourierConfig(ctx context.Context) config.CourierConfigs
 	WithConfig(c *config.Config) Registry
 
 	x.CSRFProvider
 	x.WriterProvider
 	x.LoggingProvider
+	x.HTTPClientProvider
 
 	continuity.ManagementProvider
 	continuity.PersistenceProvider

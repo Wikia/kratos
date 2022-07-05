@@ -4,12 +4,6 @@ import (
 	"github.com/ory/kratos/ui/container"
 )
 
-// CredentialsConfig is the struct that is being used as part of the identity credentials.
-type CredentialsConfig struct {
-	// HashedPassword is a hash-representation of the password.
-	HashedPassword string `json:"hashed_password"`
-}
-
 // submitSelfServiceLoginFlowWithPasswordMethodBody is used to decode the login form payload.
 //
 // swagger:model submitSelfServiceLoginFlowWithPasswordMethodBody
@@ -28,9 +22,13 @@ type submitSelfServiceLoginFlowWithPasswordMethodBody struct {
 	Password string `json:"password"`
 
 	// Identifier is the email or username of the user trying to log in.
+	// This field is deprecated!
+	LegacyIdentifier string `json:"password_identifier"`
+
+	// Identifier is the email or username of the user trying to log in.
 	//
 	// required: true
-	Identifier string `json:"password_identifier"`
+	Identifier string `json:"identifier"`
 }
 
 // FlowMethod contains the configuration for this selfservice strategy.

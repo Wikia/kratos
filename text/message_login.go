@@ -5,30 +5,6 @@ import (
 	"time"
 )
 
-const (
-	InfoSelfServiceLoginRoot      ID = 1010000 + iota // 1010000
-	InfoSelfServiceLogin                              // 1010001
-	InfoSelfServiceLoginWith                          // 1010002
-	InfoSelfServiceLoginReAuth                        // 1010003
-	InfoSelfServiceLoginMFA                           // 1010004
-	InfoSelfServiceLoginVerify                        // 1010005
-	InfoSelfServiceLoginTOTPLabel                     // 1010006
-	InfoLoginLookupLabel                              // 1010007
-	InfoSelfServiceLoginWebAuthn                      // 1010008
-	InfoLoginTOTP                                     // 1010009
-	InfoLoginLookup                                   // 1010010
-)
-
-const (
-	ErrorValidationLogin                       ID = 4010000 + iota // 4010000
-	ErrorValidationLoginFlowExpired                                // 4010001
-	ErrorValidationLoginNoStrategyFound                            // 4010002
-	ErrorValidationRegistrationNoStrategyFound                     // 4010003
-	ErrorValidationSettingsNoStrategyFound                         // 4010004
-	ErrorValidationRecoveryNoStrategyFound                         // 4010005
-	ErrorValidationVerificationNoStrategyFound                     // 4010006
-)
-
 func NewInfoLoginReAuth() *Message {
 	return &Message{
 		ID:      InfoSelfServiceLoginReAuth,
@@ -43,6 +19,15 @@ func NewInfoLoginMFA() *Message {
 		ID:      InfoSelfServiceLoginMFA,
 		Type:    Info,
 		Text:    "Please complete the second authentication challenge.",
+		Context: context(nil),
+	}
+}
+
+func NewInfoLoginWebAuthnPasswordless() *Message {
+	return &Message{
+		ID:      InfoSelfServiceLoginWebAuthnPasswordless,
+		Type:    Info,
+		Text:    "Prepare your WebAuthn device (e.g. security key, biometrics scanner, ...) and press continue.",
 		Context: context(nil),
 	}
 }
@@ -69,6 +54,15 @@ func NewInfoLogin() *Message {
 	return &Message{
 		ID:      InfoSelfServiceLogin,
 		Text:    "Sign in",
+		Type:    Info,
+		Context: context(map[string]interface{}{}),
+	}
+}
+
+func NewInfoLoginPasswordlessWebAuthn() *Message {
+	return &Message{
+		ID:      InfoSelfServiceLogin,
+		Text:    "Sign in with security key",
 		Type:    Info,
 		Context: context(map[string]interface{}{}),
 	}
@@ -167,6 +161,22 @@ func NewInfoSelfServiceLoginWebAuthn() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginWebAuthn,
 		Text: "Use security key",
+		Type: Info,
+	}
+}
+
+func NewInfoSelfServiceContinueLoginWebAuthn() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginContinueWebAuthn,
+		Text: "Continue with security key",
+		Type: Info,
+	}
+}
+
+func NewInfoSelfServiceLoginContinue() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginContinue,
+		Text: "Continue",
 		Type: Info,
 	}
 }

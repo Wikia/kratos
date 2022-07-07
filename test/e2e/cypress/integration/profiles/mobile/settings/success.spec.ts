@@ -22,6 +22,11 @@ context('Mobile Profile', () => {
 
       beforeEach(() => {
         cy.loginMobile({ email, password })
+        // In our case we enabled setCookies for API request to support mobile webview
+        // Therefore, after login to make test consistent with upstream we need to clear
+        // cookies.
+        // @see - PLATFORM-6395
+        cy.clearAllCookies()
         cy.visit(MOBILE_URL + '/Settings')
       })
 

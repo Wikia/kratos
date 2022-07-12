@@ -38,9 +38,9 @@ type DefaultApi interface {
 
 	/*
 	 * V0alpha2Execute executes the request
-	 * @return SuccessfulAdminIdentitySession
+	 * @return Session
 	 */
-	V0alpha2Execute(r DefaultApiApiV0alpha2Request) (*SuccessfulAdminIdentitySession, *http.Response, error)
+	V0alpha2Execute(r DefaultApiApiV0alpha2Request) (*Session, *http.Response, error)
 }
 
 // DefaultApiService DefaultApi service
@@ -51,7 +51,7 @@ type DefaultApiApiV0alpha2Request struct {
 	ApiService DefaultApi
 }
 
-func (r DefaultApiApiV0alpha2Request) Execute() (*SuccessfulAdminIdentitySession, *http.Response, error) {
+func (r DefaultApiApiV0alpha2Request) Execute() (*Session, *http.Response, error) {
 	return r.ApiService.V0alpha2Execute(r)
 }
 
@@ -72,16 +72,16 @@ func (a *DefaultApiService) V0alpha2(ctx context.Context) DefaultApiApiV0alpha2R
 
 /*
  * Execute executes the request
- * @return SuccessfulAdminIdentitySession
+ * @return Session
  */
-func (a *DefaultApiService) V0alpha2Execute(r DefaultApiApiV0alpha2Request) (*SuccessfulAdminIdentitySession, *http.Response, error) {
+func (a *DefaultApiService) V0alpha2Execute(r DefaultApiApiV0alpha2Request) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodGet
 		localVarPostBody     interface{}
 		localVarFormFileName string
 		localVarFileName     string
 		localVarFileBytes    []byte
-		localVarReturnValue  *SuccessfulAdminIdentitySession
+		localVarReturnValue  *Session
 	)
 
 	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "DefaultApiService.V0alpha2")
@@ -89,7 +89,7 @@ func (a *DefaultApiService) V0alpha2Execute(r DefaultApiApiV0alpha2Request) (*Su
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/sessions/refresh"
+	localVarPath := localBasePath + "/admin/token/extend"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}

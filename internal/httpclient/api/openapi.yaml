@@ -129,36 +129,6 @@ paths:
       summary: Create an Identity
       tags:
       - v0alpha2
-  /identities/validate:
-    post:
-      description: |-
-        This endpoint validates traits against provided schema_id.
-        The full identity payload (except credentials) is expected. This endpoint does not support patching.
-
-        Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
-      operationId: AdminUpdateIdentityBody
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/identity'
-          description: is valid
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      summary: Validates provided traits and state
-      tags:
-      - v0alpha2
   /admin/identities/{id}:
     delete:
       description: |-
@@ -304,81 +274,6 @@ paths:
       security:
       - oryAccessToken: []
       summary: Update an Identity
-      tags:
-      - v0alpha2
-  /admin/identities/{id}/credentials:
-    put:
-      description: |-
-        Calling this endpoint updates the credentials according to the specification provided.
-
-        Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
-      operationId: adminUpdateCredentials
-      parameters:
-      - description: ID is the identity's ID.
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "204":
-          description: Empty responses are sent when, for example, resources are deleted.
-            The HTTP status code for empty responses is typically 201.
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      summary: Update Identity Credentials
-      tags:
-      - v0alpha2
-  /admin/identities/{id}/session:
-    get:
-      description: |-
-        This endpoint is useful for:
-
-        Issuing session or session token for a given identity without authenticating
-      operationId: adminIdentitySession
-      parameters:
-      - description: ID is the identity's ID.
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/successfulAdminIdentitySession'
-          description: successfulAdminIdentitySession
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      security:
-      - oryAccessToken: []
-      summary: Calling this endpoint issues a session for a given identity.
       tags:
       - v0alpha2
   /admin/identities/{id}/sessions:
@@ -603,6 +498,37 @@ paths:
         will only extend the session after the specified time has passed.
       tags:
       - v0alpha2
+  /admin/token/extend:
+    get:
+      description: |-
+        This endpoint is useful for:
+
+        Session refresh
+      operationId: v0alpha2
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/session'
+          description: session
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      security:
+      - oryAccessToken: []
+      summary: |-
+        Calling this endpoint refreshes a current user session.
+        If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
   /health/alive:
     get:
       description: |-
@@ -659,6 +585,71 @@ paths:
       summary: Check HTTP Server and Database Status
       tags:
       - metadata
+  /identities/validate:
+    post:
+      description: |-
+        This endpoint validates traits against provided schema_id.
+        The full identity payload (except credentials) is expected. This endpoint does not support patching.
+
+        Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+      operationId: AdminUpdateIdentityBody
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/identity'
+          description: is valid
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      summary: Validates provided traits and state
+      tags:
+      - v0alpha2
+  /identities/{id}/credentials:
+    put:
+      description: |-
+        Calling this endpoint updates the credentials according to the specification provided.
+
+        Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+      operationId: adminUpdateCredentials
+      parameters:
+      - description: ID is the identity's ID.
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Empty responses are sent when, for example, resources are deleted.
+            The HTTP status code for empty responses is typically 201.
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      summary: Update Identity Credentials
+      tags:
+      - v0alpha2
   /schemas:
     get:
       description: Get all Identity Schemas
@@ -2477,37 +2468,6 @@ paths:
       summary: Get Verification Flow
       tags:
       - v0alpha2
-  /admin/token/extend:
-    get:
-      description: |-
-        This endpoint is useful for:
-
-        Session refresh
-      operationId: v0alpha2
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/successfulAdminIdentitySession'
-          description: successfulAdminIdentitySession
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      security:
-      - oryAccessToken: []
-      summary: |-
-        Calling this endpoint refreshes a current user session.
-        If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
   /sessions:
     delete:
       description: |-
@@ -4974,130 +4934,6 @@ components:
       required:
       - email
       - method
-      type: object
-    successfulAdminIdentitySession:
-      example:
-        session_token: session_token
-        identity:
-          recovery_addresses:
-          - updated_at: 2000-01-23T04:56:07.000+00:00
-            created_at: 2000-01-23T04:56:07.000+00:00
-            id: id
-            value: value
-            via: via
-          - updated_at: 2000-01-23T04:56:07.000+00:00
-            created_at: 2000-01-23T04:56:07.000+00:00
-            id: id
-            value: value
-            via: via
-          traits: ""
-          updated_at: 2000-01-23T04:56:07.000+00:00
-          credentials:
-            key:
-              updated_at: 2000-01-23T04:56:07.000+00:00
-              identifiers:
-              - identifiers
-              - identifiers
-              created_at: 2000-01-23T04:56:07.000+00:00
-              config: '{}'
-          verifiable_addresses:
-          - updated_at: 2014-01-01T23:28:56.782Z
-            verified_at: 2000-01-23T04:56:07.000+00:00
-            verified: true
-            created_at: 2014-01-01T23:28:56.782Z
-            id: id
-            value: value
-            status: status
-            via: via
-          - updated_at: 2014-01-01T23:28:56.782Z
-            verified_at: 2000-01-23T04:56:07.000+00:00
-            verified: true
-            created_at: 2014-01-01T23:28:56.782Z
-            id: id
-            value: value
-            status: status
-            via: via
-          schema_id: schema_id
-          state_changed_at: 2000-01-23T04:56:07.000+00:00
-          created_at: 2000-01-23T04:56:07.000+00:00
-          schema_url: schema_url
-          id: id
-        session:
-          expires_at: 2000-01-23T04:56:07.000+00:00
-          authentication_methods:
-          - completed_at: 2000-01-23T04:56:07.000+00:00
-            method: link_recovery
-          - completed_at: 2000-01-23T04:56:07.000+00:00
-            method: link_recovery
-          identity:
-            recovery_addresses:
-            - updated_at: 2000-01-23T04:56:07.000+00:00
-              created_at: 2000-01-23T04:56:07.000+00:00
-              id: id
-              value: value
-              via: via
-            - updated_at: 2000-01-23T04:56:07.000+00:00
-              created_at: 2000-01-23T04:56:07.000+00:00
-              id: id
-              value: value
-              via: via
-            traits: ""
-            updated_at: 2000-01-23T04:56:07.000+00:00
-            credentials:
-              key:
-                updated_at: 2000-01-23T04:56:07.000+00:00
-                identifiers:
-                - identifiers
-                - identifiers
-                created_at: 2000-01-23T04:56:07.000+00:00
-                config: '{}'
-            verifiable_addresses:
-            - updated_at: 2014-01-01T23:28:56.782Z
-              verified_at: 2000-01-23T04:56:07.000+00:00
-              verified: true
-              created_at: 2014-01-01T23:28:56.782Z
-              id: id
-              value: value
-              status: status
-              via: via
-            - updated_at: 2014-01-01T23:28:56.782Z
-              verified_at: 2000-01-23T04:56:07.000+00:00
-              verified: true
-              created_at: 2014-01-01T23:28:56.782Z
-              id: id
-              value: value
-              status: status
-              via: via
-            schema_id: schema_id
-            state_changed_at: 2000-01-23T04:56:07.000+00:00
-            created_at: 2000-01-23T04:56:07.000+00:00
-            schema_url: schema_url
-            id: id
-          authenticated_at: 2000-01-23T04:56:07.000+00:00
-          active: true
-          id: id
-          issued_at: 2000-01-23T04:56:07.000+00:00
-      properties:
-        identity:
-          $ref: '#/components/schemas/identity'
-        session:
-          $ref: '#/components/schemas/session'
-        session_token:
-          description: |-
-            The Session Token
-
-            This field is only set when the session hook is configured as a post-registration hook.
-
-            A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
-            Header:
-
-            Authorization: bearer ${session-token}
-
-            The session token is only issued for API flows, not for Browser flows!
-          type: string
-      required:
-      - identity
-      - session
       type: object
     successfulSelfServiceLoginWithoutBrowser:
       description: The Response for Login Flows via API

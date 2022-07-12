@@ -83,7 +83,7 @@ All URIs are relative to *http://localhost*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
-*DefaultApi* | [**V0alpha2**](docs/DefaultApi.md#v0alpha2) | **Get** /sessions/refresh | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
+*DefaultApi* | [**V0alpha2**](docs/DefaultApi.md#v0alpha2) | **Get** /admin/token/extend | Calling this endpoint refreshes a current user session. If &#x60;session.refresh_min_time_left&#x60; is set it will only refresh the session after this time has passed.
 *MetadataApi* | [**GetVersion**](docs/MetadataApi.md#getversion) | **Get** /version | Return Running Software Version.
 *MetadataApi* | [**IsAlive**](docs/MetadataApi.md#isalive) | **Get** /health/alive | Check HTTP Server Status
 *MetadataApi* | [**IsReady**](docs/MetadataApi.md#isready) | **Get** /health/ready | Check HTTP Server and Database Status
@@ -95,6 +95,7 @@ Class | Method | HTTP request | Description
 *V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /admin/identities/{id} | Get an Identity
 *V0alpha2Api* | [**AdminListIdentities**](docs/V0alpha2Api.md#adminlistidentities) | **Get** /admin/identities | List Identities
 *V0alpha2Api* | [**AdminListIdentitySessions**](docs/V0alpha2Api.md#adminlistidentitysessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
+*V0alpha2Api* | [**AdminUpdateCredentials**](docs/V0alpha2Api.md#adminupdatecredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
 *V0alpha2Api* | [**AdminUpdateIdentity**](docs/V0alpha2Api.md#adminupdateidentity) | **Put** /admin/identities/{id} | Update an Identity
 *V0alpha2Api* | [**AdminUpdateIdentityBody**](docs/V0alpha2Api.md#adminupdateidentitybody) | **Post** /identities/validate | Validates provided traits and state
 *V0alpha2Api* | [**CreateSelfServiceLogoutFlowUrlForBrowsers**](docs/V0alpha2Api.md#createselfservicelogoutflowurlforbrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
@@ -202,7 +203,6 @@ Class | Method | HTTP request | Description
  - [SubmitSelfServiceSettingsFlowWithWebAuthnMethodBody](docs/SubmitSelfServiceSettingsFlowWithWebAuthnMethodBody.md)
  - [SubmitSelfServiceVerificationFlowBody](docs/SubmitSelfServiceVerificationFlowBody.md)
  - [SubmitSelfServiceVerificationFlowWithLinkMethodBody](docs/SubmitSelfServiceVerificationFlowWithLinkMethodBody.md)
- - [SuccessfulAdminIdentitySession](docs/SuccessfulAdminIdentitySession.md)
  - [SuccessfulSelfServiceLoginWithoutBrowser](docs/SuccessfulSelfServiceLoginWithoutBrowser.md)
  - [SuccessfulSelfServiceRegistrationWithoutBrowser](docs/SuccessfulSelfServiceRegistrationWithoutBrowser.md)
  - [UiContainer](docs/UiContainer.md)

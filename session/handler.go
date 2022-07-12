@@ -3,7 +3,6 @@ package session
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/ory/x/pointerx"
 
@@ -56,7 +55,6 @@ const (
 
 const (
 	AdminRouteIdentity           = "/identities"
-	AdminRouteIdentitiesSession  = AdminRouteIdentity + "/:id/session"
 	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/:id/sessions"
 	AdminRouteSessionExtend      = "/token/extend"
 	AdminRouteSessionExtendId    = RouteSession + "/extend"
@@ -67,7 +65,6 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(AdminRouteIdentitiesSessions, h.adminDeleteIdentitySessions)
 	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
 	admin.PATCH(AdminRouteSessionExtend, h.adminCurrentSessionExtend)
-	admin.GET(AdminRouteIdentitiesSession, h.session)
 
 	admin.DELETE(RouteCollection, x.RedirectToPublicRoute(h.r))
 	admin.DELETE(RouteSession, x.RedirectToPublicRoute(h.r))
@@ -86,12 +83,10 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	h.r.CSRFHandler().IgnorePath(RouteCollection)
 	h.r.CSRFHandler().IgnoreGlob(RouteCollection + "/*")
 	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/sessions")
-	h.r.CSRFHandler().IgnoreGlob(AdminRouteIdentity + "/*/session")
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
 		public.Handle(m, AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
-		public.Handle(m, AdminRouteIdentitiesSession, x.RedirectToAdminRoute(h.r))
 	}
 
 	public.DELETE(RouteCollection, h.revokeSessions)
@@ -482,88 +477,6 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request, _ httprou
 }
 
 // fandom-start
-// swagger:parameters adminIdentitySession
-// nolint:deadcode,unused
-type adminIdentitySession struct {
-	// ID is the identity's ID.
-	//
-	// required: true
-	// in: path
-	ID string `json:"id"`
-}
-
-// swagger:model successfulAdminIdentitySession
-// nolint:deadcode,unused
-type AdminIdentitySessionResponse struct {
-	// The Session Token
-	//
-	// This field is only set when the session hook is configured as a post-registration hook.
-	//
-	// A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
-	// Header:
-	//
-	// 		Authorization: bearer ${session-token}
-	//
-	// The session token is only issued for API flows, not for Browser flows!
-	Token string `json:"session_token"`
-
-	// Session
-	//
-	// The session contains information about the user, the session device, and so on.
-	//
-	// required: true
-	Session *Session `json:"session"`
-
-	// Identity
-	//
-	// The identity that just signed up.
-	//
-	// required: true
-	Identity *identity.Identity `json:"identity"`
-}
-
-// swagger:route GET /admin/identities/{id}/session v0alpha2 adminIdentitySession
-//
-// Calling this endpoint issues a session for a given identity.
-//
-// This endpoint is useful for:
-//
-// - Issuing session or session token for a given identity without authenticating
-//
-//     Schemes: http, https
-//
-//     Security:
-//       oryAccessToken:
-//
-//     Responses:
-//       200: successfulAdminIdentitySession
-//       404: jsonError
-//       500: jsonError
-func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")))
-	if err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-
-	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
-	if err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-
-	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-
-	if err := h.r.SessionManager().IssueCookieWithoutCSRF(r.Context(), w, r, s); err != nil {
-		h.r.Writer().WriteError(w, r, err)
-		return
-	}
-
-	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
-}
 
 // swagger:parameters adminSessionRefresh
 // nolint:deadcode,unused
@@ -575,7 +488,7 @@ type adminSessionRefresh struct {
 	ID string `json:"id"`
 }
 
-// swagger:route GET /admin/sessions/extend v0alpha2
+// swagger:route GET /admin/token/extend v0alpha2
 //
 // Calling this endpoint refreshes a current user session.
 // If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
@@ -590,7 +503,7 @@ type adminSessionRefresh struct {
 //       oryAccessToken:
 //
 //     Responses:
-//       200: successfulAdminIdentitySession
+//       200: session
 //       404: jsonError
 //       500: jsonError
 func (h *Handler) adminCurrentSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

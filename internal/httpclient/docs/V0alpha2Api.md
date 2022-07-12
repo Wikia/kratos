@@ -2,49 +2,50 @@
 
 All URIs are relative to *http://localhost*
 
-Method | HTTP request                               | Description
-------------- |--------------------------------------------| -------------
-[**AdminCreateIdentity**](V0alpha2Api.md#AdminCreateIdentity) | **Post** /admin/identities                 | Create an Identity
-[**AdminCreateSelfServiceRecoveryLink**](V0alpha2Api.md#AdminCreateSelfServiceRecoveryLink) | **Post** /admin/recovery/link              | Create a Recovery Link
-[**AdminDeleteIdentity**](V0alpha2Api.md#AdminDeleteIdentity) | **Delete** /admin/identities/{id}          | Delete an Identity
+Method | HTTP request | Description
+------------- | ------------- | -------------
+[**AdminCreateIdentity**](V0alpha2Api.md#AdminCreateIdentity) | **Post** /admin/identities | Create an Identity
+[**AdminCreateSelfServiceRecoveryLink**](V0alpha2Api.md#AdminCreateSelfServiceRecoveryLink) | **Post** /admin/recovery/link | Create a Recovery Link
+[**AdminDeleteIdentity**](V0alpha2Api.md#AdminDeleteIdentity) | **Delete** /admin/identities/{id} | Delete an Identity
 [**AdminDeleteIdentitySessions**](V0alpha2Api.md#AdminDeleteIdentitySessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
-[**AdminExtendSession**](V0alpha2Api.md#AdminExtendSession) | **Patch** /admin/sessions/{id}/extend      | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
-[**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id}             | Get an Identity
-[**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities                  | List Identities
-[**AdminListIdentitySessions**](V0alpha2Api.md#AdminListIdentitySessions) | **Get** /admin/identities/{id}/sessions    | This endpoint returns all sessions that belong to the given Identity.
-[**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /admin/identities/{id}             | Update an Identity
-[**AdminUpdateIdentityBody**](V0alpha2Api.md#AdminUpdateIdentityBody) | **Post** /admin/identities/validate        | Validates provided traits and state
-[**CreateSelfServiceLogoutFlowUrlForBrowsers**](V0alpha2Api.md#CreateSelfServiceLogoutFlowUrlForBrowsers) | **Get** /self-service/logout/browser       | Create a Logout URL for Browsers
-[**GetJsonSchema**](V0alpha2Api.md#GetJsonSchema) | **Get** /schemas/{id}                      | 
-[**GetSelfServiceError**](V0alpha2Api.md#GetSelfServiceError) | **Get** /self-service/errors               | Get Self-Service Errors
-[**GetSelfServiceLoginFlow**](V0alpha2Api.md#GetSelfServiceLoginFlow) | **Get** /self-service/login/flows          | Get Login Flow
-[**GetSelfServiceRecoveryFlow**](V0alpha2Api.md#GetSelfServiceRecoveryFlow) | **Get** /self-service/recovery/flows       | Get Recovery Flow
-[**GetSelfServiceRegistrationFlow**](V0alpha2Api.md#GetSelfServiceRegistrationFlow) | **Get** /self-service/registration/flows   | Get Registration Flow
-[**GetSelfServiceSettingsFlow**](V0alpha2Api.md#GetSelfServiceSettingsFlow) | **Get** /self-service/settings/flows       | Get Settings Flow
-[**GetSelfServiceVerificationFlow**](V0alpha2Api.md#GetSelfServiceVerificationFlow) | **Get** /self-service/verification/flows   | Get Verification Flow
-[**GetWebAuthnJavaScript**](V0alpha2Api.md#GetWebAuthnJavaScript) | **Get** /.well-known/ory/webauthn.js       | Get WebAuthn JavaScript
-[**InitializeSelfServiceLoginFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceLoginFlowForBrowsers) | **Get** /self-service/login/browser        | Initialize Login Flow for Browsers
-[**InitializeSelfServiceLoginFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceLoginFlowWithoutBrowser) | **Get** /self-service/login/api            | Initialize Login Flow for APIs, Services, Apps, ...
-[**InitializeSelfServiceRecoveryFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceRecoveryFlowForBrowsers) | **Get** /self-service/recovery/browser     | Initialize Recovery Flow for Browsers
-[**InitializeSelfServiceRecoveryFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceRecoveryFlowWithoutBrowser) | **Get** /self-service/recovery/api         | Initialize Recovery Flow for APIs, Services, Apps, ...
+[**AdminExtendSession**](V0alpha2Api.md#AdminExtendSession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
+[**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id} | Get an Identity
+[**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities | List Identities
+[**AdminListIdentitySessions**](V0alpha2Api.md#AdminListIdentitySessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
+[**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
+[**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /admin/identities/{id} | Update an Identity
+[**AdminUpdateIdentityBody**](V0alpha2Api.md#AdminUpdateIdentityBody) | **Post** /identities/validate | Validates provided traits and state
+[**CreateSelfServiceLogoutFlowUrlForBrowsers**](V0alpha2Api.md#CreateSelfServiceLogoutFlowUrlForBrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
+[**GetJsonSchema**](V0alpha2Api.md#GetJsonSchema) | **Get** /schemas/{id} | 
+[**GetSelfServiceError**](V0alpha2Api.md#GetSelfServiceError) | **Get** /self-service/errors | Get Self-Service Errors
+[**GetSelfServiceLoginFlow**](V0alpha2Api.md#GetSelfServiceLoginFlow) | **Get** /self-service/login/flows | Get Login Flow
+[**GetSelfServiceRecoveryFlow**](V0alpha2Api.md#GetSelfServiceRecoveryFlow) | **Get** /self-service/recovery/flows | Get Recovery Flow
+[**GetSelfServiceRegistrationFlow**](V0alpha2Api.md#GetSelfServiceRegistrationFlow) | **Get** /self-service/registration/flows | Get Registration Flow
+[**GetSelfServiceSettingsFlow**](V0alpha2Api.md#GetSelfServiceSettingsFlow) | **Get** /self-service/settings/flows | Get Settings Flow
+[**GetSelfServiceVerificationFlow**](V0alpha2Api.md#GetSelfServiceVerificationFlow) | **Get** /self-service/verification/flows | Get Verification Flow
+[**GetWebAuthnJavaScript**](V0alpha2Api.md#GetWebAuthnJavaScript) | **Get** /.well-known/ory/webauthn.js | Get WebAuthn JavaScript
+[**InitializeSelfServiceLoginFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceLoginFlowForBrowsers) | **Get** /self-service/login/browser | Initialize Login Flow for Browsers
+[**InitializeSelfServiceLoginFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceLoginFlowWithoutBrowser) | **Get** /self-service/login/api | Initialize Login Flow for APIs, Services, Apps, ...
+[**InitializeSelfServiceRecoveryFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceRecoveryFlowForBrowsers) | **Get** /self-service/recovery/browser | Initialize Recovery Flow for Browsers
+[**InitializeSelfServiceRecoveryFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceRecoveryFlowWithoutBrowser) | **Get** /self-service/recovery/api | Initialize Recovery Flow for APIs, Services, Apps, ...
 [**InitializeSelfServiceRegistrationFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceRegistrationFlowForBrowsers) | **Get** /self-service/registration/browser | Initialize Registration Flow for Browsers
-[**InitializeSelfServiceRegistrationFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceRegistrationFlowWithoutBrowser) | **Get** /self-service/registration/api     | Initialize Registration Flow for APIs, Services, Apps, ...
-[**InitializeSelfServiceSettingsFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceSettingsFlowForBrowsers) | **Get** /self-service/settings/browser     | Initialize Settings Flow for Browsers
-[**InitializeSelfServiceSettingsFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceSettingsFlowWithoutBrowser) | **Get** /self-service/settings/api         | Initialize Settings Flow for APIs, Services, Apps, ...
+[**InitializeSelfServiceRegistrationFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceRegistrationFlowWithoutBrowser) | **Get** /self-service/registration/api | Initialize Registration Flow for APIs, Services, Apps, ...
+[**InitializeSelfServiceSettingsFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceSettingsFlowForBrowsers) | **Get** /self-service/settings/browser | Initialize Settings Flow for Browsers
+[**InitializeSelfServiceSettingsFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceSettingsFlowWithoutBrowser) | **Get** /self-service/settings/api | Initialize Settings Flow for APIs, Services, Apps, ...
 [**InitializeSelfServiceVerificationFlowForBrowsers**](V0alpha2Api.md#InitializeSelfServiceVerificationFlowForBrowsers) | **Get** /self-service/verification/browser | Initialize Verification Flow for Browser Clients
-[**InitializeSelfServiceVerificationFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceVerificationFlowWithoutBrowser) | **Get** /self-service/verification/api     | Initialize Verification Flow for APIs, Services, Apps, ...
-[**ListIdentitySchemas**](V0alpha2Api.md#ListIdentitySchemas) | **Get** /schemas                           | 
+[**InitializeSelfServiceVerificationFlowWithoutBrowser**](V0alpha2Api.md#InitializeSelfServiceVerificationFlowWithoutBrowser) | **Get** /self-service/verification/api | Initialize Verification Flow for APIs, Services, Apps, ...
+[**ListIdentitySchemas**](V0alpha2Api.md#ListIdentitySchemas) | **Get** /schemas | 
 [**ListSessions**](V0alpha2Api.md#ListSessions) | **Get** /sessions | This endpoints returns all other active sessions that belong to the logged-in user. The current session can be retrieved by calling the &#x60;/sessions/whoami&#x60; endpoint.
 [**RevokeSession**](V0alpha2Api.md#RevokeSession) | **Delete** /sessions/{id} | Calling this endpoint invalidates the specified session. The current session cannot be revoked. Session data are not deleted.
 [**RevokeSessions**](V0alpha2Api.md#RevokeSessions) | **Delete** /sessions | Calling this endpoint invalidates all except the current session that belong to the logged-in user. Session data are not deleted.
-[**SubmitSelfServiceLoginFlow**](V0alpha2Api.md#SubmitSelfServiceLoginFlow) | **Post** /self-service/login               | Submit a Login Flow
-[**SubmitSelfServiceLogoutFlow**](V0alpha2Api.md#SubmitSelfServiceLogoutFlow) | **Get** /self-service/logout               | Complete Self-Service Logout
-[**SubmitSelfServiceLogoutFlowWithoutBrowser**](V0alpha2Api.md#SubmitSelfServiceLogoutFlowWithoutBrowser) | **Delete** /self-service/logout/api        | Perform Logout for APIs, Services, Apps, ...
-[**SubmitSelfServiceRecoveryFlow**](V0alpha2Api.md#SubmitSelfServiceRecoveryFlow) | **Post** /self-service/recovery            | Complete Recovery Flow
-[**SubmitSelfServiceRegistrationFlow**](V0alpha2Api.md#SubmitSelfServiceRegistrationFlow) | **Post** /self-service/registration        | Submit a Registration Flow
-[**SubmitSelfServiceSettingsFlow**](V0alpha2Api.md#SubmitSelfServiceSettingsFlow) | **Post** /self-service/settings            | Complete Settings Flow
-[**SubmitSelfServiceVerificationFlow**](V0alpha2Api.md#SubmitSelfServiceVerificationFlow) | **Post** /self-service/verification        | Complete Verification Flow
-[**ToSession**](V0alpha2Api.md#ToSession) | **Get** /sessions/whoami                   | Check Who the Current HTTP Session Belongs To
+[**SubmitSelfServiceLoginFlow**](V0alpha2Api.md#SubmitSelfServiceLoginFlow) | **Post** /self-service/login | Submit a Login Flow
+[**SubmitSelfServiceLogoutFlow**](V0alpha2Api.md#SubmitSelfServiceLogoutFlow) | **Get** /self-service/logout | Complete Self-Service Logout
+[**SubmitSelfServiceLogoutFlowWithoutBrowser**](V0alpha2Api.md#SubmitSelfServiceLogoutFlowWithoutBrowser) | **Delete** /self-service/logout/api | Perform Logout for APIs, Services, Apps, ...
+[**SubmitSelfServiceRecoveryFlow**](V0alpha2Api.md#SubmitSelfServiceRecoveryFlow) | **Post** /self-service/recovery | Complete Recovery Flow
+[**SubmitSelfServiceRegistrationFlow**](V0alpha2Api.md#SubmitSelfServiceRegistrationFlow) | **Post** /self-service/registration | Submit a Registration Flow
+[**SubmitSelfServiceSettingsFlow**](V0alpha2Api.md#SubmitSelfServiceSettingsFlow) | **Post** /self-service/settings | Complete Settings Flow
+[**SubmitSelfServiceVerificationFlow**](V0alpha2Api.md#SubmitSelfServiceVerificationFlow) | **Post** /self-service/verification | Complete Verification Flow
+[**ToSession**](V0alpha2Api.md#ToSession) | **Get** /sessions/whoami | Check Who the Current HTTP Session Belongs To
 
 
 
@@ -458,76 +459,6 @@ Name | Type | Description  | Notes
 [[Back to README]](../README.md)
 
 
-## AdminIdentitySession
-
-> SuccessfulAdminIdentitySession AdminIdentitySession(ctx, id).Execute()
-
-Calling this endpoint issues a session for a given identity.
-
-
-
-### Example
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "os"
-    openapiclient "./openapi"
-)
-
-func main() {
-    id := "id_example" // string | ID is the identity's ID.
-
-    configuration := openapiclient.NewConfiguration()
-    apiClient := openapiclient.NewAPIClient(configuration)
-    resp, r, err := apiClient.V0alpha2Api.AdminIdentitySession(context.Background(), id).Execute()
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminIdentitySession``: %v\n", err)
-        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-    }
-    // response from `AdminIdentitySession`: SuccessfulAdminIdentitySession
-    fmt.Fprintf(os.Stdout, "Response from `V0alpha2Api.AdminIdentitySession`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | ID is the identity&#39;s ID. | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiAdminIdentitySessionRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**SuccessfulAdminIdentitySession**](SuccessfulAdminIdentitySession.md)
-
-### Authorization
-
-[oryAccessToken](../README.md#oryAccessToken)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
 ## AdminListIdentities
 
 > []Identity AdminListIdentities(ctx).PerPage(perPage).Page(page).Execute()
@@ -657,76 +588,6 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**[]Session**](Session.md)
-
-### Authorization
-
-[oryAccessToken](../README.md#oryAccessToken)
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: application/json
-
-[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
-[[Back to Model list]](../README.md#documentation-for-models)
-[[Back to README]](../README.md)
-
-
-## AdminSessionRefresh
-
-> Session AdminSessionRefresh(ctx, id).Execute()
-
-Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
-
-
-
-### Example
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "os"
-    openapiclient "./openapi"
-)
-
-func main() {
-    id := "id_example" // string | ID is the session's ID.
-
-    configuration := openapiclient.NewConfiguration()
-    apiClient := openapiclient.NewAPIClient(configuration)
-    resp, r, err := apiClient.V0alpha2Api.AdminSessionRefresh(context.Background(), id).Execute()
-    if err != nil {
-        fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminSessionRefresh``: %v\n", err)
-        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
-    }
-    // response from `AdminSessionRefresh`: Session
-    fmt.Fprintf(os.Stdout, "Response from `V0alpha2Api.AdminSessionRefresh`: %v\n", resp)
-}
-```
-
-### Path Parameters
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
-**id** | **string** | ID is the session&#39;s ID. | 
-
-### Other Parameters
-
-Other parameters are passed through a pointer to a apiAdminSessionRefreshRequest struct via the builder pattern
-
-
-Name | Type | Description  | Notes
-------------- | ------------- | ------------- | -------------
-
-
-### Return type
-
-[**Session**](Session.md)
 
 ### Authorization
 

@@ -22,6 +22,7 @@ import (
 	"github.com/ory/x/httpx"
 
 	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/selfservice/hook"

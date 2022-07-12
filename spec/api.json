@@ -1779,25 +1779,6 @@
         ],
         "type": "object"
       },
-      "successfulAdminIdentitySession": {
-        "properties": {
-          "identity": {
-            "$ref": "#/components/schemas/identity"
-          },
-          "session": {
-            "$ref": "#/components/schemas/session"
-          },
-          "session_token": {
-            "description": "The Session Token\n\nThis field is only set when the session hook is configured as a post-registration hook.\n\nA session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization\nHeader:\n\nAuthorization: bearer ${session-token}\n\nThe session token is only issued for API flows, not for Browser flows!",
-            "type": "string"
-          }
-        },
-        "required": [
-          "session",
-          "identity"
-        ],
-        "type": "object"
-      },
       "successfulSelfServiceLoginWithoutBrowser": {
         "description": "The Response for Login Flows via API",
         "properties": {
@@ -2400,48 +2381,6 @@
         ]
       }
     },
-    "/identities/validate": {
-      "post": {
-        "description": "This endpoint validates traits against provided schema_id.\nThe full identity payload (except credentials) is expected. This endpoint does not support patching.\n\nLearn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).",
-        "operationId": "AdminUpdateIdentityBody",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/identity"
-                }
-              }
-            },
-            "description": "is valid"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "summary": "Validates provided traits and state",
-        "tags": [
-          "v0alpha2"
-        ]
-      }
-    },
     "/admin/identities/{id}": {
       "delete": {
         "description": "Calling this endpoint irrecoverably and permanently deletes the identity given its ID. This action can not be undone.\nThis endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is\nassumed that is has been deleted already.\n\nLearn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).",
@@ -2641,110 +2580,6 @@
           }
         ],
         "summary": "Update an Identity",
-        "tags": [
-          "v0alpha2"
-        ]
-      }
-    },
-    "/identities/{id}/credentials": {
-      "put": {
-        "description": "Calling this endpoint updates the credentials according to the specification provided.\n\nLearn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).",
-        "operationId": "adminUpdateCredentials",
-        "parameters": [
-          {
-            "description": "ID is the identity's ID.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "$ref": "#/components/responses/emptyResponse"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "summary": "Update Identity Credentials",
-        "tags": [
-          "v0alpha2"
-        ]
-      }
-    },
-    "/identities/{id}/session": {
-      "get": {
-        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
-        "operationId": "adminIdentitySession",
-        "parameters": [
-          {
-            "description": "ID is the identity's ID.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/successfulAdminIdentitySession"
-                }
-              }
-            },
-            "description": "successfulAdminIdentitySession"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "summary": "Calling this endpoint issues a session for a given identity.",
         "tags": [
           "v0alpha2"
         ]
@@ -3058,6 +2893,50 @@
         ]
       }
     },
+    "/admin/token/extend": {
+      "get": {
+        "description": "This endpoint is useful for:\n\nSession refresh",
+        "operationId": "v0alpha2",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/session"
+                }
+              }
+            },
+            "description": "session"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "summary": "Calling this endpoint refreshes a current user session.\nIf `session.refresh_min_time_left` is set it will only refresh the session after this time has passed."
+      }
+    },
     "/health/alive": {
       "get": {
         "description": "This endpoint returns a HTTP 200 status code when Ory Kratos is accepting incoming\nHTTP requests. This status does currently not include checks whether the database connection is working.\n\nIf the service supports TLS Edge Termination, this endpoint does not require the\n`X-Forwarded-Proto` header to be set.\n\nBe aware that if you are running multiple nodes of this service, the health status will never\nrefer to the cluster state, only to a single instance.",
@@ -3149,6 +3028,94 @@
         "summary": "Check HTTP Server and Database Status",
         "tags": [
           "metadata"
+        ]
+      }
+    },
+    "/identities/validate": {
+      "post": {
+        "description": "This endpoint validates traits against provided schema_id.\nThe full identity payload (except credentials) is expected. This endpoint does not support patching.\n\nLearn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).",
+        "operationId": "AdminUpdateIdentityBody",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/identity"
+                }
+              }
+            },
+            "description": "is valid"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "summary": "Validates provided traits and state",
+        "tags": [
+          "v0alpha2"
+        ]
+      }
+    },
+    "/identities/{id}/credentials": {
+      "put": {
+        "description": "Calling this endpoint updates the credentials according to the specification provided.\n\nLearn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).",
+        "operationId": "adminUpdateCredentials",
+        "parameters": [
+          {
+            "description": "ID is the identity's ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/emptyResponse"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "summary": "Update Identity Credentials",
+        "tags": [
+          "v0alpha2"
         ]
       }
     },
@@ -5120,108 +5087,6 @@
           }
         },
         "summary": "This endpoints returns all other active sessions that belong to the logged-in user.\nThe current session can be retrieved by calling the `/sessions/whoami` endpoint.",
-        "tags": [
-          "v0alpha2"
-        ]
-      }
-    },
-    "/sessions/refresh": {
-      "get": {
-        "description": "This endpoint is useful for:\n\nSession refresh",
-        "operationId": "v0alpha2",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/successfulAdminIdentitySession"
-                }
-              }
-            },
-            "description": "successfulAdminIdentitySession"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "summary": "Calling this endpoint refreshes a current user session.\nIf `session.refresh_min_time_left` is set it will only refresh the session after this time has passed."
-      }
-    },
-    "/sessions/refresh/{id}": {
-      "patch": {
-        "description": "This endpoint is useful for:\n\nSession refresh",
-        "operationId": "adminSessionRefresh",
-        "parameters": [
-          {
-            "description": "ID is the session's ID.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/session"
-                }
-              }
-            },
-            "description": "session"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "summary": "Calling this endpoint refreshes a given session.\nIf `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.",
         "tags": [
           "v0alpha2"
         ]

@@ -3,6 +3,7 @@ package session
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/ory/x/pointerx"
 
@@ -58,6 +59,7 @@ const (
 	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/:id/sessions"
 	AdminRouteSessionExtend      = "/token/extend"
 	AdminRouteSessionExtendId    = RouteSession + "/extend"
+	RouteIdentitySession         = AdminRouteIdentity + "/:id/session"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -65,6 +67,7 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.DELETE(AdminRouteIdentitiesSessions, h.adminDeleteIdentitySessions)
 	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
 	admin.PATCH(AdminRouteSessionExtend, h.adminCurrentSessionExtend)
+	admin.GET(RouteIdentitySession, h.session)
 
 	admin.DELETE(RouteCollection, x.RedirectToPublicRoute(h.r))
 	admin.DELETE(RouteSession, x.RedirectToPublicRoute(h.r))
@@ -94,6 +97,90 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 	public.GET(RouteCollection, h.listSessions)
 
 	public.DELETE(AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
+}
+
+// fandom-start
+// swagger:parameters adminIdentitySession
+// nolint:deadcode,unused
+type adminIdentitySession struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:model successfulAdminIdentitySession
+// nolint:deadcode,unused
+type AdminIdentitySessionResponse struct {
+	// The Session Token
+	//
+	// This field is only set when the session hook is configured as a post-registration hook.
+	//
+	// A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
+	// Header:
+	//
+	// 		Authorization: bearer ${session-token}
+	//
+	// The session token is only issued for API flows, not for Browser flows!
+	Token string `json:"session_token"`
+
+	// Session
+	//
+	// The session contains information about the user, the session device, and so on.
+	//
+	// required: true
+	Session *Session `json:"session"`
+
+	// Identity
+	//
+	// The identity that just signed up.
+	//
+	// required: true
+	Identity *identity.Identity `json:"identity"`
+}
+
+// swagger:route GET /identities/{id}/session v0alpha2 adminIdentitySession
+//
+// Calling this endpoint issues a session for a given identity.
+//
+// This endpoint is useful for:
+//
+// - Issuing session or session token for a given identity without authenticating
+//
+//     Schemes: http, https
+//
+//     Security:
+//       oryAccessToken:
+//
+//     Responses:
+//       200: successfulAdminIdentitySession
+//       404: jsonError
+//       500: jsonError
+func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := h.r.SessionManager().IssueCookieWithoutCSRF(r.Context(), w, r, s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
 
 // nolint:deadcode,unused

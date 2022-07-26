@@ -93,6 +93,7 @@ Class | Method | HTTP request | Description
 *V0alpha2Api* | [**AdminDeleteIdentitySessions**](docs/V0alpha2Api.md#admindeleteidentitysessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminExtendSession**](docs/V0alpha2Api.md#adminextendsession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
 *V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /admin/identities/{id} | Get an Identity
+*V0alpha2Api* | [**AdminIdentitySession**](docs/V0alpha2Api.md#adminidentitysession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 *V0alpha2Api* | [**AdminListIdentities**](docs/V0alpha2Api.md#adminlistidentities) | **Get** /admin/identities | List Identities
 *V0alpha2Api* | [**AdminListIdentitySessions**](docs/V0alpha2Api.md#adminlistidentitysessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminUpdateCredentials**](docs/V0alpha2Api.md#adminupdatecredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
@@ -203,6 +204,7 @@ Class | Method | HTTP request | Description
  - [SubmitSelfServiceSettingsFlowWithWebAuthnMethodBody](docs/SubmitSelfServiceSettingsFlowWithWebAuthnMethodBody.md)
  - [SubmitSelfServiceVerificationFlowBody](docs/SubmitSelfServiceVerificationFlowBody.md)
  - [SubmitSelfServiceVerificationFlowWithLinkMethodBody](docs/SubmitSelfServiceVerificationFlowWithLinkMethodBody.md)
+ - [SuccessfulAdminIdentitySession](docs/SuccessfulAdminIdentitySession.md)
  - [SuccessfulSelfServiceLoginWithoutBrowser](docs/SuccessfulSelfServiceLoginWithoutBrowser.md)
  - [SuccessfulSelfServiceRegistrationWithoutBrowser](docs/SuccessfulSelfServiceRegistrationWithoutBrowser.md)
  - [UiContainer](docs/UiContainer.md)

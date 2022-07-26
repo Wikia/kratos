@@ -650,6 +650,46 @@ paths:
       summary: Update Identity Credentials
       tags:
       - v0alpha2
+  /identities/{id}/session:
+    get:
+      description: |-
+        This endpoint is useful for:
+
+        Issuing session or session token for a given identity without authenticating
+      operationId: adminIdentitySession
+      parameters:
+      - description: ID is the identity's ID.
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/successfulAdminIdentitySession'
+          description: successfulAdminIdentitySession
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      security:
+      - oryAccessToken: []
+      summary: Calling this endpoint issues a session for a given identity.
+      tags:
+      - v0alpha2
   /schemas:
     get:
       description: Get all Identity Schemas
@@ -4934,6 +4974,136 @@ components:
       required:
       - email
       - method
+      type: object
+    successfulAdminIdentitySession:
+      example:
+        session_token: session_token
+        identity:
+          traits: ""
+          credentials:
+            key:
+              updated_at: 2000-01-23T04:56:07.000+00:00
+              identifiers:
+              - identifiers
+              - identifiers
+              created_at: 2000-01-23T04:56:07.000+00:00
+              config: '{}'
+              version: 0
+          state_changed_at: 2000-01-23T04:56:07.000+00:00
+          created_at: 2000-01-23T04:56:07.000+00:00
+          recovery_addresses:
+          - updated_at: 2000-01-23T04:56:07.000+00:00
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: id
+            value: value
+            via: via
+          - updated_at: 2000-01-23T04:56:07.000+00:00
+            created_at: 2000-01-23T04:56:07.000+00:00
+            id: id
+            value: value
+            via: via
+          metadata_admin: ""
+          updated_at: 2000-01-23T04:56:07.000+00:00
+          verifiable_addresses:
+          - updated_at: 2014-01-01T23:28:56.782Z
+            verified_at: 2000-01-23T04:56:07.000+00:00
+            verified: true
+            created_at: 2014-01-01T23:28:56.782Z
+            id: id
+            value: value
+            status: status
+            via: via
+          - updated_at: 2014-01-01T23:28:56.782Z
+            verified_at: 2000-01-23T04:56:07.000+00:00
+            verified: true
+            created_at: 2014-01-01T23:28:56.782Z
+            id: id
+            value: value
+            status: status
+            via: via
+          schema_id: schema_id
+          schema_url: schema_url
+          id: id
+          metadata_public: ""
+        session:
+          expires_at: 2000-01-23T04:56:07.000+00:00
+          authentication_methods:
+          - completed_at: 2000-01-23T04:56:07.000+00:00
+            method: link_recovery
+          - completed_at: 2000-01-23T04:56:07.000+00:00
+            method: link_recovery
+          identity:
+            traits: ""
+            credentials:
+              key:
+                updated_at: 2000-01-23T04:56:07.000+00:00
+                identifiers:
+                - identifiers
+                - identifiers
+                created_at: 2000-01-23T04:56:07.000+00:00
+                config: '{}'
+                version: 0
+            state_changed_at: 2000-01-23T04:56:07.000+00:00
+            created_at: 2000-01-23T04:56:07.000+00:00
+            recovery_addresses:
+            - updated_at: 2000-01-23T04:56:07.000+00:00
+              created_at: 2000-01-23T04:56:07.000+00:00
+              id: id
+              value: value
+              via: via
+            - updated_at: 2000-01-23T04:56:07.000+00:00
+              created_at: 2000-01-23T04:56:07.000+00:00
+              id: id
+              value: value
+              via: via
+            metadata_admin: ""
+            updated_at: 2000-01-23T04:56:07.000+00:00
+            verifiable_addresses:
+            - updated_at: 2014-01-01T23:28:56.782Z
+              verified_at: 2000-01-23T04:56:07.000+00:00
+              verified: true
+              created_at: 2014-01-01T23:28:56.782Z
+              id: id
+              value: value
+              status: status
+              via: via
+            - updated_at: 2014-01-01T23:28:56.782Z
+              verified_at: 2000-01-23T04:56:07.000+00:00
+              verified: true
+              created_at: 2014-01-01T23:28:56.782Z
+              id: id
+              value: value
+              status: status
+              via: via
+            schema_id: schema_id
+            schema_url: schema_url
+            id: id
+            metadata_public: ""
+          authenticated_at: 2000-01-23T04:56:07.000+00:00
+          active: true
+          id: id
+          issued_at: 2000-01-23T04:56:07.000+00:00
+      properties:
+        identity:
+          $ref: '#/components/schemas/identity'
+        session:
+          $ref: '#/components/schemas/session'
+        session_token:
+          description: |-
+            The Session Token
+
+            This field is only set when the session hook is configured as a post-registration hook.
+
+            A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
+            Header:
+
+            Authorization: bearer ${session-token}
+
+            The session token is only issued for API flows, not for Browser flows!
+          type: string
+      required:
+      - identity
+      - session
       type: object
     successfulSelfServiceLoginWithoutBrowser:
       description: The Response for Login Flows via API

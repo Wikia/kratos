@@ -10,6 +10,7 @@ Method | HTTP request | Description
 [**AdminDeleteIdentitySessions**](V0alpha2Api.md#AdminDeleteIdentitySessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 [**AdminExtendSession**](V0alpha2Api.md#AdminExtendSession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
 [**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id} | Get an Identity
+[**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
 [**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities | List Identities
 [**AdminListIdentitySessions**](V0alpha2Api.md#AdminListIdentitySessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
@@ -444,6 +445,76 @@ Name | Type | Description  | Notes
 ### Return type
 
 [**Identity**](Identity.md)
+
+### Authorization
+
+[oryAccessToken](../README.md#oryAccessToken)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints)
+[[Back to Model list]](../README.md#documentation-for-models)
+[[Back to README]](../README.md)
+
+
+## AdminIdentitySession
+
+> SuccessfulAdminIdentitySession AdminIdentitySession(ctx, id).Execute()
+
+Calling this endpoint issues a session for a given identity.
+
+
+
+### Example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+    openapiclient "./openapi"
+)
+
+func main() {
+    id := "id_example" // string | ID is the identity's ID.
+
+    configuration := openapiclient.NewConfiguration()
+    apiClient := openapiclient.NewAPIClient(configuration)
+    resp, r, err := apiClient.V0alpha2Api.AdminIdentitySession(context.Background(), id).Execute()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminIdentitySession``: %v\n", err)
+        fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+    }
+    // response from `AdminIdentitySession`: SuccessfulAdminIdentitySession
+    fmt.Fprintf(os.Stdout, "Response from `V0alpha2Api.AdminIdentitySession`: %v\n", resp)
+}
+```
+
+### Path Parameters
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+**ctx** | **context.Context** | context for authentication, logging, cancellation, deadlines, tracing, etc.
+**id** | **string** | ID is the identity&#39;s ID. | 
+
+### Other Parameters
+
+Other parameters are passed through a pointer to a apiAdminIdentitySessionRequest struct via the builder pattern
+
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+
+
+### Return type
+
+[**SuccessfulAdminIdentitySession**](SuccessfulAdminIdentitySession.md)
 
 ### Authorization
 

@@ -138,6 +138,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	// Verify the redirect URL before we do any other processing.
 	c := e.d.Config(r.Context())
 	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
+		x.SecureRedirectUseRedirectToURL(ctxUpdate.Flow.ReturnTo),
 		x.SecureRedirectUseSourceURL(ctxUpdate.Flow.RequestURL),
 		x.SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains()),
 		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL()),

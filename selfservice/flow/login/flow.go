@@ -111,7 +111,7 @@ func NewFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Reques
 	requestURL := x.RequestURL(r).String()
 
 	// Pre-validate the return to URL which is contained in the HTTP request.
-	_, err := x.SecureRedirectTo(r,
+	returnTo, err := x.SecureRedirectTo(r,
 		conf.SelfServiceBrowserDefaultReturnTo(),
 		x.SecureRedirectUseSourceURL(requestURL),
 		x.SecureRedirectAllowURLs(conf.SelfServiceBrowserAllowedReturnToDomains()),
@@ -130,6 +130,7 @@ func NewFlow(conf *config.Config, exp time.Duration, csrf string, r *http.Reques
 			Action: flow.AppendFlowTo(urlx.AppendPaths(conf.SelfPublicURL(), RouteSubmitFlow), id).String(),
 		},
 		RequestURL: requestURL,
+		ReturnTo:   returnTo.String(),
 		CSRFToken:  csrf,
 		Type:       flowType,
 		Refresh:    r.URL.Query().Get("refresh") == "true",

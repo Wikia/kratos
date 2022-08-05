@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -94,6 +95,20 @@ func (s *Strategy) processLogin(w http.ResponseWriter, r *http.Request, a *login
 			if err != nil {
 				return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
 			}
+
+			// Take over `return_to` parameter from login flow
+			aRequestURL, err := url.Parse(a.RequestURL)
+			if err != nil {
+				return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
+			}
+			aaRequestURL, err := url.Parse(aa.RequestURL)
+			if err != nil {
+				return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
+			}
+			aQuery := aRequestURL.Query()
+			aQuery.Set("return_to", aRequestURL.Query().Get("return_to"))
+			aaRequestURL.RawQuery = aQuery.Encode()
+			aa.RequestURL = aaRequestURL.String()
 
 			if _, err := s.processRegistration(w, r, aa, token, claims, provider, container); err != nil {
 				return aa, err

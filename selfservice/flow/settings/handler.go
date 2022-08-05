@@ -144,6 +144,7 @@ func (h *Handler) FromOldFlow(w http.ResponseWriter, r *http.Request, i *identit
 	}
 
 	nf.RequestURL = of.RequestURL
+	nf.ReturnTo = of.ReturnTo
 	return nf, nil
 }
 

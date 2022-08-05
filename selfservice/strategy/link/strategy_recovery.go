@@ -299,6 +299,7 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 	sfQuery.Set("return_to", fRequestURL.Query().Get("return_to"))
 	sfRequestURL.RawQuery = sfQuery.Encode()
 	sf.RequestURL = sfRequestURL.String()
+	sf.SetReturnTo()
 
 	if err := s.d.RecoveryExecutor().PostRecoveryHook(w, r, f, sess); err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)

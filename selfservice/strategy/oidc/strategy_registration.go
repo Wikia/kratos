@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/ory/x/fetcher"
@@ -186,6 +187,20 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, a
 		if err != nil {
 			return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
 		}
+
+		// Take over `return_to` parameter from registration flow
+		aRequestURL, err := url.Parse(a.RequestURL)
+		if err != nil {
+			return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
+		}
+		arRequestURL, err := url.Parse(ar.RequestURL)
+		if err != nil {
+			return nil, s.handleError(w, r, a, provider.Config().ID, nil, err)
+		}
+		aQuery := aRequestURL.Query()
+		aQuery.Set("return_to", aRequestURL.Query().Get("return_to"))
+		arRequestURL.RawQuery = aQuery.Encode()
+		ar.RequestURL = arRequestURL.String()
 
 		if _, err := s.processLogin(w, r, ar, token, claims, provider, container); err != nil {
 			return ar, err

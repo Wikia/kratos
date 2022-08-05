@@ -126,7 +126,7 @@ func NewFlow(conf *config.Config, exp time.Duration, r *http.Request, i *identit
 
 	// Pre-validate the return to URL which is contained in the HTTP request.
 	requestURL := x.RequestURL(r).String()
-	_, err := x.SecureRedirectTo(r,
+	returnToURL, err := x.SecureRedirectTo(r,
 		conf.SelfServiceBrowserDefaultReturnTo(),
 		x.SecureRedirectUseSourceURL(requestURL),
 		x.SecureRedirectAllowURLs(conf.SelfServiceBrowserAllowedReturnToDomains()),
@@ -141,6 +141,7 @@ func NewFlow(conf *config.Config, exp time.Duration, r *http.Request, i *identit
 		ExpiresAt:  now.Add(exp),
 		IssuedAt:   now,
 		RequestURL: requestURL,
+		ReturnTo:   returnToURL.String(),
 		IdentityID: i.ID,
 		Identity:   i,
 		Type:       ft,

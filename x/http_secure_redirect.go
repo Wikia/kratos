@@ -21,6 +21,7 @@ type secureRedirectOptions struct {
 	allowlist       []url.URL
 	defaultReturnTo *url.URL
 	sourceURL       string
+	returnToURL     string
 }
 
 type SecureRedirectOption func(*secureRedirectOptions)
@@ -37,6 +38,13 @@ func SecureRedirectAllowURLs(urls []url.URL) SecureRedirectOption {
 func SecureRedirectUseSourceURL(source string) SecureRedirectOption {
 	return func(o *secureRedirectOptions) {
 		o.sourceURL = source
+	}
+}
+
+// SecureRedirectUseRedirectToURL uses the given source URL instead of r.URL.
+func SecureRedirectUseRedirectToURL(returnTo string) SecureRedirectOption {
+	return func(o *secureRedirectOptions) {
+		o.returnToURL = returnTo
 	}
 }
 
@@ -85,7 +93,11 @@ func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureR
 		}
 	}
 
-	if len(source.Query().Get("return_to")) == 0 {
+	if o.returnToURL != "" {
+		if returnTo, err = url.Parse(o.returnToURL); err != nil {
+			return nil, herodot.ErrInternalServerError.WithWrap(err).WithReasonf("Unable to parse the returnToURL as an URL: %s", err)
+		}
+	} else if len(source.Query().Get("return_to")) == 0 {
 		return o.defaultReturnTo, nil
 	} else if returnTo, err = url.Parse(source.Query().Get("return_to")); err != nil {
 		return nil, herodot.ErrInternalServerError.WithWrap(err).WithReasonf("Unable to parse the return_to query parameter as an URL: %s", err)

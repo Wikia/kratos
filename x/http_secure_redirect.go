@@ -65,6 +65,29 @@ func SecureRedirectToIsAllowedHost(returnTo *url.URL, allowed url.URL) bool {
 	return strings.EqualFold(allowed.Host, returnTo.Host)
 }
 
+// fandom-start - preserve return_to param between flows
+func TakeOverReturnToParameter(from string, to string) (string, error) {
+	fromURL, err := url.Parse(from)
+	if err != nil {
+		return "", err
+	}
+	returnTo := fromURL.Query().Get("return_to")
+	// Empty return_to parameter, return early
+	if returnTo == "" {
+		return to, nil
+	}
+	toURL, err := url.Parse(to)
+	if err != nil {
+		return "", err
+	}
+	toQuery := toURL.Query()
+	toQuery.Set("return_to", returnTo)
+	toURL.RawQuery = toQuery.Encode()
+	return toURL.String(), nil
+}
+
+// fandom-end
+
 // SecureRedirectTo implements a HTTP redirector who mitigates open redirect vulnerabilities by
 // working with allow lists.
 func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureRedirectOption) (returnTo *url.URL, err error) {

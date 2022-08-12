@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -53,7 +53,7 @@ func TestHandler(t *testing.T) {
 	var get = func(t *testing.T, base *httptest.Server, href string, expectCode int) gjson.Result {
 		res, err := base.Client().Get(base.URL + href)
 		require.NoError(t, err)
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		require.NoError(t, res.Body.Close())
 
@@ -81,7 +81,7 @@ func TestHandler(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		res, err := base.Client().Do(req)
 		require.NoError(t, err)
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		require.NoError(t, res.Body.Close())
 

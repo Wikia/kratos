@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"strings"
 	"sync"
@@ -436,6 +437,37 @@ func (m *RegistryDefault) SelfServiceErrorHandler() *errorx.Handler {
 	}
 	return m.errorHandler
 }
+
+// fandom-start support new cookie format
+func (m *RegistryDefault) NewCookieManager(ctx context.Context) sessions.Store {
+	var keys [][]byte
+	for _, k := range m.Config(ctx).SecretsSession() {
+		encrypt := sha256.Sum256(k)
+		keys = append(keys, k, encrypt[:])
+	}
+	cs := sessions.NewCookieStore(keys...)
+	cs.Options.Secure = !m.Config(ctx).IsInsecureDevMode()
+	cs.Options.HttpOnly = true
+
+	if domain := m.Config(ctx).SessionDomain(); domain != "" {
+		cs.Options.Domain = domain
+	}
+
+	if path := m.Config(ctx).SessionPath(); path != "" {
+		cs.Options.Path = path
+	}
+
+	if sameSite := m.Config(ctx).SessionSameSiteMode(); sameSite != 0 {
+		cs.Options.SameSite = sameSite
+	}
+
+	cs.Options.MaxAge = 0
+	if m.Config(ctx).SessionPersistentCookie() {
+		cs.Options.MaxAge = int(m.Config(ctx).SessionLifespan().Seconds())
+	}
+	return cs
+}
+// fandom-end
 
 func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.Store {
 	cs := sessions.NewCookieStore(m.Config(ctx).SecretsSession()...)

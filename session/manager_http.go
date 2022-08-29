@@ -129,16 +129,37 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 		r.Header = http.Header{"Cookie": []string{s.cookieName(r.Context()) + "=" + cookie}}
 	}
 
+	// fandom-start support new cookie format
+	copyR := r.WithContext(r.Context())
 	cookie, err := s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
 	if err != nil {
-		token, _ := bearerTokenFromRequest(r)
-		return token
+		newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+		if err != nil {
+			token, _ := bearerTokenFromRequest(r)
+			return token
+		}
+		token, ok := newCookie.Values["session_token"].(string)
+		if ok {
+			return token
+		}
 	}
 
 	token, ok := cookie.Values["session_token"].(string)
 	if ok {
 		return token
 	}
+
+	newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+	if err != nil {
+		token, _ = bearerTokenFromRequest(r)
+		return token
+	}
+
+	token, ok = newCookie.Values["session_token"].(string)
+	if ok {
+		return token
+	}
+	// fandom-end
 
 	token, _ = bearerTokenFromRequest(r)
 	return token

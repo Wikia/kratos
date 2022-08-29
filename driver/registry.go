@@ -51,6 +51,9 @@ type Registry interface {
 	WithCSRFTokenGenerator(cg x.CSRFToken)
 
 	HealthHandler(ctx context.Context) *healthx.Handler
+	// fandom-start support new cookie format
+	NewCookieManager(ctx context.Context) sessions.Store
+	// fandom-end
 	CookieManager(ctx context.Context) sessions.Store
 	MetricsHandler() *prometheus.Handler
 	ContinuityCookieManager(ctx context.Context) sessions.Store

@@ -22,7 +22,9 @@ build() {
 
 start() {
   log "Starting Delve"
-  dlv --listen=:${DELVE_PORT} --headless=true --api-version=2 --accept-multiclient exec /${SERVICE_NAME} -- ${SERVICE_ARGS} &
+  # Fandom-start allow debugging old Golang versions (add --check-go-version=false flag)
+  dlv --listen=:${DELVE_PORT} --check-go-version=false --headless=true --api-version=2 --accept-multiclient exec /${SERVICE_NAME} -- ${SERVICE_ARGS} &
+  # Fandom-end
 }
 
 restart() {

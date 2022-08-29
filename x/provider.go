@@ -20,6 +20,9 @@ type WriterProvider interface {
 }
 
 type CookieProvider interface {
+	// fandom-start support old cookie format
+	LegacyCookieManager(ctx context.Context) sessions.StoreExact
+	// fandom-end
 	CookieManager(ctx context.Context) sessions.StoreExact
 	ContinuityCookieManager(ctx context.Context) sessions.StoreExact
 }

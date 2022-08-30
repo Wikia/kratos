@@ -59,16 +59,10 @@ DROP INDEX sessions_id_nid_idx ON sessions;
 DROP INDEX sessions_token_nid_idx ON sessions;
 
 DROP INDEX sessions_identity_id_nid_idx ON sessions;
-DROP INDEX identities_id_nid_idx ON identities;
-DROP INDEX identities_nid_id_idx ON identities;
 DROP INDEX continuity_containers_nid_id_idx ON continuity_containers;
 DROP INDEX continuity_containers_id_nid_idx ON continuity_containers;
 DROP INDEX courier_messages_nid_id_idx ON courier_messages;
 DROP INDEX courier_messages_id_nid_idx ON courier_messages;
-DROP INDEX identity_credential_identifiers_nid_id_idx ON identity_credential_identifiers;
-DROP INDEX identity_credential_identifiers_id_nid_idx ON identity_credential_identifiers;
-DROP INDEX identity_credentials_nid_id_idx ON identity_credentials;
-DROP INDEX identity_credentials_id_nid_idx ON identity_credentials;
 DROP INDEX identity_recovery_addresses_nid_id_idx ON identity_recovery_addresses;
 DROP INDEX identity_recovery_addresses_id_nid_idx ON identity_recovery_addresses;
 DROP INDEX identity_recovery_tokens_nid_id_idx ON identity_recovery_tokens;

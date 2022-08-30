@@ -1,9 +1,5 @@
 CREATE INDEX sessions_identity_id_nid_idx ON sessions (identity_id, nid);
 
-CREATE INDEX identities_id_nid_idx ON identities (id, nid);
-CREATE INDEX identities_nid_id_idx ON identities (nid, id);
-DROP INDEX identities_nid_idx ON identities;
-
 CREATE INDEX continuity_containers_nid_id_idx ON continuity_containers (nid, id);
 CREATE INDEX continuity_containers_id_nid_idx ON continuity_containers (id, nid);
 DROP INDEX continuity_containers_nid_idx ON continuity_containers;
@@ -11,14 +7,6 @@ DROP INDEX continuity_containers_nid_idx ON continuity_containers;
 CREATE INDEX courier_messages_nid_id_idx ON courier_messages (nid, id);
 CREATE INDEX courier_messages_id_nid_idx ON courier_messages (id, nid);
 DROP INDEX courier_messages_nid_idx ON courier_messages;
-
-CREATE INDEX identity_credential_identifiers_nid_id_idx ON identity_credential_identifiers (nid, id);
-CREATE INDEX identity_credential_identifiers_id_nid_idx ON identity_credential_identifiers (id, nid);
-DROP INDEX identity_credential_identifiers_nid_idx ON identity_credential_identifiers;
-
-CREATE INDEX identity_credentials_nid_id_idx ON identity_credentials (nid, id);
-CREATE INDEX identity_credentials_id_nid_idx ON identity_credentials (id, nid);
-DROP INDEX identity_credentials_nid_idx ON identity_credentials;
 
 CREATE INDEX identity_recovery_addresses_nid_id_idx ON identity_recovery_addresses (nid, id);
 CREATE INDEX identity_recovery_addresses_id_nid_idx ON identity_recovery_addresses (id, nid);

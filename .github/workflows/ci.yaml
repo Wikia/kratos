@@ -85,14 +85,16 @@ jobs:
         name: Install node deps
       - name: Run prettier
         run: npm run format:check
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v2
-        env:
-          GOGC: 100
-        with:
-          args: --timeout 10m0s
-          skip-go-installation: true
-          skip-pkg-cache: true
+# Fandom-start skip linter checks
+#      - name: Run golangci-lint
+#        uses: golangci/golangci-lint-action@v2
+#        env:
+#          GOGC: 100
+#        with:
+#          args: --timeout 10m0s
+#          skip-go-installation: true
+#          skip-pkg-cache: true
+# Fandom-end skip linter checks
       - name: Build Kratos
         run: make install
       - name: Run documentation tests

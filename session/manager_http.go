@@ -134,6 +134,13 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 	cookie, err := s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
 	if err != nil {
 		newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+		/**
+		 * This is a workaround around shared CookieStore (Sic!)
+		 * Even creating new object sets some shared state via gorilla.sessions library.
+		 * Creating old CookieManager sets shared state to previous values.
+		 * THIS IS SOO BROKEN :D
+		 */
+		_, _ = s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
 		if err != nil {
 			token, _ := bearerTokenFromRequest(r)
 			return token
@@ -150,6 +157,13 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 	}
 
 	newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+	/**
+	 * This is a workaround around shared CookieStore (Sic!)
+	 * Even creating new object sets some shared state via gorilla.sessions library
+	 * Creating old CookieManager sets shared state to previous values
+	 * THIS IS SOO BROKEN :D
+	 */
+	_, _ = s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
 	if err != nil {
 		token, _ = bearerTokenFromRequest(r)
 		return token

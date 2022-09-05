@@ -131,7 +131,8 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 
 	// fandom-start support new cookie format
 	copyR := r.WithContext(r.Context())
-	cookie, err := s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
+	copyR2 := r.WithContext(r.Context())
+	cookie, err := s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 	if err != nil {
 		newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
 		/**
@@ -140,7 +141,7 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 		 * Creating old CookieManager sets shared state to previous values.
 		 * THIS IS SOO BROKEN :D
 		 */
-		_, _ = s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
+		_, _ = s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 		if err != nil {
 			token, _ := bearerTokenFromRequest(r)
 			return token
@@ -163,7 +164,7 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 	 * Creating old CookieManager sets shared state to previous values
 	 * THIS IS SOO BROKEN :D
 	 */
-	_, _ = s.r.CookieManager(r.Context()).Get(r, s.cookieName(r.Context()))
+	_, _ = s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 	if err != nil {
 		token, _ = bearerTokenFromRequest(r)
 		return token

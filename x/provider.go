@@ -21,6 +21,9 @@ type WriterProvider interface {
 }
 
 type CookieProvider interface {
+	// fandom-start support new cookie format
+	NewCookieManager(ctx context.Context) sessions.Store
+	// fandom-end
 	CookieManager(ctx context.Context) sessions.Store
 	ContinuityCookieManager(ctx context.Context) sessions.Store
 }

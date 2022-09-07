@@ -52,6 +52,9 @@ type Registry interface {
 
 	MetricsHandler() *prometheus.Handler
 	HealthHandler(ctx context.Context) *healthx.Handler
+	// fandom-start support old cookie format
+	LegacyCookieManager(ctx context.Context) sessions.StoreExact
+	// fandom-end
 	CookieManager(ctx context.Context) sessions.StoreExact
 	ContinuityCookieManager(ctx context.Context) sessions.StoreExact
 

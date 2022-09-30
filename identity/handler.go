@@ -628,9 +628,7 @@ type adminDeleteIdentityCredential struct {
 //	  404: jsonError
 //	  500: jsonError
 func (h *Handler) deleteMultifactorCredential(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	//identity, err := h.r.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), x.ParseUUID(ps.ByName("id")))
-	identity, err := h.r.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), x.ParseUUID("352cde8f-1027-4ac8-9df9-80584b714e25"))
-
+	identity, err := h.r.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), x.ParseUUID(ps.ByName("id")))
 	if err != nil {
 		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("Invalid identity")))
 		return

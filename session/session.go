@@ -195,10 +195,6 @@ func (s *Session) Declassify() *Session {
 	return s
 }
 
-func (s *Session) CanBeRefreshed(c refreshWindowProvider) bool {
-	return s.ExpiresAt.Add(-c.SessionRefreshMinTimeLeft()).Before(time.Now())
-}
-
 func (s *Session) IsActive() bool {
 	return s.Active && s.ExpiresAt.After(time.Now()) && (s.Identity == nil || s.Identity.IsActive())
 }
@@ -206,6 +202,10 @@ func (s *Session) IsActive() bool {
 func (s *Session) Refresh(c lifespanProvider) *Session {
 	s.ExpiresAt = time.Now().Add(c.SessionLifespan()).UTC()
 	return s
+}
+
+func (s *Session) CanBeRefreshed(c refreshWindowProvider) bool {
+	return s.ExpiresAt.Add(-c.SessionRefreshMinTimeLeft()).Before(time.Now())
 }
 
 // List of (Used) AuthenticationMethods

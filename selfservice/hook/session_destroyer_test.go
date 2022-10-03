@@ -7,12 +7,10 @@ import (
 
 	"github.com/ory/kratos/internal/testhelpers"
 
-	"github.com/ory/kratos/corpx"
-	"github.com/ory/kratos/ui/node"
-
 	"github.com/bxcodec/faker/v3"
 	"github.com/gobuffalo/httptest"
 	"github.com/gofrs/uuid"
+	"github.com/ory/kratos/corpx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -45,7 +43,6 @@ func TestSessionDestroyer(t *testing.T) {
 				return h.ExecuteLoginPostHook(
 					httptest.NewRecorder(),
 					new(http.Request),
-					node.DefaultGroup,
 					nil,
 					&session.Session{Identity: i},
 				)

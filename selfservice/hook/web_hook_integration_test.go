@@ -18,7 +18,6 @@ import (
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/text"
 
-	"github.com/ory/kratos/ui/node"
 	"github.com/ory/x/httpx"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -164,7 +163,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Login Hook",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
-				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
+				return wh.ExecuteLoginPostHook(nil, req, f.(*login.Flow), s)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentity(req, f, s)
@@ -384,7 +383,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Login Hook - no block",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
+				return wh.ExecuteLoginPostHook(nil, req, f.(*login.Flow), s)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -395,7 +394,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Login Hook - block",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
+				return wh.ExecuteLoginPostHook(nil, req, f.(*login.Flow), s)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -692,7 +691,7 @@ func TestDisallowPrivateIPRanges(t *testing.T) {
   "method": "GET",
   "body": "file://stub/test_body.jsonnet"
 }`))
-		err := wh.ExecuteLoginPostHook(nil, req, node.DefaultGroup, f, s)
+		err := wh.ExecuteLoginPostHook(nil, req, f, s)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "ip 127.0.0.1 is in the 127.0.0.0/8 range")
 
@@ -710,7 +709,7 @@ func TestDisallowPrivateIPRanges(t *testing.T) {
   "method": "GET",
   "body": "http://192.168.178.0/test_body.jsonnet"
 }`))
-		err := wh.ExecuteLoginPostHook(nil, req, node.DefaultGroup, f, s)
+		err := wh.ExecuteLoginPostHook(nil, req, f, s)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "ip 192.168.178.0 is in the 192.168.0.0/16 range")
 	})

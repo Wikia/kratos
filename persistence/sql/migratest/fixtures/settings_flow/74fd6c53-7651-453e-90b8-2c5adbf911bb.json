@@ -12,7 +12,7 @@
   "identity": {
     "id": "5ff66179-c240-4703-b0d8-494592cefff5",
     "schema_id": "default",
-    "schema_url": "https://www.ory.sh/schemas/default",
+    "schema_url": "https://www.ory.sh/schemas/ZGVmYXVsdA",
     "state": "active",
     "traits": {
       "email": "bazbar@ory.sh"
@@ -28,6 +28,7 @@
         "updated_at": "2013-10-07T08:23:19Z"
       }
     ],
+    "metadata_public": null,
     "created_at": "2013-10-07T08:23:19Z",
     "updated_at": "2013-10-07T08:23:19Z"
   },

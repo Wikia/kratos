@@ -36,7 +36,7 @@ type Attributes interface {
 	GetValue() interface{}
 
 	// swagger:ignore
-	GetNodeType() Type
+	GetNodeType() UiNodeType
 }
 
 // InputAttributes represents the attributes of an input node
@@ -75,10 +75,10 @@ type InputAttributes struct {
 	OnClick string `json:"onclick,omitempty"`
 
 	// NodeType represents this node's types. It is a mirror of `node.type` and
-	// is primarily used to allow compatibility with OpenAPI 3.0.
+	// is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "input".
 	//
 	// required: true
-	NodeType Type `json:"node_type"`
+	NodeType string `json:"node_type"`
 }
 
 // ImageAttributes represents the attributes of an image node.
@@ -97,16 +97,20 @@ type ImageAttributes struct {
 	Identifier string `json:"id"`
 
 	// Width of the image
-	Width int `json:"width,omitempty"`
-
-	// Height of the image
-	Height int `json:"height,omitempty"`
-
-	// NodeType represents this node's types. It is a mirror of `node.type` and
-	// is primarily used to allow compatibility with OpenAPI 3.0.
 	//
 	// required: true
-	NodeType Type `json:"node_type"`
+	Width int `json:"width"`
+
+	// Height of the image
+	//
+	// required: true
+	Height int `json:"height"`
+
+	// NodeType represents this node's types. It is a mirror of `node.type` and
+	// is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "img".
+	//
+	// required: true
+	NodeType string `json:"node_type"`
 }
 
 // AnchorAttributes represents the attributes of an anchor node.
@@ -130,10 +134,10 @@ type AnchorAttributes struct {
 	Identifier string `json:"id"`
 
 	// NodeType represents this node's types. It is a mirror of `node.type` and
-	// is primarily used to allow compatibility with OpenAPI 3.0.
+	// is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "a".
 	//
 	// required: true
-	NodeType Type `json:"node_type"`
+	NodeType string `json:"node_type"`
 }
 
 // TextAttributes represents the attributes of a text node.
@@ -152,10 +156,10 @@ type TextAttributes struct {
 	Identifier string `json:"id"`
 
 	// NodeType represents this node's types. It is a mirror of `node.type` and
-	// is primarily used to allow compatibility with OpenAPI 3.0.
+	// is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is "text".
 	//
 	// required: true
-	NodeType Type `json:"node_type"`
+	NodeType string `json:"node_type"`
 }
 
 // ScriptAttributes represent script nodes which load javascript.
@@ -197,11 +201,20 @@ type ScriptAttributes struct {
 	// required: true
 	Identifier string `json:"id"`
 
-	// NodeType represents this node's types. It is a mirror of `node.type` and
-	// is primarily used to allow compatibility with OpenAPI 3.0.
+	// Nonce for CSP
+	//
+	// A nonce you may want to use to improve your Content Security Policy.
+	// You do not have to use this value but if you want to improve your CSP
+	// policies you may use it. You can also choose to use your own nonce value!
 	//
 	// required: true
-	NodeType Type `json:"node_type"`
+	Nonce string `json:"nonce"`
+
+	// NodeType represents this node's types. It is a mirror of `node.type` and
+	// is primarily used to allow compatibility with OpenAPI 3.0. In this struct it technically always is "script".
+	//
+	// required: true
+	NodeType string `json:"node_type"`
 }
 
 var (
@@ -288,22 +301,22 @@ func (a *TextAttributes) Reset() {
 func (a *ScriptAttributes) Reset() {
 }
 
-func (a *InputAttributes) GetNodeType() Type {
-	return a.NodeType
+func (a *InputAttributes) GetNodeType() UiNodeType {
+	return UiNodeType(a.NodeType)
 }
 
-func (a *ImageAttributes) GetNodeType() Type {
-	return a.NodeType
+func (a *ImageAttributes) GetNodeType() UiNodeType {
+	return UiNodeType(a.NodeType)
 }
 
-func (a *AnchorAttributes) GetNodeType() Type {
-	return a.NodeType
+func (a *AnchorAttributes) GetNodeType() UiNodeType {
+	return UiNodeType(a.NodeType)
 }
 
-func (a *TextAttributes) GetNodeType() Type {
-	return a.NodeType
+func (a *TextAttributes) GetNodeType() UiNodeType {
+	return UiNodeType(a.NodeType)
 }
 
-func (a *ScriptAttributes) GetNodeType() Type {
-	return a.NodeType
+func (a *ScriptAttributes) GetNodeType() UiNodeType {
+	return UiNodeType(a.NodeType)
 }

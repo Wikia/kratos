@@ -7,6 +7,8 @@ import (
 
 	"github.com/ory/kratos/cmd/cleanup"
 
+	"github.com/ory/kratos/schema"
+
 	"github.com/ory/kratos/selfservice/flow/recovery"
 
 	"github.com/ory/x/reqlog"
@@ -86,13 +88,15 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 	}
 	publicLogger := reqlog.NewMiddlewareFromLogger(
 		l,
-		"public#"+c.SelfPublicURL(nil).String(),
+		"public#"+c.SelfPublicURL().String(),
 	)
 	if r.Config(ctx).DisablePublicHealthRequestLog() {
 		publicLogger.ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath)
 	}
 	n.Use(publicLogger)
+	n.Use(x.HTTPLoaderContextMiddleware(r))
 	n.Use(sqa(ctx, cmd, r))
+
 	n.Use(r.PrometheusManager())
 
 	router := x.NewRouterPublic()
@@ -111,10 +115,6 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 	r.RegisterPublicRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
 
-	if tracer := r.Tracer(ctx); tracer.IsLoaded() {
-		n.Use(tracer)
-	}
-
 	var handler http.Handler = n
 	options, enabled := r.Config(ctx).CORS("public")
 	if enabled {
@@ -122,6 +122,12 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 	}
 
 	certs := c.GetTSLCertificatesForPublic()
+
+	if tracer := r.Tracer(ctx); tracer.IsLoaded() {
+		handler = x.TraceHandler(handler)
+	}
+
+	// #nosec G112 - the correct settings are set by graceful.WithDefaults
 	server := graceful.WithDefaults(&http.Server{
 		Handler:   handler,
 		TLSConfig: &tls.Config{Certificates: certs, MinVersion: tls.VersionTLS12},
@@ -158,12 +164,15 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 	}
 	adminLogger := reqlog.NewMiddlewareFromLogger(
 		l,
-		"admin#"+c.SelfPublicURL(nil).String(),
+		"admin#"+c.SelfPublicURL().String(),
 	)
+
 	if r.Config(ctx).DisableAdminHealthRequestLog() {
-		adminLogger.ExcludePaths(healthx.AliveCheckPath, healthx.ReadyCheckPath)
+		adminLogger.ExcludePaths(x.AdminPrefix+healthx.AliveCheckPath, x.AdminPrefix+healthx.ReadyCheckPath)
 	}
 	n.Use(adminLogger)
+	n.UseFunc(x.RedirectAdminMiddleware)
+	n.Use(x.HTTPLoaderContextMiddleware(r))
 	n.Use(sqa(ctx, cmd, r))
 	n.Use(r.PrometheusManager())
 
@@ -171,16 +180,20 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 	r.RegisterAdminRoutes(ctx, router)
 	r.PrometheusManager().RegisterRouter(router.Router)
 
-	if tracer := r.Tracer(ctx); tracer.IsLoaded() {
-		n.Use(tracer)
-	}
-
 	n.UseHandler(router)
 	certs := c.GetTSLCertificatesForAdmin()
+
+	var handler http.Handler = n
+	if tracer := r.Tracer(ctx); tracer.IsLoaded() {
+		handler = x.TraceHandler(n)
+	}
+
+	// #nosec G112 - the correct settings are set by graceful.WithDefaults
 	server := graceful.WithDefaults(&http.Server{
-		Handler:   n,
+		Handler:   handler,
 		TLSConfig: &tls.Config{Certificates: certs, MinVersion: tls.VersionTLS12},
 	})
+
 	addr := c.AdminListenOn()
 
 	l.Printf("Starting the admin httpd on: %s", addr)
@@ -235,7 +248,9 @@ func sqa(ctx stdctx.Context, cmd *cobra.Command, d driver.Registry) *metricsx.Se
 				registration.RouteSubmitFlow,
 
 				session.RouteWhoami,
-				identity.RouteCollection,
+
+				x.AdminPrefix + "/" + schema.SchemasPath,
+				x.AdminPrefix + identity.RouteCollection,
 
 				settings.RouteInitBrowserFlow,
 				settings.RouteInitAPIFlow,

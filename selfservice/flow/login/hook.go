@@ -23,7 +23,7 @@ type (
 	}
 
 	PostHookExecutor interface {
-		ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, g node.Group, a *Flow, s *session.Session) error
+		ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, a *Flow, s *session.Session) error
 	}
 
 	HooksProvider interface {
@@ -63,13 +63,21 @@ func NewHookExecutor(d executorDependencies) *HookExecutor {
 	return &HookExecutor{d: d}
 }
 
-func (e *HookExecutor) requiresAAL2(r *http.Request, s *session.Session) (*session.ErrAALNotSatisfied, bool) {
+func (e *HookExecutor) requiresAAL2(r *http.Request, s *session.Session, a *Flow) (*session.ErrAALNotSatisfied, bool) {
 	var aalErr *session.ErrAALNotSatisfied
 	err := e.d.SessionManager().DoesSessionSatisfy(r, s, e.d.Config(r.Context()).SessionWhoAmIAAL())
-	return aalErr, errors.As(err, &aalErr)
+	if ok := errors.As(err, &aalErr); !ok {
+		return nil, false
+	}
+
+	if err := aalErr.PassReturnToParameter(a.RequestURL); err != nil {
+		return nil, false
+	}
+
+	return aalErr, true
 }
 
-func (e *HookExecutor) handleLoginError(_ http.ResponseWriter, r *http.Request, g node.Group, f *Flow, i *identity.Identity, flowError error) error {
+func (e *HookExecutor) handleLoginError(_ http.ResponseWriter, r *http.Request, g node.UiNodeGroup, f *Flow, i *identity.Identity, flowError error) error {
 	if f != nil {
 		if i != nil {
 			cont, err := container.NewFromStruct("", g, i.Traits, "traits")
@@ -92,7 +100,7 @@ func (e *HookExecutor) handleLoginError(_ http.ResponseWriter, r *http.Request, 
 	return flowError
 }
 
-func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g node.Group, a *Flow, i *identity.Identity, s *session.Session) error {
+func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g node.UiNodeGroup, a *Flow, i *identity.Identity, s *session.Session) error {
 	if err := s.Activate(i, e.d.Config(r.Context()), time.Now().UTC()); err != nil {
 		return err
 	}
@@ -101,8 +109,8 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g n
 	c := e.d.Config(r.Context())
 	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
 		x.SecureRedirectUseSourceURL(a.RequestURL),
-		x.SecureRedirectAllowURLs(c.SelfServiceBrowserWhitelistedReturnToDomains()),
-		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(r)),
+		x.SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains()),
+		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL()),
 		x.SecureRedirectOverrideDefaultReturnTo(e.d.Config(r.Context()).SelfServiceFlowLoginReturnTo(a.Active.String())),
 	)
 	if err != nil {
@@ -117,7 +125,7 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g n
 		WithField("flow_method", a.Active).
 		Debug("Running ExecuteLoginPostHook.")
 	for k, executor := range e.d.PostLoginHooks(r.Context(), a.Active) {
-		if err := executor.ExecuteLoginPostHook(w, r, g, a, s); err != nil {
+		if err := executor.ExecuteLoginPostHook(w, r, a, s); err != nil {
 			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().
 					WithRequest(r).
@@ -156,7 +164,7 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g n
 			Info("Identity authenticated successfully and was issued an Ory Kratos Session Token.")
 
 		response := &APIFlowResponse{Session: s, Token: s.Token}
-		if _, required := e.requiresAAL2(r, s); required {
+		if _, required := e.requiresAAL2(r, s, a); required {
 			// If AAL is not satisfied, we omit the identity to preserve the user's privacy in case of a phishing attack.
 			response.Session.Identity = nil
 		}
@@ -180,7 +188,7 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g n
 		s.Token = ""
 
 		response := &APIFlowResponse{Session: s}
-		if _, required := e.requiresAAL2(r, s); required {
+		if _, required := e.requiresAAL2(r, s, a); required {
 			// If AAL is not satisfied, we omit the identity to preserve the user's privacy in case of a phishing attack.
 			response.Session.Identity = nil
 		}
@@ -189,7 +197,7 @@ func (e *HookExecutor) PostLoginHook(w http.ResponseWriter, r *http.Request, g n
 	}
 
 	// If we detect that whoami would require a higher AAL, we redirect!
-	if aalErr, required := e.requiresAAL2(r, s); required {
+	if aalErr, required := e.requiresAAL2(r, s, a); required {
 		http.Redirect(w, r, aalErr.RedirectTo, http.StatusSeeOther)
 		return nil
 	}

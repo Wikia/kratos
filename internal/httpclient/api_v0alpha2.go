@@ -29,14 +29,11 @@ var (
 type V0alpha2Api interface {
 
 	/*
-			 * AdminCreateIdentity Create an Identity
-			 * This endpoint creates an identity. It is NOT possible to set an identity's credentials (password, ...)
-		using this method! A way to achieve that will be introduced in the future.
-
-		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
-			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-			 * @return V0alpha2ApiApiAdminCreateIdentityRequest
-	*/
+	 * AdminCreateIdentity Create an Identity
+	 * This endpoint creates an identity. Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	 * @return V0alpha2ApiApiAdminCreateIdentityRequest
+	 */
 	AdminCreateIdentity(ctx context.Context) V0alpha2ApiApiAdminCreateIdentityRequest
 
 	/*
@@ -95,6 +92,21 @@ type V0alpha2Api interface {
 	AdminDeleteIdentitySessionsExecute(r V0alpha2ApiApiAdminDeleteIdentitySessionsRequest) (*http.Response, error)
 
 	/*
+	 * AdminExtendSession Calling this endpoint extends the given session ID. If `session.earliest_possible_extend` is set it will only extend the session after the specified time has passed.
+	 * Retrieve the session ID from the `/sessions/whoami` endpoint / `toSession` SDK method.
+	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+	 * @param id ID is the session's ID.
+	 * @return V0alpha2ApiApiAdminExtendSessionRequest
+	 */
+	AdminExtendSession(ctx context.Context, id string) V0alpha2ApiApiAdminExtendSessionRequest
+
+	/*
+	 * AdminExtendSessionExecute executes the request
+	 * @return Session
+	 */
+	AdminExtendSessionExecute(r V0alpha2ApiApiAdminExtendSessionRequest) (*Session, *http.Response, error)
+
+	/*
 	 * AdminGetIdentity Get an Identity
 	 * Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -143,21 +155,21 @@ type V0alpha2Api interface {
 	AdminListIdentitiesExecute(r V0alpha2ApiApiAdminListIdentitiesRequest) ([]Identity, *http.Response, error)
 
 	/*
-			 * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
+			 * AdminListIdentitySessions This endpoint returns all sessions that belong to the given Identity.
 			 * This endpoint is useful for:
 
-		Session refresh
+		Listing all sessions that belong to an Identity in an administrative context.
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-			 * @param id ID is the session's ID.
-			 * @return V0alpha2ApiApiAdminSessionRefreshRequest
+			 * @param id ID is the identity's ID.
+			 * @return V0alpha2ApiApiAdminListIdentitySessionsRequest
 	*/
-	AdminSessionRefresh(ctx context.Context, id string) V0alpha2ApiApiAdminSessionRefreshRequest
+	AdminListIdentitySessions(ctx context.Context, id string) V0alpha2ApiApiAdminListIdentitySessionsRequest
 
 	/*
-	 * AdminSessionRefreshExecute executes the request
-	 * @return Session
+	 * AdminListIdentitySessionsExecute executes the request
+	 * @return []Session
 	 */
-	AdminSessionRefreshExecute(r V0alpha2ApiApiAdminSessionRefreshRequest) (*Session, *http.Response, error)
+	AdminListIdentitySessionsExecute(r V0alpha2ApiApiAdminListIdentitySessionsRequest) ([]Session, *http.Response, error)
 
 	/*
 			 * AdminUpdateCredentials Update Identity Credentials
@@ -177,10 +189,7 @@ type V0alpha2Api interface {
 
 	/*
 			 * AdminUpdateIdentity Update an Identity
-			 * This endpoint updates an identity. It is NOT possible to set an identity's credentials (password, ...)
-		using this method! A way to achieve that will be introduced in the future.
-
-		The full identity payload (except credentials) is expected. This endpoint does not support patching.
+			 * This endpoint updates an identity. The full identity payload (except credentials) is expected. This endpoint does not support patching.
 
 		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -294,7 +303,7 @@ type V0alpha2Api interface {
 		`session_already_available`: The user is already signed in.
 		`self_service_flow_expired`: The flow is expired and you should request a new one.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiGetSelfServiceLoginFlowRequest
 	*/
@@ -325,7 +334,7 @@ type V0alpha2Api interface {
 		})
 		```
 
-		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiGetSelfServiceRecoveryFlowRequest
 	*/
@@ -361,7 +370,7 @@ type V0alpha2Api interface {
 		`session_already_available`: The user is already signed in.
 		`self_service_flow_expired`: The flow is expired and you should request a new one.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiGetSelfServiceRegistrationFlowRequest
 	*/
@@ -445,7 +454,7 @@ type V0alpha2Api interface {
 		<script src="https://public-kratos.example.org/.well-known/ory/webauthn.js" type="script" async />
 		```
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiGetWebAuthnJavaScriptRequest
 	*/
@@ -477,7 +486,7 @@ type V0alpha2Api interface {
 
 		This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceLoginFlowForBrowsersRequest
 	*/
@@ -510,7 +519,7 @@ type V0alpha2Api interface {
 
 		This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceLoginFlowWithoutBrowserRequest
 	*/
@@ -533,7 +542,7 @@ type V0alpha2Api interface {
 
 		This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceRecoveryFlowForBrowsersRequest
 	*/
@@ -560,7 +569,7 @@ type V0alpha2Api interface {
 		This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
 
-		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceRecoveryFlowWithoutBrowserRequest
 	*/
@@ -598,7 +607,7 @@ type V0alpha2Api interface {
 
 		This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceRegistrationFlowForBrowsersRequest
 	*/
@@ -630,7 +639,7 @@ type V0alpha2Api interface {
 
 		This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiInitializeSelfServiceRegistrationFlowWithoutBrowserRequest
 	*/
@@ -776,6 +785,54 @@ type V0alpha2Api interface {
 	ListIdentitySchemasExecute(r V0alpha2ApiApiListIdentitySchemasRequest) ([]IdentitySchema, *http.Response, error)
 
 	/*
+			 * ListSessions This endpoints returns all other active sessions that belong to the logged-in user. The current session can be retrieved by calling the `/sessions/whoami` endpoint.
+			 * This endpoint is useful for:
+
+		Displaying all other sessions that belong to the logged-in user
+			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			 * @return V0alpha2ApiApiListSessionsRequest
+	*/
+	ListSessions(ctx context.Context) V0alpha2ApiApiListSessionsRequest
+
+	/*
+	 * ListSessionsExecute executes the request
+	 * @return []Session
+	 */
+	ListSessionsExecute(r V0alpha2ApiApiListSessionsRequest) ([]Session, *http.Response, error)
+
+	/*
+			 * RevokeSession Calling this endpoint invalidates the specified session. The current session cannot be revoked. Session data are not deleted.
+			 * This endpoint is useful for:
+
+		To forcefully logout the current user from another device or session
+			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			 * @param id ID is the session's ID.
+			 * @return V0alpha2ApiApiRevokeSessionRequest
+	*/
+	RevokeSession(ctx context.Context, id string) V0alpha2ApiApiRevokeSessionRequest
+
+	/*
+	 * RevokeSessionExecute executes the request
+	 */
+	RevokeSessionExecute(r V0alpha2ApiApiRevokeSessionRequest) (*http.Response, error)
+
+	/*
+			 * RevokeSessions Calling this endpoint invalidates all except the current session that belong to the logged-in user. Session data are not deleted.
+			 * This endpoint is useful for:
+
+		To forcefully logout the current user from all other devices and sessions
+			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+			 * @return V0alpha2ApiApiRevokeSessionsRequest
+	*/
+	RevokeSessions(ctx context.Context) V0alpha2ApiApiRevokeSessionsRequest
+
+	/*
+	 * RevokeSessionsExecute executes the request
+	 * @return RevokedSessions
+	 */
+	RevokeSessionsExecute(r V0alpha2ApiApiRevokeSessionsRequest) (*RevokedSessions, *http.Response, error)
+
+	/*
 			 * SubmitSelfServiceLoginFlow Submit a Login Flow
 			 * :::info
 
@@ -788,16 +845,16 @@ type V0alpha2Api interface {
 
 		API flows expect `application/json` to be sent in the body and responds with
 		HTTP 200 and a application/json body with the session token on success;
-		HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+		HTTP 410 if the original flow expired with the appropriate error messages set and optionally a `use_flow_id` parameter in the body;
 		HTTP 400 on form validation errors.
 
 		Browser flows expect a Content-Type of `application/x-www-form-urlencoded` or `application/json` to be sent in the body and respond with
-		a HTTP 302 redirect to the post/after login URL or the `return_to` value if it was set and if the login succeeded;
-		a HTTP 302 redirect to the login UI URL with the flow ID containing the validation errors otherwise.
+		a HTTP 303 redirect to the post/after login URL or the `return_to` value if it was set and if the login succeeded;
+		a HTTP 303 redirect to the login UI URL with the flow ID containing the validation errors otherwise.
 
 		Browser flows with an accept header of `application/json` will not redirect but instead respond with
 		HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-		HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+		HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 		HTTP 400 on form validation errors.
 
 		If this endpoint is called with `Accept: application/json` in the header, the response contains the flow without a redirect. In the
@@ -809,7 +866,7 @@ type V0alpha2Api interface {
 		`browser_location_change_required`: Usually sent when an AJAX request indicates that the browser needs to open a specific URL.
 		Most likely used in Social Sign In flows.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest
 	*/
@@ -825,7 +882,7 @@ type V0alpha2Api interface {
 			 * SubmitSelfServiceLogoutFlow Complete Self-Service Logout
 			 * This endpoint logs out an identity in a self-service manner.
 
-		If the `Accept` HTTP header is not set to `application/json`, the browser will be redirected (HTTP 302 Found)
+		If the `Accept` HTTP header is not set to `application/json`, the browser will be redirected (HTTP 303 See Other)
 		to the `return_to` parameter of the initial request or fall back to `urls.default_return_to`.
 
 		If the `Accept` HTTP header is set to `application/json`, a 204 No Content response
@@ -874,16 +931,16 @@ type V0alpha2Api interface {
 		`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
 		and works with API- and Browser-initiated flows.
 		For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid.
-		and a HTTP 302 Found redirect with a fresh recovery flow if the flow was otherwise invalid (e.g. expired).
-		For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 302 Found redirect to the Recovery UI URL with the Recovery Flow ID appended.
+		and a HTTP 303 See Other redirect with a fresh recovery flow if the flow was otherwise invalid (e.g. expired).
+		For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Recovery UI URL with the Recovery Flow ID appended.
 		`sent_email` is the success state after `choose_method` for the `link` method and allows the user to request another recovery email. It
 		works for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.
 		`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow ("sending a recovery link")
-		does not have any API capabilities. The server responds with a HTTP 302 Found redirect either to the Settings UI URL
+		does not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL
 		(if the link was valid) and instructs the user to update their password, or a redirect to the Recover UI URL with
 		a new Recovery Flow ID which contains an error message that the recovery link was invalid.
 
-		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest
 	*/
@@ -903,16 +960,16 @@ type V0alpha2Api interface {
 		API flows expect `application/json` to be sent in the body and respond with
 		HTTP 200 and a application/json body with the created identity success - if the session hook is configured the
 		`session` and `session_token` will also be included;
-		HTTP 302 redirect to a fresh registration flow if the original flow expired with the appropriate error messages set;
+		HTTP 410 if the original flow expired with the appropriate error messages set and optionally a `use_flow_id` parameter in the body;
 		HTTP 400 on form validation errors.
 
 		Browser flows expect a Content-Type of `application/x-www-form-urlencoded` or `application/json` to be sent in the body and respond with
-		a HTTP 302 redirect to the post/after registration URL or the `return_to` value if it was set and if the registration succeeded;
-		a HTTP 302 redirect to the registration UI URL with the flow ID containing the validation errors otherwise.
+		a HTTP 303 redirect to the post/after registration URL or the `return_to` value if it was set and if the registration succeeded;
+		a HTTP 303 redirect to the registration UI URL with the flow ID containing the validation errors otherwise.
 
 		Browser flows with an accept header of `application/json` will not redirect but instead respond with
 		HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-		HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+		HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 		HTTP 400 on form validation errors.
 
 		If this endpoint is called with `Accept: application/json` in the header, the response contains the flow without a redirect. In the
@@ -924,7 +981,7 @@ type V0alpha2Api interface {
 		`browser_location_change_required`: Usually sent when an AJAX request indicates that the browser needs to open a specific URL.
 		Most likely used in Social Sign In flows.
 
-		More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+		More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @return V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest
 	*/
@@ -943,20 +1000,20 @@ type V0alpha2Api interface {
 
 		API-initiated flows expect `application/json` to be sent in the body and respond with
 		HTTP 200 and an application/json body with the session token on success;
-		HTTP 302 redirect to a fresh settings flow if the original flow expired with the appropriate error messages set;
+		HTTP 303 redirect to a fresh settings flow if the original flow expired with the appropriate error messages set;
 		HTTP 400 on form validation errors.
 		HTTP 401 when the endpoint is called without a valid session token.
 		HTTP 403 when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
 		Implies that the user needs to re-authenticate.
 
 		Browser flows without HTTP Header `Accept` or with `Accept: text/*` respond with
-		a HTTP 302 redirect to the post/after settings URL or the `return_to` value if it was set and if the flow succeeded;
-		a HTTP 302 redirect to the Settings UI URL with the flow ID containing the validation errors otherwise.
-		a HTTP 302 redirect to the login endpoint when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
+		a HTTP 303 redirect to the post/after settings URL or the `return_to` value if it was set and if the flow succeeded;
+		a HTTP 303 redirect to the Settings UI URL with the flow ID containing the validation errors otherwise.
+		a HTTP 303 redirect to the login endpoint when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
 
 		Browser flows with HTTP Header `Accept: application/json` respond with
 		HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-		HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+		HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 		HTTP 401 when the endpoint is called without a valid session cookie.
 		HTTP 403 when the page is accessed without a session cookie or the session's AAL is too low.
 		HTTP 400 on form validation errors.
@@ -1000,12 +1057,12 @@ type V0alpha2Api interface {
 		`choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
 		and works with API- and Browser-initiated flows.
 		For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid
-		and a HTTP 302 Found redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
-		For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 302 Found redirect to the Verification UI URL with the Verification Flow ID appended.
+		and a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
+		For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.
 		`sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It
 		works for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.
 		`passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow ("sending a verification link")
-		does not have any API capabilities. The server responds with a HTTP 302 Found redirect either to the Settings UI URL
+		does not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL
 		(if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with
 		a new Verification Flow ID which contains an error message that the verification link was invalid.
 
@@ -1025,7 +1082,8 @@ type V0alpha2Api interface {
 			 * ToSession Check Who the Current HTTP Session Belongs To
 			 * Uses the HTTP Headers in the GET request to determine (e.g. by using checking the cookies) who is authenticated.
 		Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
-		Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
+		Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header
+		in the response.
 
 		It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 		By default session refresh on this endpoint is disabled.
@@ -1110,13 +1168,10 @@ func (r V0alpha2ApiApiAdminCreateIdentityRequest) Execute() (*Identity, *http.Re
 
 /*
  * AdminCreateIdentity Create an Identity
- * This endpoint creates an identity. It is NOT possible to set an identity's credentials (password, ...)
-using this method! A way to achieve that will be introduced in the future.
-
-Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
+ * This endpoint creates an identity. Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiAdminCreateIdentityRequest
-*/
+ */
 func (a *V0alpha2ApiService) AdminCreateIdentity(ctx context.Context) V0alpha2ApiApiAdminCreateIdentityRequest {
 	return V0alpha2ApiApiAdminCreateIdentityRequest{
 		ApiService: a,
@@ -1143,7 +1198,7 @@ func (a *V0alpha2ApiService) AdminCreateIdentityExecute(r V0alpha2ApiApiAdminCre
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities"
+	localVarPath := localBasePath + "/admin/identities"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -1296,7 +1351,7 @@ func (a *V0alpha2ApiService) AdminCreateSelfServiceRecoveryLinkExecute(r V0alpha
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/recovery/link"
+	localVarPath := localBasePath + "/admin/recovery/link"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -1433,7 +1488,7 @@ func (a *V0alpha2ApiService) AdminDeleteIdentityExecute(r V0alpha2ApiApiAdminDel
 		return nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities/{id}"
+	localVarPath := localBasePath + "/admin/identities/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1562,7 +1617,7 @@ func (a *V0alpha2ApiService) AdminDeleteIdentitySessionsExecute(r V0alpha2ApiApi
 		return nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities/{id}/sessions"
+	localVarPath := localBasePath + "/admin/identities/{id}/sessions"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -1667,6 +1722,154 @@ func (a *V0alpha2ApiService) AdminDeleteIdentitySessionsExecute(r V0alpha2ApiApi
 	return localVarHTTPResponse, nil
 }
 
+type V0alpha2ApiApiAdminExtendSessionRequest struct {
+	ctx        context.Context
+	ApiService V0alpha2Api
+	id         string
+}
+
+func (r V0alpha2ApiApiAdminExtendSessionRequest) Execute() (*Session, *http.Response, error) {
+	return r.ApiService.AdminExtendSessionExecute(r)
+}
+
+/*
+ * AdminExtendSession Calling this endpoint extends the given session ID. If `session.earliest_possible_extend` is set it will only extend the session after the specified time has passed.
+ * Retrieve the session ID from the `/sessions/whoami` endpoint / `toSession` SDK method.
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @param id ID is the session's ID.
+ * @return V0alpha2ApiApiAdminExtendSessionRequest
+ */
+func (a *V0alpha2ApiService) AdminExtendSession(ctx context.Context, id string) V0alpha2ApiApiAdminExtendSessionRequest {
+	return V0alpha2ApiApiAdminExtendSessionRequest{
+		ApiService: a,
+		ctx:        ctx,
+		id:         id,
+	}
+}
+
+/*
+ * Execute executes the request
+ * @return Session
+ */
+func (a *V0alpha2ApiService) AdminExtendSessionExecute(r V0alpha2ApiApiAdminExtendSessionRequest) (*Session, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodPatch
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+		localVarReturnValue  *Session
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.AdminExtendSession")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/admin/sessions/{id}/extend"
+	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.ctx != nil {
+		// API Key Authentication
+		if auth, ok := r.ctx.Value(ContextAPIKeys).(map[string]APIKey); ok {
+			if apiKey, ok := auth["oryAccessToken"]; ok {
+				var key string
+				if apiKey.Prefix != "" {
+					key = apiKey.Prefix + " " + apiKey.Key
+				} else {
+					key = apiKey.Key
+				}
+				localVarHeaderParams["Authorization"] = key
+			}
+		}
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
 type V0alpha2ApiApiAdminGetIdentityRequest struct {
 	ctx               context.Context
 	ApiService        V0alpha2Api
@@ -1717,7 +1920,7 @@ func (a *V0alpha2ApiService) AdminGetIdentityExecute(r V0alpha2ApiApiAdminGetIde
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities/{id}"
+	localVarPath := localBasePath + "/admin/identities/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -2016,7 +2219,7 @@ func (a *V0alpha2ApiService) AdminListIdentitiesExecute(r V0alpha2ApiApiAdminLis
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities"
+	localVarPath := localBasePath + "/admin/identities"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
@@ -2105,27 +2308,43 @@ func (a *V0alpha2ApiService) AdminListIdentitiesExecute(r V0alpha2ApiApiAdminLis
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
-type V0alpha2ApiApiAdminSessionRefreshRequest struct {
+type V0alpha2ApiApiAdminListIdentitySessionsRequest struct {
 	ctx        context.Context
 	ApiService V0alpha2Api
 	id         string
+	perPage    *int64
+	page       *int64
+	active     *bool
 }
 
-func (r V0alpha2ApiApiAdminSessionRefreshRequest) Execute() (*Session, *http.Response, error) {
-	return r.ApiService.AdminSessionRefreshExecute(r)
+func (r V0alpha2ApiApiAdminListIdentitySessionsRequest) PerPage(perPage int64) V0alpha2ApiApiAdminListIdentitySessionsRequest {
+	r.perPage = &perPage
+	return r
+}
+func (r V0alpha2ApiApiAdminListIdentitySessionsRequest) Page(page int64) V0alpha2ApiApiAdminListIdentitySessionsRequest {
+	r.page = &page
+	return r
+}
+func (r V0alpha2ApiApiAdminListIdentitySessionsRequest) Active(active bool) V0alpha2ApiApiAdminListIdentitySessionsRequest {
+	r.active = &active
+	return r
+}
+
+func (r V0alpha2ApiApiAdminListIdentitySessionsRequest) Execute() ([]Session, *http.Response, error) {
+	return r.ApiService.AdminListIdentitySessionsExecute(r)
 }
 
 /*
- * AdminSessionRefresh Calling this endpoint refreshes a given session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
+ * AdminListIdentitySessions This endpoint returns all sessions that belong to the given Identity.
  * This endpoint is useful for:
 
-Session refresh
+Listing all sessions that belong to an Identity in an administrative context.
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
- * @param id ID is the session's ID.
- * @return V0alpha2ApiApiAdminSessionRefreshRequest
+ * @param id ID is the identity's ID.
+ * @return V0alpha2ApiApiAdminListIdentitySessionsRequest
 */
-func (a *V0alpha2ApiService) AdminSessionRefresh(ctx context.Context, id string) V0alpha2ApiApiAdminSessionRefreshRequest {
-	return V0alpha2ApiApiAdminSessionRefreshRequest{
+func (a *V0alpha2ApiService) AdminListIdentitySessions(ctx context.Context, id string) V0alpha2ApiApiAdminListIdentitySessionsRequest {
+	return V0alpha2ApiApiAdminListIdentitySessionsRequest{
 		ApiService: a,
 		ctx:        ctx,
 		id:         id,
@@ -2134,30 +2353,39 @@ func (a *V0alpha2ApiService) AdminSessionRefresh(ctx context.Context, id string)
 
 /*
  * Execute executes the request
- * @return Session
+ * @return []Session
  */
-func (a *V0alpha2ApiService) AdminSessionRefreshExecute(r V0alpha2ApiApiAdminSessionRefreshRequest) (*Session, *http.Response, error) {
+func (a *V0alpha2ApiService) AdminListIdentitySessionsExecute(r V0alpha2ApiApiAdminListIdentitySessionsRequest) ([]Session, *http.Response, error) {
 	var (
-		localVarHTTPMethod   = http.MethodPatch
+		localVarHTTPMethod   = http.MethodGet
 		localVarPostBody     interface{}
 		localVarFormFileName string
 		localVarFileName     string
 		localVarFileBytes    []byte
-		localVarReturnValue  *Session
+		localVarReturnValue  []Session
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.AdminSessionRefresh")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.AdminListIdentitySessions")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/sessions/refresh/{id}"
+	localVarPath := localBasePath + "/admin/identities/{id}/sessions"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
 	localVarFormParams := url.Values{}
 
+	if r.perPage != nil {
+		localVarQueryParams.Add("per_page", parameterToString(*r.perPage, ""))
+	}
+	if r.page != nil {
+		localVarQueryParams.Add("page", parameterToString(*r.page, ""))
+	}
+	if r.active != nil {
+		localVarQueryParams.Add("active", parameterToString(*r.active, ""))
+	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
 
@@ -2210,6 +2438,26 @@ func (a *V0alpha2ApiService) AdminSessionRefreshExecute(r V0alpha2ApiApiAdminSes
 		newErr := &GenericOpenAPIError{
 			body:  localVarBody,
 			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
 		if localVarHTTPResponse.StatusCode == 404 {
 			var v JsonError
@@ -2378,10 +2626,7 @@ func (r V0alpha2ApiApiAdminUpdateIdentityRequest) Execute() (*Identity, *http.Re
 
 /*
  * AdminUpdateIdentity Update an Identity
- * This endpoint updates an identity. It is NOT possible to set an identity's credentials (password, ...)
-using this method! A way to achieve that will be introduced in the future.
-
-The full identity payload (except credentials) is expected. This endpoint does not support patching.
+ * This endpoint updates an identity. The full identity payload (except credentials) is expected. This endpoint does not support patching.
 
 Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -2415,7 +2660,7 @@ func (a *V0alpha2ApiService) AdminUpdateIdentityExecute(r V0alpha2ApiApiAdminUpd
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities/{id}"
+	localVarPath := localBasePath + "/admin/identities/{id}"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
@@ -3106,7 +3351,7 @@ This request may fail due to several reasons. The `error.id` can be one of:
 `session_already_available`: The user is already signed in.
 `self_service_flow_expired`: The flow is expired and you should request a new one.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiGetSelfServiceLoginFlowRequest
 */
@@ -3164,7 +3409,7 @@ func (a *V0alpha2ApiService) GetSelfServiceLoginFlowExecute(r V0alpha2ApiApiGetS
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	if r.cookie != nil {
-		localVarHeaderParams["cookie"] = parameterToString(*r.cookie, "")
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
 	if err != nil {
@@ -3281,7 +3526,7 @@ res.render('recovery', flow)
 })
 ```
 
-More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiGetSelfServiceRecoveryFlowRequest
 */
@@ -3339,7 +3584,7 @@ func (a *V0alpha2ApiService) GetSelfServiceRecoveryFlowExecute(r V0alpha2ApiApiG
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	if r.cookie != nil {
-		localVarHeaderParams["cookie"] = parameterToString(*r.cookie, "")
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
 	if err != nil {
@@ -3451,7 +3696,7 @@ This request may fail due to several reasons. The `error.id` can be one of:
 `session_already_available`: The user is already signed in.
 `self_service_flow_expired`: The flow is expired and you should request a new one.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiGetSelfServiceRegistrationFlowRequest
 */
@@ -3509,7 +3754,7 @@ func (a *V0alpha2ApiService) GetSelfServiceRegistrationFlowExecute(r V0alpha2Api
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
 	}
 	if r.cookie != nil {
-		localVarHeaderParams["cookie"] = parameterToString(*r.cookie, "")
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
 	if err != nil {
@@ -3693,7 +3938,7 @@ func (a *V0alpha2ApiService) GetSelfServiceSettingsFlowExecute(r V0alpha2ApiApiG
 		localVarHeaderParams["X-Session-Token"] = parameterToString(*r.xSessionToken, "")
 	}
 	if r.cookie != nil {
-		localVarHeaderParams["cookie"] = parameterToString(*r.cookie, "")
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
 	if err != nil {
@@ -3964,7 +4209,7 @@ If you are building a JavaScript Browser App (e.g. in ReactJS or AngularJS) you 
 <script src="https://public-kratos.example.org/.well-known/ory/webauthn.js" type="script" async />
 ```
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiGetWebAuthnJavaScriptRequest
 */
@@ -4099,7 +4344,7 @@ case of an error, the `error.id` of the JSON response body can be one of:
 
 This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceLoginFlowForBrowsersRequest
 */
@@ -4263,7 +4508,7 @@ In the case of an error, the `error.id` of the JSON response body can be one of:
 
 This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceLoginFlowWithoutBrowserRequest
 */
@@ -4407,7 +4652,7 @@ or a 400 bad request error if the user is already authenticated.
 
 This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceRecoveryFlowForBrowsersRequest
 */
@@ -4543,7 +4788,7 @@ you vulnerable to a variety of CSRF attacks.
 This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
 
-More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceRecoveryFlowWithoutBrowserRequest
 */
@@ -4693,7 +4938,7 @@ If this endpoint is called via an AJAX request, the response contains the regist
 
 This endpoint is NOT INTENDED for clients that do not have a browser (Chrome, Firefox, ...) as cookies are needed.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceRegistrationFlowForBrowsersRequest
 */
@@ -4824,7 +5069,7 @@ In the case of an error, the `error.id` of the JSON response body can be one of:
 
 This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiInitializeSelfServiceRegistrationFlowWithoutBrowserRequest
 */
@@ -5640,24 +5885,488 @@ func (a *V0alpha2ApiService) ListIdentitySchemasExecute(r V0alpha2ApiApiListIden
 	return localVarReturnValue, localVarHTTPResponse, nil
 }
 
+type V0alpha2ApiApiListSessionsRequest struct {
+	ctx           context.Context
+	ApiService    V0alpha2Api
+	xSessionToken *string
+	cookie        *string
+	perPage       *int64
+	page          *int64
+}
+
+func (r V0alpha2ApiApiListSessionsRequest) XSessionToken(xSessionToken string) V0alpha2ApiApiListSessionsRequest {
+	r.xSessionToken = &xSessionToken
+	return r
+}
+func (r V0alpha2ApiApiListSessionsRequest) Cookie(cookie string) V0alpha2ApiApiListSessionsRequest {
+	r.cookie = &cookie
+	return r
+}
+func (r V0alpha2ApiApiListSessionsRequest) PerPage(perPage int64) V0alpha2ApiApiListSessionsRequest {
+	r.perPage = &perPage
+	return r
+}
+func (r V0alpha2ApiApiListSessionsRequest) Page(page int64) V0alpha2ApiApiListSessionsRequest {
+	r.page = &page
+	return r
+}
+
+func (r V0alpha2ApiApiListSessionsRequest) Execute() ([]Session, *http.Response, error) {
+	return r.ApiService.ListSessionsExecute(r)
+}
+
+/*
+ * ListSessions This endpoints returns all other active sessions that belong to the logged-in user. The current session can be retrieved by calling the `/sessions/whoami` endpoint.
+ * This endpoint is useful for:
+
+Displaying all other sessions that belong to the logged-in user
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @return V0alpha2ApiApiListSessionsRequest
+*/
+func (a *V0alpha2ApiService) ListSessions(ctx context.Context) V0alpha2ApiApiListSessionsRequest {
+	return V0alpha2ApiApiListSessionsRequest{
+		ApiService: a,
+		ctx:        ctx,
+	}
+}
+
+/*
+ * Execute executes the request
+ * @return []Session
+ */
+func (a *V0alpha2ApiService) ListSessionsExecute(r V0alpha2ApiApiListSessionsRequest) ([]Session, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodGet
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+		localVarReturnValue  []Session
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.ListSessions")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/sessions"
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	if r.perPage != nil {
+		localVarQueryParams.Add("per_page", parameterToString(*r.perPage, ""))
+	}
+	if r.page != nil {
+		localVarQueryParams.Add("page", parameterToString(*r.page, ""))
+	}
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.xSessionToken != nil {
+		localVarHeaderParams["X-Session-Token"] = parameterToString(*r.xSessionToken, "")
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
+type V0alpha2ApiApiRevokeSessionRequest struct {
+	ctx        context.Context
+	ApiService V0alpha2Api
+	id         string
+}
+
+func (r V0alpha2ApiApiRevokeSessionRequest) Execute() (*http.Response, error) {
+	return r.ApiService.RevokeSessionExecute(r)
+}
+
+/*
+ * RevokeSession Calling this endpoint invalidates the specified session. The current session cannot be revoked. Session data are not deleted.
+ * This endpoint is useful for:
+
+To forcefully logout the current user from another device or session
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @param id ID is the session's ID.
+ * @return V0alpha2ApiApiRevokeSessionRequest
+*/
+func (a *V0alpha2ApiService) RevokeSession(ctx context.Context, id string) V0alpha2ApiApiRevokeSessionRequest {
+	return V0alpha2ApiApiRevokeSessionRequest{
+		ApiService: a,
+		ctx:        ctx,
+		id:         id,
+	}
+}
+
+/*
+ * Execute executes the request
+ */
+func (a *V0alpha2ApiService) RevokeSessionExecute(r V0alpha2ApiApiRevokeSessionRequest) (*http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodDelete
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.RevokeSession")
+	if err != nil {
+		return nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/sessions/{id}"
+	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarHTTPResponse, newErr
+	}
+
+	return localVarHTTPResponse, nil
+}
+
+type V0alpha2ApiApiRevokeSessionsRequest struct {
+	ctx           context.Context
+	ApiService    V0alpha2Api
+	xSessionToken *string
+	cookie        *string
+}
+
+func (r V0alpha2ApiApiRevokeSessionsRequest) XSessionToken(xSessionToken string) V0alpha2ApiApiRevokeSessionsRequest {
+	r.xSessionToken = &xSessionToken
+	return r
+}
+func (r V0alpha2ApiApiRevokeSessionsRequest) Cookie(cookie string) V0alpha2ApiApiRevokeSessionsRequest {
+	r.cookie = &cookie
+	return r
+}
+
+func (r V0alpha2ApiApiRevokeSessionsRequest) Execute() (*RevokedSessions, *http.Response, error) {
+	return r.ApiService.RevokeSessionsExecute(r)
+}
+
+/*
+ * RevokeSessions Calling this endpoint invalidates all except the current session that belong to the logged-in user. Session data are not deleted.
+ * This endpoint is useful for:
+
+To forcefully logout the current user from all other devices and sessions
+ * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+ * @return V0alpha2ApiApiRevokeSessionsRequest
+*/
+func (a *V0alpha2ApiService) RevokeSessions(ctx context.Context) V0alpha2ApiApiRevokeSessionsRequest {
+	return V0alpha2ApiApiRevokeSessionsRequest{
+		ApiService: a,
+		ctx:        ctx,
+	}
+}
+
+/*
+ * Execute executes the request
+ * @return RevokedSessions
+ */
+func (a *V0alpha2ApiService) RevokeSessionsExecute(r V0alpha2ApiApiRevokeSessionsRequest) (*RevokedSessions, *http.Response, error) {
+	var (
+		localVarHTTPMethod   = http.MethodDelete
+		localVarPostBody     interface{}
+		localVarFormFileName string
+		localVarFileName     string
+		localVarFileBytes    []byte
+		localVarReturnValue  *RevokedSessions
+	)
+
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "V0alpha2ApiService.RevokeSessions")
+	if err != nil {
+		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
+	}
+
+	localVarPath := localBasePath + "/sessions"
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{"application/json"}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.xSessionToken != nil {
+		localVarHeaderParams["X-Session-Token"] = parameterToString(*r.xSessionToken, "")
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
+	}
+	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFormFileName, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return localVarReturnValue, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(req)
+	if err != nil || localVarHTTPResponse == nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	localVarBody, err := ioutil.ReadAll(localVarHTTPResponse.Body)
+	localVarHTTPResponse.Body.Close()
+	localVarHTTPResponse.Body = ioutil.NopCloser(bytes.NewBuffer(localVarBody))
+	if err != nil {
+		return localVarReturnValue, localVarHTTPResponse, err
+	}
+
+	if localVarHTTPResponse.StatusCode >= 300 {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: localVarHTTPResponse.Status,
+		}
+		if localVarHTTPResponse.StatusCode == 400 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 401 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 404 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 500 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	err = a.client.decode(&localVarReturnValue, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+	if err != nil {
+		newErr := &GenericOpenAPIError{
+			body:  localVarBody,
+			error: err.Error(),
+		}
+		return localVarReturnValue, localVarHTTPResponse, newErr
+	}
+
+	return localVarReturnValue, localVarHTTPResponse, nil
+}
+
 type V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest struct {
 	ctx                            context.Context
 	ApiService                     V0alpha2Api
 	flow                           *string
-	xSessionToken                  *string
 	submitSelfServiceLoginFlowBody *SubmitSelfServiceLoginFlowBody
+	xSessionToken                  *string
+	cookie                         *string
 }
 
 func (r V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest) Flow(flow string) V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest {
 	r.flow = &flow
 	return r
 }
+func (r V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest) SubmitSelfServiceLoginFlowBody(submitSelfServiceLoginFlowBody SubmitSelfServiceLoginFlowBody) V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest {
+	r.submitSelfServiceLoginFlowBody = &submitSelfServiceLoginFlowBody
+	return r
+}
 func (r V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest) XSessionToken(xSessionToken string) V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest {
 	r.xSessionToken = &xSessionToken
 	return r
 }
-func (r V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest) SubmitSelfServiceLoginFlowBody(submitSelfServiceLoginFlowBody SubmitSelfServiceLoginFlowBody) V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest {
-	r.submitSelfServiceLoginFlowBody = &submitSelfServiceLoginFlowBody
+func (r V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest) Cookie(cookie string) V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest {
+	r.cookie = &cookie
 	return r
 }
 
@@ -5678,16 +6387,16 @@ behaves differently for API and browser flows.
 
 API flows expect `application/json` to be sent in the body and responds with
 HTTP 200 and a application/json body with the session token on success;
-HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+HTTP 410 if the original flow expired with the appropriate error messages set and optionally a `use_flow_id` parameter in the body;
 HTTP 400 on form validation errors.
 
 Browser flows expect a Content-Type of `application/x-www-form-urlencoded` or `application/json` to be sent in the body and respond with
-a HTTP 302 redirect to the post/after login URL or the `return_to` value if it was set and if the login succeeded;
-a HTTP 302 redirect to the login UI URL with the flow ID containing the validation errors otherwise.
+a HTTP 303 redirect to the post/after login URL or the `return_to` value if it was set and if the login succeeded;
+a HTTP 303 redirect to the login UI URL with the flow ID containing the validation errors otherwise.
 
 Browser flows with an accept header of `application/json` will not redirect but instead respond with
 HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 HTTP 400 on form validation errors.
 
 If this endpoint is called with `Accept: application/json` in the header, the response contains the flow without a redirect. In the
@@ -5699,7 +6408,7 @@ case of an error, the `error.id` of the JSON response body can be one of:
 `browser_location_change_required`: Usually sent when an AJAX request indicates that the browser needs to open a specific URL.
 Most likely used in Social Sign In flows.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiSubmitSelfServiceLoginFlowRequest
 */
@@ -5737,6 +6446,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceLoginFlowExecute(r V0alpha2ApiApiS
 	if r.flow == nil {
 		return localVarReturnValue, nil, reportError("flow is required and must be specified")
 	}
+	if r.submitSelfServiceLoginFlowBody == nil {
+		return localVarReturnValue, nil, reportError("submitSelfServiceLoginFlowBody is required and must be specified")
+	}
 
 	localVarQueryParams.Add("flow", parameterToString(*r.flow, ""))
 	// to determine the Content-Type header
@@ -5758,6 +6470,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceLoginFlowExecute(r V0alpha2ApiApiS
 	}
 	if r.xSessionToken != nil {
 		localVarHeaderParams["X-Session-Token"] = parameterToString(*r.xSessionToken, "")
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	// body params
 	localVarPostBody = r.submitSelfServiceLoginFlowBody
@@ -5785,6 +6500,16 @@ func (a *V0alpha2ApiService) SubmitSelfServiceLoginFlowExecute(r V0alpha2ApiApiS
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
 			var v SelfServiceLoginFlow
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 410 {
+			var v JsonError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -5851,7 +6576,7 @@ func (r V0alpha2ApiApiSubmitSelfServiceLogoutFlowRequest) Execute() (*http.Respo
  * SubmitSelfServiceLogoutFlow Complete Self-Service Logout
  * This endpoint logs out an identity in a self-service manner.
 
-If the `Accept` HTTP header is not set to `application/json`, the browser will be redirected (HTTP 302 Found)
+If the `Accept` HTTP header is not set to `application/json`, the browser will be redirected (HTTP 303 See Other)
 to the `return_to` parameter of the initial request or fall back to `urls.default_return_to`.
 
 If the `Accept` HTTP header is set to `application/json`, a 204 No Content response
@@ -6086,20 +6811,25 @@ type V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest struct {
 	ctx                               context.Context
 	ApiService                        V0alpha2Api
 	flow                              *string
-	token                             *string
 	submitSelfServiceRecoveryFlowBody *SubmitSelfServiceRecoveryFlowBody
+	token                             *string
+	cookie                            *string
 }
 
 func (r V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest) Flow(flow string) V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest {
 	r.flow = &flow
 	return r
 }
+func (r V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest) SubmitSelfServiceRecoveryFlowBody(submitSelfServiceRecoveryFlowBody SubmitSelfServiceRecoveryFlowBody) V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest {
+	r.submitSelfServiceRecoveryFlowBody = &submitSelfServiceRecoveryFlowBody
+	return r
+}
 func (r V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest) Token(token string) V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest {
 	r.token = &token
 	return r
 }
-func (r V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest) SubmitSelfServiceRecoveryFlowBody(submitSelfServiceRecoveryFlowBody SubmitSelfServiceRecoveryFlowBody) V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest {
-	r.submitSelfServiceRecoveryFlowBody = &submitSelfServiceRecoveryFlowBody
+func (r V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest) Cookie(cookie string) V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest {
+	r.cookie = &cookie
 	return r
 }
 
@@ -6115,16 +6845,16 @@ behaves differently for API and browser flows and has several states:
 `choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
 and works with API- and Browser-initiated flows.
 For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid.
-and a HTTP 302 Found redirect with a fresh recovery flow if the flow was otherwise invalid (e.g. expired).
-For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 302 Found redirect to the Recovery UI URL with the Recovery Flow ID appended.
+and a HTTP 303 See Other redirect with a fresh recovery flow if the flow was otherwise invalid (e.g. expired).
+For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Recovery UI URL with the Recovery Flow ID appended.
 `sent_email` is the success state after `choose_method` for the `link` method and allows the user to request another recovery email. It
 works for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.
 `passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow ("sending a recovery link")
-does not have any API capabilities. The server responds with a HTTP 302 Found redirect either to the Settings UI URL
+does not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL
 (if the link was valid) and instructs the user to update their password, or a redirect to the Recover UI URL with
 a new Recovery Flow ID which contains an error message that the recovery link was invalid.
 
-More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery.mdx).
+More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiSubmitSelfServiceRecoveryFlowRequest
 */
@@ -6162,6 +6892,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRecoveryFlowExecute(r V0alpha2ApiA
 	if r.flow == nil {
 		return localVarReturnValue, nil, reportError("flow is required and must be specified")
 	}
+	if r.submitSelfServiceRecoveryFlowBody == nil {
+		return localVarReturnValue, nil, reportError("submitSelfServiceRecoveryFlowBody is required and must be specified")
+	}
 
 	localVarQueryParams.Add("flow", parameterToString(*r.flow, ""))
 	if r.token != nil {
@@ -6183,6 +6916,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRecoveryFlowExecute(r V0alpha2ApiA
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	// body params
 	localVarPostBody = r.submitSelfServiceRecoveryFlowBody
@@ -6210,6 +6946,16 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRecoveryFlowExecute(r V0alpha2ApiA
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
 			var v SelfServiceRecoveryFlow
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 410 {
+			var v JsonError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -6247,6 +6993,7 @@ type V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest struct {
 	ApiService                            V0alpha2Api
 	flow                                  *string
 	submitSelfServiceRegistrationFlowBody *SubmitSelfServiceRegistrationFlowBody
+	cookie                                *string
 }
 
 func (r V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest) Flow(flow string) V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest {
@@ -6255,6 +7002,10 @@ func (r V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest) Flow(flow string
 }
 func (r V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest) SubmitSelfServiceRegistrationFlowBody(submitSelfServiceRegistrationFlowBody SubmitSelfServiceRegistrationFlowBody) V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest {
 	r.submitSelfServiceRegistrationFlowBody = &submitSelfServiceRegistrationFlowBody
+	return r
+}
+func (r V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest) Cookie(cookie string) V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest {
+	r.cookie = &cookie
 	return r
 }
 
@@ -6270,16 +7021,16 @@ behaves differently for API and browser flows.
 API flows expect `application/json` to be sent in the body and respond with
 HTTP 200 and a application/json body with the created identity success - if the session hook is configured the
 `session` and `session_token` will also be included;
-HTTP 302 redirect to a fresh registration flow if the original flow expired with the appropriate error messages set;
+HTTP 410 if the original flow expired with the appropriate error messages set and optionally a `use_flow_id` parameter in the body;
 HTTP 400 on form validation errors.
 
 Browser flows expect a Content-Type of `application/x-www-form-urlencoded` or `application/json` to be sent in the body and respond with
-a HTTP 302 redirect to the post/after registration URL or the `return_to` value if it was set and if the registration succeeded;
-a HTTP 302 redirect to the registration UI URL with the flow ID containing the validation errors otherwise.
+a HTTP 303 redirect to the post/after registration URL or the `return_to` value if it was set and if the registration succeeded;
+a HTTP 303 redirect to the registration UI URL with the flow ID containing the validation errors otherwise.
 
 Browser flows with an accept header of `application/json` will not redirect but instead respond with
 HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 HTTP 400 on form validation errors.
 
 If this endpoint is called with `Accept: application/json` in the header, the response contains the flow without a redirect. In the
@@ -6291,7 +7042,7 @@ case of an error, the `error.id` of the JSON response body can be one of:
 `browser_location_change_required`: Usually sent when an AJAX request indicates that the browser needs to open a specific URL.
 Most likely used in Social Sign In flows.
 
-More information can be found at [Ory Kratos User Login and User Registration Documentation](https://www.ory.sh/docs/next/kratos/self-service/flows/user-login-user-registration).
+More information can be found at [Ory Kratos User Login](https://www.ory.sh/docs/kratos/self-service/flows/user-login) and [User Registration Documentation](https://www.ory.sh/docs/kratos/self-service/flows/user-registration).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiSubmitSelfServiceRegistrationFlowRequest
 */
@@ -6329,6 +7080,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRegistrationFlowExecute(r V0alpha2
 	if r.flow == nil {
 		return localVarReturnValue, nil, reportError("flow is required and must be specified")
 	}
+	if r.submitSelfServiceRegistrationFlowBody == nil {
+		return localVarReturnValue, nil, reportError("submitSelfServiceRegistrationFlowBody is required and must be specified")
+	}
 
 	localVarQueryParams.Add("flow", parameterToString(*r.flow, ""))
 	// to determine the Content-Type header
@@ -6347,6 +7101,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRegistrationFlowExecute(r V0alpha2
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	// body params
 	localVarPostBody = r.submitSelfServiceRegistrationFlowBody
@@ -6374,6 +7131,16 @@ func (a *V0alpha2ApiService) SubmitSelfServiceRegistrationFlowExecute(r V0alpha2
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
 			var v SelfServiceRegistrationFlow
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 410 {
+			var v JsonError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -6420,20 +7187,25 @@ type V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest struct {
 	ctx                               context.Context
 	ApiService                        V0alpha2Api
 	flow                              *string
-	xSessionToken                     *string
 	submitSelfServiceSettingsFlowBody *SubmitSelfServiceSettingsFlowBody
+	xSessionToken                     *string
+	cookie                            *string
 }
 
 func (r V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest) Flow(flow string) V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest {
 	r.flow = &flow
 	return r
 }
+func (r V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest) SubmitSelfServiceSettingsFlowBody(submitSelfServiceSettingsFlowBody SubmitSelfServiceSettingsFlowBody) V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest {
+	r.submitSelfServiceSettingsFlowBody = &submitSelfServiceSettingsFlowBody
+	return r
+}
 func (r V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest) XSessionToken(xSessionToken string) V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest {
 	r.xSessionToken = &xSessionToken
 	return r
 }
-func (r V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest) SubmitSelfServiceSettingsFlowBody(submitSelfServiceSettingsFlowBody SubmitSelfServiceSettingsFlowBody) V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest {
-	r.submitSelfServiceSettingsFlowBody = &submitSelfServiceSettingsFlowBody
+func (r V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest) Cookie(cookie string) V0alpha2ApiApiSubmitSelfServiceSettingsFlowRequest {
+	r.cookie = &cookie
 	return r
 }
 
@@ -6448,20 +7220,20 @@ behaves differently for API and browser flows.
 
 API-initiated flows expect `application/json` to be sent in the body and respond with
 HTTP 200 and an application/json body with the session token on success;
-HTTP 302 redirect to a fresh settings flow if the original flow expired with the appropriate error messages set;
+HTTP 303 redirect to a fresh settings flow if the original flow expired with the appropriate error messages set;
 HTTP 400 on form validation errors.
 HTTP 401 when the endpoint is called without a valid session token.
 HTTP 403 when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
 Implies that the user needs to re-authenticate.
 
 Browser flows without HTTP Header `Accept` or with `Accept: text/*` respond with
-a HTTP 302 redirect to the post/after settings URL or the `return_to` value if it was set and if the flow succeeded;
-a HTTP 302 redirect to the Settings UI URL with the flow ID containing the validation errors otherwise.
-a HTTP 302 redirect to the login endpoint when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
+a HTTP 303 redirect to the post/after settings URL or the `return_to` value if it was set and if the flow succeeded;
+a HTTP 303 redirect to the Settings UI URL with the flow ID containing the validation errors otherwise.
+a HTTP 303 redirect to the login endpoint when `selfservice.flows.settings.privileged_session_max_age` was reached or the session's AAL is too low.
 
 Browser flows with HTTP Header `Accept: application/json` respond with
 HTTP 200 and a application/json body with the signed in identity and a `Set-Cookie` header on success;
-HTTP 302 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
+HTTP 303 redirect to a fresh login flow if the original flow expired with the appropriate error messages set;
 HTTP 401 when the endpoint is called without a valid session cookie.
 HTTP 403 when the page is accessed without a session cookie or the session's AAL is too low.
 HTTP 400 on form validation errors.
@@ -6523,6 +7295,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceSettingsFlowExecute(r V0alpha2ApiA
 	if r.flow == nil {
 		return localVarReturnValue, nil, reportError("flow is required and must be specified")
 	}
+	if r.submitSelfServiceSettingsFlowBody == nil {
+		return localVarReturnValue, nil, reportError("submitSelfServiceSettingsFlowBody is required and must be specified")
+	}
 
 	localVarQueryParams.Add("flow", parameterToString(*r.flow, ""))
 	// to determine the Content-Type header
@@ -6544,6 +7319,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceSettingsFlowExecute(r V0alpha2ApiA
 	}
 	if r.xSessionToken != nil {
 		localVarHeaderParams["X-Session-Token"] = parameterToString(*r.xSessionToken, "")
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	// body params
 	localVarPostBody = r.submitSelfServiceSettingsFlowBody
@@ -6599,6 +7377,16 @@ func (a *V0alpha2ApiService) SubmitSelfServiceSettingsFlowExecute(r V0alpha2ApiA
 			newErr.model = v
 			return localVarReturnValue, localVarHTTPResponse, newErr
 		}
+		if localVarHTTPResponse.StatusCode == 410 {
+			var v JsonError
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
 		if localVarHTTPResponse.StatusCode == 422 {
 			var v SelfServiceBrowserLocationChangeRequiredError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
@@ -6637,20 +7425,25 @@ type V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest struct {
 	ctx                                   context.Context
 	ApiService                            V0alpha2Api
 	flow                                  *string
-	token                                 *string
 	submitSelfServiceVerificationFlowBody *SubmitSelfServiceVerificationFlowBody
+	token                                 *string
+	cookie                                *string
 }
 
 func (r V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest) Flow(flow string) V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest {
 	r.flow = &flow
 	return r
 }
+func (r V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest) SubmitSelfServiceVerificationFlowBody(submitSelfServiceVerificationFlowBody SubmitSelfServiceVerificationFlowBody) V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest {
+	r.submitSelfServiceVerificationFlowBody = &submitSelfServiceVerificationFlowBody
+	return r
+}
 func (r V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest) Token(token string) V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest {
 	r.token = &token
 	return r
 }
-func (r V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest) SubmitSelfServiceVerificationFlowBody(submitSelfServiceVerificationFlowBody SubmitSelfServiceVerificationFlowBody) V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest {
-	r.submitSelfServiceVerificationFlowBody = &submitSelfServiceVerificationFlowBody
+func (r V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest) Cookie(cookie string) V0alpha2ApiApiSubmitSelfServiceVerificationFlowRequest {
+	r.cookie = &cookie
 	return r
 }
 
@@ -6666,12 +7459,12 @@ behaves differently for API and browser flows and has several states:
 `choose_method` expects `flow` (in the URL query) and `email` (in the body) to be sent
 and works with API- and Browser-initiated flows.
 For API clients and Browser clients with HTTP Header `Accept: application/json` it either returns a HTTP 200 OK when the form is valid and HTTP 400 OK when the form is invalid
-and a HTTP 302 Found redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
-For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 302 Found redirect to the Verification UI URL with the Verification Flow ID appended.
+and a HTTP 303 See Other redirect with a fresh verification flow if the flow was otherwise invalid (e.g. expired).
+For Browser clients without HTTP Header `Accept` or with `Accept: text/*` it returns a HTTP 303 See Other redirect to the Verification UI URL with the Verification Flow ID appended.
 `sent_email` is the success state after `choose_method` when using the `link` method and allows the user to request another verification email. It
 works for both API and Browser-initiated flows and returns the same responses as the flow in `choose_method` state.
 `passed_challenge` expects a `token` to be sent in the URL query and given the nature of the flow ("sending a verification link")
-does not have any API capabilities. The server responds with a HTTP 302 Found redirect either to the Settings UI URL
+does not have any API capabilities. The server responds with a HTTP 303 See Other redirect either to the Settings UI URL
 (if the link was valid) and instructs the user to update their password, or a redirect to the Verification UI URL with
 a new Verification Flow ID which contains an error message that the verification link was invalid.
 
@@ -6713,6 +7506,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceVerificationFlowExecute(r V0alpha2
 	if r.flow == nil {
 		return localVarReturnValue, nil, reportError("flow is required and must be specified")
 	}
+	if r.submitSelfServiceVerificationFlowBody == nil {
+		return localVarReturnValue, nil, reportError("submitSelfServiceVerificationFlowBody is required and must be specified")
+	}
 
 	localVarQueryParams.Add("flow", parameterToString(*r.flow, ""))
 	if r.token != nil {
@@ -6734,6 +7530,9 @@ func (a *V0alpha2ApiService) SubmitSelfServiceVerificationFlowExecute(r V0alpha2
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+	if r.cookie != nil {
+		localVarHeaderParams["Cookie"] = parameterToString(*r.cookie, "")
 	}
 	// body params
 	localVarPostBody = r.submitSelfServiceVerificationFlowBody
@@ -6761,6 +7560,16 @@ func (a *V0alpha2ApiService) SubmitSelfServiceVerificationFlowExecute(r V0alpha2
 		}
 		if localVarHTTPResponse.StatusCode == 400 {
 			var v SelfServiceVerificationFlow
+			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
+			if err != nil {
+				newErr.error = err.Error()
+				return localVarReturnValue, localVarHTTPResponse, newErr
+			}
+			newErr.model = v
+			return localVarReturnValue, localVarHTTPResponse, newErr
+		}
+		if localVarHTTPResponse.StatusCode == 410 {
+			var v JsonError
 			err = a.client.decode(&v, localVarBody, localVarHTTPResponse.Header.Get("Content-Type"))
 			if err != nil {
 				newErr.error = err.Error()
@@ -6817,7 +7626,8 @@ func (r V0alpha2ApiApiToSessionRequest) Execute() (*Session, *http.Response, err
  * ToSession Check Who the Current HTTP Session Belongs To
  * Uses the HTTP Headers in the GET request to determine (e.g. by using checking the cookies) who is authenticated.
 Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
-Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header in the response.
+Additionally when the request it successful it adds the user ID to the 'X-Kratos-Authenticated-Identity-Id' header
+in the response.
 
 It is also possible to refresh the session lifespan of a current session by adding a `refresh=true` param to the request url.
 By default session refresh on this endpoint is disabled.

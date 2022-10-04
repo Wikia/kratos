@@ -8,16 +8,15 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ory/kratos/hash"
-	"github.com/ory/kratos/selfservice/strategy/password"
-
 	"github.com/gofrs/uuid"
 
+	"github.com/ory/kratos/hash"
+
 	"github.com/julienschmidt/httprouter"
+	"github.com/pkg/errors"
+
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
-	"github.com/ory/kratos/selfservice/strategy/oidc"
-	"github.com/pkg/errors"
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/x"
@@ -154,7 +153,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 		return
 	}
 
-	h.r.Writer().Write(w, r, identity.WithCredentialsMetadataInJSON(*i))
+	h.r.Writer().Write(w, r, identity.WithCredentialsMetadataAndAdminMetadataInJSON(*i))
 }
 
 type IdentityAlreadyExists struct {
@@ -170,11 +169,11 @@ var ErrUnexpectedProviderType = errors.New("Illegal credentials type")
 func (h *Handler) removeCredentials(v RemoveCredentialsBody, creds *identity.Credentials) (*identity.Credentials, error) {
 	if v.Type == identity.CredentialsTypeOIDC {
 		// oidc may contain more than one entry, so it has to be edited
-		var credentialsConfig oidc.CredentialsConfig
+		var credentialsConfig identity.CredentialsOIDC
 		if err := json.Unmarshal(creds.Config, &credentialsConfig); err != nil {
 			return nil, err
 		}
-		var newProviders []oidc.ProviderCredentialsConfig
+		var newProviders []identity.CredentialsOIDCProvider
 		var newIds []string
 		for _, val := range credentialsConfig.Providers {
 			if val.Provider != v.Filter {
@@ -202,7 +201,7 @@ func (h *Handler) removeCredentials(v RemoveCredentialsBody, creds *identity.Cre
 
 func (h *Handler) createCredentials(ctx context.Context, identityId uuid.UUID, newCreds ImportCredentialsBody) (*identity.Credentials, error) {
 	if newCreds.Type == identity.CredentialsTypeOIDC {
-		var newConfig oidc.CredentialsConfig
+		var newConfig identity.CredentialsOIDC
 		if err := json.Unmarshal(newCreds.Config, &newConfig); err != nil {
 			return nil, err
 		}
@@ -226,7 +225,7 @@ func (h *Handler) createCredentials(ctx context.Context, identityId uuid.UUID, n
 			}
 			newConfig.HashedPassword = string(hpw)
 		}
-		return h.newCredentials([]string{}, password.CredentialsConfig{HashedPassword: newConfig.HashedPassword}, newCreds)
+		return h.newCredentials([]string{}, identity.CredentialsPassword{HashedPassword: newConfig.HashedPassword}, newCreds)
 	} else {
 		return nil, errors.WithStack(ErrUnexpectedProviderType)
 	}
@@ -246,17 +245,17 @@ func (h *Handler) newCredentials(ids []string, newConfig interface{}, newCreds I
 
 type OidcCredentialsWithId struct {
 	id          string
-	credentials oidc.ProviderCredentialsConfig
+	credentials identity.CredentialsOIDCProvider
 }
 
 func (h *Handler) updateCredentials(ctx context.Context, identityId uuid.UUID, oldCreds *identity.Credentials, newCreds ImportCredentialsBody) error {
 	if newCreds.Type == identity.CredentialsTypeOIDC {
 		// for OIDC - replace the ones in the import and leave all the rest w/o changing
-		var newConfig oidc.CredentialsConfig
+		var newConfig identity.CredentialsOIDC
 		if err := json.Unmarshal(newCreds.Config, &newConfig); err != nil {
 			return err
 		}
-		var oldConfig oidc.CredentialsConfig
+		var oldConfig identity.CredentialsOIDC
 		if err := json.Unmarshal(oldCreds.Config, &oldConfig); err != nil {
 			return err
 		}
@@ -274,7 +273,7 @@ func (h *Handler) updateCredentials(ctx context.Context, identityId uuid.UUID, o
 		for _, newV := range newConfig.Providers {
 			providers[newV.Provider] = OidcCredentialsWithId{id: credentialsId(newV), credentials: newV}
 		}
-		var newProviders []oidc.ProviderCredentialsConfig
+		var newProviders []identity.CredentialsOIDCProvider
 		var newIds []string
 		for _, v := range providers {
 			newProviders = append(newProviders, v.credentials)
@@ -299,7 +298,7 @@ func (h *Handler) updateCredentials(ctx context.Context, identityId uuid.UUID, o
 			}
 			newConfig.HashedPassword = string(hpw)
 		}
-		if err := h.replaceConfig(oldCreds, password.CredentialsConfig{HashedPassword: newConfig.HashedPassword}); err != nil {
+		if err := h.replaceConfig(oldCreds, identity.CredentialsPassword{HashedPassword: newConfig.HashedPassword}); err != nil {
 			return err
 		}
 		return nil
@@ -316,7 +315,7 @@ func (h *Handler) replaceConfig(oldCreds *identity.Credentials, oldConfig interf
 	return nil
 }
 
-func (h *Handler) doesAnotherIdentityUseTheseOidcCredentials(ctx context.Context, identityId uuid.UUID, provider oidc.ProviderCredentialsConfig) error {
+func (h *Handler) doesAnotherIdentityUseTheseOidcCredentials(ctx context.Context, identityId uuid.UUID, provider identity.CredentialsOIDCProvider) error {
 	i, _, err := h.r.PrivilegedIdentityPool().FindByCredentialsIdentifier(ctx, identity.CredentialsTypeOIDC, credentialsId(provider))
 	if err != nil && errors.Is(err, sql.ErrNoRows) {
 		return err
@@ -327,6 +326,6 @@ func (h *Handler) doesAnotherIdentityUseTheseOidcCredentials(ctx context.Context
 	return nil
 }
 
-func credentialsId(provider oidc.ProviderCredentialsConfig) string {
+func credentialsId(provider identity.CredentialsOIDCProvider) string {
 	return fmt.Sprintf("%s:%s", provider.Provider, provider.Subject)
 }

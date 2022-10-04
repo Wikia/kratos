@@ -25,7 +25,7 @@ import (
 func setup(t *testing.T, cmd *cobra.Command) driver.Registry {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	_, admin := testhelpers.NewKratosServerWithCSRF(t, reg)
-	conf.MustSet(config.ViperKeyDefaultIdentitySchemaURL, "file://./stubs/identity.schema.json")
+	testhelpers.SetDefaultIdentitySchema(conf, "file://./stubs/identity.schema.json")
 	// setup command
 	cliclient.RegisterClientFlags(cmd.Flags())
 	cmdx.RegisterFormatFlags(cmd.Flags())
@@ -50,7 +50,7 @@ func exec(cmd *cobra.Command, stdIn io.Reader, args ...string) (string, string, 
 
 func execNoErr(t *testing.T, cmd *cobra.Command, args ...string) string {
 	stdOut, stdErr, err := exec(cmd, nil, args...)
-	require.NoError(t, err)
+	require.NoError(t, err, "stdout: %s\nstderr: %s", stdOut, stdErr)
 	require.Len(t, stdErr, 0, stdOut)
 	return stdOut
 }
@@ -65,6 +65,7 @@ func execErr(t *testing.T, cmd *cobra.Command, args ...string) string {
 func makeIdentities(t *testing.T, reg driver.Registry, n int) (is []*identity.Identity, ids []string) {
 	for j := 0; j < n; j++ {
 		i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
+		i.MetadataPublic = []byte(`{"foo":"bar"}`)
 		require.NoError(t, reg.Persister().CreateIdentity(context.Background(), i))
 		is = append(is, i)
 		ids = append(ids, i.ID.String())

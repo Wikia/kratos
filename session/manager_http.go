@@ -26,6 +26,7 @@ type (
 		config.Provider
 		identity.PoolProvider
 		identity.PrivilegedPoolProvider
+		identity.ManagementProvider
 		x.CookieProvider
 		x.CSRFProvider
 		PersistenceProvider
@@ -83,7 +84,7 @@ func (s *ManagerHTTP) issueCookiesAndCSRF(ctx context.Context, w http.ResponseWr
 		cookie.Options.Domain = domain
 	}
 
-	if alias := s.r.Config(ctx).SelfPublicURL(r); s.r.Config(ctx).SelfPublicURL(nil).String() != alias.String() {
+	if alias := s.r.Config(ctx).SelfPublicURL(); s.r.Config(ctx).SelfPublicURL().String() != alias.String() {
 		// If a domain alias is detected use that instead.
 		cookie.Options.Domain = alias.Hostname()
 		cookie.Options.Path = alias.Path
@@ -129,16 +130,16 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 		r.Header = http.Header{"Cookie": []string{s.cookieName(r.Context()) + "=" + cookie}}
 	}
 
-	// fandom-start support new cookie format
+	// fandom-start support old cookie format
 	copyR := r.WithContext(r.Context())
 	copyR2 := r.WithContext(r.Context())
 	cookie, err := s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 	if err != nil {
-		newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+		legacyCookie, err := s.r.LegacyCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
 		/**
 		 * This is a workaround around shared CookieStore (Sic!)
-		 * Even creating new object sets some shared state via gorilla.sessions library.
-		 * Creating old CookieManager sets shared state to previous values.
+		 * Even creating new object sets some shared state via gorilla.sessions library
+		 * Creating old CookieManager sets shared state to previous values
 		 * THIS IS SOO BROKEN :D
 		 */
 		_, _ = s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
@@ -146,7 +147,7 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 			token, _ := bearerTokenFromRequest(r)
 			return token
 		}
-		token, ok := newCookie.Values["session_token"].(string)
+		token, ok := legacyCookie.Values["session_token"].(string)
 		if ok {
 			return token
 		}
@@ -157,7 +158,7 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 		return token
 	}
 
-	newCookie, err := s.r.NewCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
+	legacyCookie, err := s.r.LegacyCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
 	/**
 	 * This is a workaround around shared CookieStore (Sic!)
 	 * Even creating new object sets some shared state via gorilla.sessions library
@@ -166,11 +167,11 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 	 */
 	_, _ = s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 	if err != nil {
-		token, _ = bearerTokenFromRequest(r)
+		token, _ := bearerTokenFromRequest(r)
 		return token
 	}
 
-	token, ok = newCookie.Values["session_token"].(string)
+	token, ok = legacyCookie.Values["session_token"].(string)
 	if ok {
 		return token
 	}
@@ -237,30 +238,37 @@ func (s *ManagerHTTP) DoesSessionSatisfy(r *http.Request, sess *Session, request
 			return err
 		}
 
-		hasCredentials := make([]identity.CredentialsType, 0)
-		for ct := range i.Credentials {
-			hasCredentials = append(hasCredentials, ct)
+		available := identity.NoAuthenticatorAssuranceLevel
+		if firstCount, err := s.r.IdentityManager().CountActiveFirstFactorCredentials(r.Context(), i); err != nil {
+			return err
+		} else if firstCount > 0 {
+			available = identity.AuthenticatorAssuranceLevel1
 		}
 
-		available := identity.DetermineAAL(hasCredentials)
+		if secondCount, err := s.r.IdentityManager().CountActiveMultiFactorCredentials(r.Context(), i); err != nil {
+			return err
+		} else if secondCount > 0 {
+			available = identity.AuthenticatorAssuranceLevel2
+		}
+
 		if sess.AuthenticatorAssuranceLevel >= available {
 			return nil
 		}
 
 		return NewErrAALNotSatisfied(
-			urlx.CopyWithQuery(urlx.AppendPaths(s.r.Config(r.Context()).SelfPublicURL(r), "/self-service/login/browser"), url.Values{"aal": {"aal2"}}).String())
+			urlx.CopyWithQuery(urlx.AppendPaths(s.r.Config(r.Context()).SelfPublicURL(), "/self-service/login/browser"), url.Values{"aal": {"aal2"}}).String())
 	}
 	return errors.Errorf("requested unknown aal: %s", requestedAAL)
 }
 
-func (s *ManagerHTTP) SessionAddAuthenticationMethod(ctx context.Context, sid uuid.UUID, methods ...identity.CredentialsType) error {
+func (s *ManagerHTTP) SessionAddAuthenticationMethods(ctx context.Context, sid uuid.UUID, ams ...AuthenticationMethod) error {
 	// Since we added the method, it also means that we have authenticated it
 	sess, err := s.r.SessionPersister().GetSession(ctx, sid)
 	if err != nil {
 		return err
 	}
-	for _, m := range methods {
-		sess.CompletedLoginFor(m)
+	for _, m := range ams {
+		sess.CompletedLoginFor(m.Method, m.AAL)
 	}
 	sess.SetAuthenticatorAssuranceLevel()
 	return s.r.SessionPersister().UpsertSession(ctx, sess)

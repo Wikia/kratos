@@ -4,11 +4,17 @@ includes:
 
 variables:
   brew_name: kratos
-
-  brew_description: "The Ory Kratos Identity Platform"
-
+  brew_description: "The Ory Identity Platform (Ory Kratos)"
   buildinfo_hash: "github.com/ory/kratos/driver/config.Commit"
   buildinfo_tag: "github.com/ory/kratos/driver/config.Version"
   buildinfo_date: "github.com/ory/kratos/driver/config.Date"
+  dockerfile: ".docker/Dockerfile-alpine"
 
 project_name: kratos
+
+after:
+  hooks:
+  - cmd: "bash <(curl -s https://raw.githubusercontent.com/ory/xgoreleaser/master/docs.sh)"
+    env:
+      - "TAG_VERSION={{ .Tag }}"
+      - "DOCS_VERSION={{ .Major }}.{{ .Minor }}"

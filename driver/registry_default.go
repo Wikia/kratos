@@ -10,6 +10,10 @@ import (
 
 	"github.com/ory/kratos/credentials"
 
+	"github.com/ory/x/httpx"
+	"github.com/ory/x/otelx"
+	otelsql "github.com/ory/x/otelx/sql"
+
 	"github.com/ory/nosurf"
 
 	"github.com/ory/kratos/selfservice/strategy/webauthn"
@@ -18,17 +22,11 @@ import (
 
 	"github.com/ory/kratos/selfservice/strategy/totp"
 
-	"github.com/hashicorp/go-retryablehttp"
 	"github.com/luna-duclos/instrumentedsql"
-	"github.com/luna-duclos/instrumentedsql/opentracing"
-
-	"github.com/ory/x/httpx"
 
 	"github.com/ory/kratos/corp"
 
 	prometheus "github.com/ory/x/prometheusx"
-
-	"github.com/gobuffalo/pop/v5"
 
 	"github.com/ory/kratos/cipher"
 	"github.com/ory/kratos/continuity"
@@ -43,14 +41,14 @@ import (
 	"github.com/ory/kratos/x"
 
 	"github.com/cenkalti/backoff"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gorilla/sessions"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 
 	"github.com/ory/x/dbal"
 	"github.com/ory/x/healthx"
 	"github.com/ory/x/sqlcon"
-
-	"github.com/ory/x/tracing"
 
 	"github.com/ory/x/logrusx"
 
@@ -80,7 +78,7 @@ type RegistryDefault struct {
 	injectedSelfserviceHooks map[string]func(config.SelfServiceHook) interface{}
 
 	nosurf         nosurf.Handler
-	trc            *tracing.Tracer
+	trc            *otelx.Tracer
 	pmm            *prometheus.MetricsManager
 	writer         herodot.Writer
 	healthxHandler *healthx.Handler
@@ -193,9 +191,11 @@ func (m *RegistryDefault) RegisterAdminRoutes(ctx context.Context, router *x.Rou
 	m.VerificationHandler().RegisterAdminRoutes(router)
 	m.AllVerificationStrategies().RegisterAdminRoutes(router)
 
-	m.HealthHandler(ctx).SetHealthRoutes(router.Router, true)
-	m.HealthHandler(ctx).SetVersionRoutes(router.Router)
-	m.MetricsHandler().SetRoutes(router.Router)
+	m.HealthHandler(ctx).SetHealthRoutes(router, true)
+	m.HealthHandler(ctx).SetVersionRoutes(router)
+	m.MetricsHandler().SetRoutes(router)
+
+	config.NewConfigHashHandler(m, router)
 }
 
 func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPublic, admin *x.RouterAdmin) {
@@ -270,6 +270,10 @@ func (m *RegistryDefault) Config(ctx context.Context) *config.Config {
 		panic("configuration not set")
 	}
 	return corp.ContextualizeConfig(ctx, m.c)
+}
+
+func (m *RegistryDefault) CourierConfig(ctx context.Context) config.CourierConfigs {
+	return m.Config(ctx)
 }
 
 func (m *RegistryDefault) selfServiceStrategies() []interface{} {
@@ -426,7 +430,11 @@ func (m *RegistryDefault) Hasher() hash.Hasher {
 
 func (m *RegistryDefault) PasswordValidator() password2.Validator {
 	if m.passwordValidator == nil {
-		m.passwordValidator = password2.NewDefaultPasswordValidatorStrategy(m)
+		var err error
+		m.passwordValidator, err = password2.NewDefaultPasswordValidatorStrategy(m)
+		if err != nil {
+			m.Logger().WithError(err).Fatal("could not initialize DefaultPasswordValidator")
+		}
 	}
 	return m.passwordValidator
 }
@@ -438,14 +446,9 @@ func (m *RegistryDefault) SelfServiceErrorHandler() *errorx.Handler {
 	return m.errorHandler
 }
 
-// fandom-start support new cookie format
-func (m *RegistryDefault) NewCookieManager(ctx context.Context) sessions.Store {
-	var keys [][]byte
-	for _, k := range m.Config(ctx).SecretsSession() {
-		encrypt := sha256.Sum256(k)
-		keys = append(keys, k, encrypt[:])
-	}
-	cs := sessions.NewCookieStore(keys...)
+// fandom-start support old cookie format
+func (m *RegistryDefault) LegacyCookieManager(ctx context.Context) sessions.StoreExact {
+	cs := sessions.NewCookieStore(m.Config(ctx).SecretsSession()...)
 	cs.Options.Secure = !m.Config(ctx).IsInsecureDevMode()
 	cs.Options.HttpOnly = true
 
@@ -469,8 +472,14 @@ func (m *RegistryDefault) NewCookieManager(ctx context.Context) sessions.Store {
 }
 // fandom-end
 
-func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.Store {
-	cs := sessions.NewCookieStore(m.Config(ctx).SecretsSession()...)
+func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.StoreExact {
+	var keys [][]byte
+	for _, k := range m.Config(ctx).SecretsSession() {
+		encrypt := sha256.Sum256(k)
+		keys = append(keys, k, encrypt[:])
+	}
+
+	cs := sessions.NewCookieStore(keys...)
 	cs.Options.Secure = !m.Config(ctx).IsInsecureDevMode()
 	cs.Options.HttpOnly = true
 
@@ -493,7 +502,7 @@ func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.Store {
 	return cs
 }
 
-func (m *RegistryDefault) ContinuityCookieManager(ctx context.Context) sessions.Store {
+func (m *RegistryDefault) ContinuityCookieManager(ctx context.Context) sessions.StoreExact {
 	// To support hot reloading, this can not be instantiated only once.
 	cs := sessions.NewCookieStore(m.Config(ctx).SecretsSession()...)
 	cs.Options.Secure = !m.Config(ctx).IsInsecureDevMode()
@@ -502,14 +511,19 @@ func (m *RegistryDefault) ContinuityCookieManager(ctx context.Context) sessions.
 	return cs
 }
 
-func (m *RegistryDefault) Tracer(ctx context.Context) *tracing.Tracer {
+func (m *RegistryDefault) Tracer(ctx context.Context) *otelx.Tracer {
 	if m.trc == nil {
 		// Tracing is initialized only once so it can not be hot reloaded or context-aware.
-		t, err := tracing.New(m.l, m.Config(ctx).Tracing())
+		t, err := otelx.New("Ory Kratos", m.l, m.Config(ctx).Tracing())
 		if err != nil {
 			m.Logger().WithError(err).Fatalf("Unable to initialize Tracer.")
+			t = otelx.NewNoop(m.l, m.Config(ctx).Tracing())
 		}
 		m.trc = t
+	}
+
+	if m.trc.Tracer() == nil {
+		m.trc = otelx.NewNoop(m.l, m.Config(ctx).Tracing())
 	}
 
 	return m.trc
@@ -561,7 +575,7 @@ func (m *RegistryDefault) Init(ctx context.Context, opts ...RegistryOption) erro
 			var opts []instrumentedsql.Opt
 			if m.Tracer(ctx).IsLoaded() {
 				opts = []instrumentedsql.Opt{
-					instrumentedsql.WithTracer(opentracing.NewTracer(true)),
+					instrumentedsql.WithTracer(otelsql.NewTracer()),
 				}
 			}
 
@@ -603,7 +617,7 @@ func (m *RegistryDefault) Init(ctx context.Context, opts ...RegistryOption) erro
 			}
 
 			// if dsn is memory we have to run the migrations on every start
-			if dbal.IsMemorySQLite(m.Config(ctx).DSN()) || m.Config(ctx).DSN() == dbal.SQLiteInMemory || m.Config(ctx).DSN() == dbal.SQLiteSharedInMemory || m.Config(ctx).DSN() == "memory" {
+			if dbal.IsMemorySQLite(m.Config(ctx).DSN()) || m.Config(ctx).DSN() == "memory" {
 				m.Logger().Infoln("Ory Kratos is running migrations on every startup as DSN is memory. This means your data is lost when Kratos terminates.")
 				if err := p.MigrateUp(ctx); err != nil {
 					m.Logger().WithError(err).Warnf("Unable to run migrations, retrying.")
@@ -632,8 +646,8 @@ func (m *RegistryDefault) SetPersister(p persistence.Persister) {
 	m.persister = p
 }
 
-func (m *RegistryDefault) Courier(ctx context.Context) *courier.Courier {
-	return courier.NewSMTP(m, m.Config(ctx))
+func (m *RegistryDefault) Courier(ctx context.Context) courier.Courier {
+	return courier.NewCourier(ctx, m)
 }
 
 func (m *RegistryDefault) ContinuityManager() continuity.Manager {
@@ -726,13 +740,34 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+func (m *RegistryDefault) NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
 	var rc *retryablehttp.Client
 	if cl, ok := m.rc[name]; ok {
 		rc = cl
 	} else {
-		rc = httpx.NewResilientClient(opts...)
+		rc = m.HTTPClient(ctx, opts...)
 		m.rc[name] = rc
 	}
 	return rc
+}
+
+func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	opts = append(
+		[]httpx.ResilientOptions{
+			httpx.ResilientClientWithLogger(m.Logger()),
+			httpx.ResilientClientWithMaxRetry(2),
+			httpx.ResilientClientWithConnectionTimeout(30 * time.Second),
+		},
+		opts...,
+	)
+
+	tracer := m.Tracer(ctx)
+	if tracer.IsLoaded() {
+		opts = append(opts, httpx.ResilientClientWithTracer(tracer.Tracer()))
+	}
+
+	if m.Config(ctx).ClientHTTPNoPrivateIPRanges() {
+		opts = append(opts, httpx.ResilientClientDisallowInternalIPs())
+	}
+	return httpx.NewResilientClient(opts...)
 }

@@ -19,23 +19,25 @@ import (
 type SubmitSelfServiceLoginFlowWithPasswordMethodBody struct {
 	// Sending the anti-csrf token is only required for browser login flows.
 	CsrfToken *string `json:"csrf_token,omitempty"`
+	// Identifier is the email or username of the user trying to log in.
+	Identifier string `json:"identifier"`
 	// Method should be set to \"password\" when logging in using the identifier and password strategy.
 	Method string `json:"method"`
 	// The user's password.
 	Password string `json:"password"`
-	// Identifier is the email or username of the user trying to log in.
-	PasswordIdentifier string `json:"password_identifier"`
+	// Identifier is the email or username of the user trying to log in. This field is deprecated!
+	PasswordIdentifier *string `json:"password_identifier,omitempty"`
 }
 
 // NewSubmitSelfServiceLoginFlowWithPasswordMethodBody instantiates a new SubmitSelfServiceLoginFlowWithPasswordMethodBody object
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewSubmitSelfServiceLoginFlowWithPasswordMethodBody(method string, password string, passwordIdentifier string) *SubmitSelfServiceLoginFlowWithPasswordMethodBody {
+func NewSubmitSelfServiceLoginFlowWithPasswordMethodBody(identifier string, method string, password string) *SubmitSelfServiceLoginFlowWithPasswordMethodBody {
 	this := SubmitSelfServiceLoginFlowWithPasswordMethodBody{}
+	this.Identifier = identifier
 	this.Method = method
 	this.Password = password
-	this.PasswordIdentifier = passwordIdentifier
 	return &this
 }
 
@@ -77,6 +79,30 @@ func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) HasCsrfToken() bool {
 // SetCsrfToken gets a reference to the given string and assigns it to the CsrfToken field.
 func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) SetCsrfToken(v string) {
 	o.CsrfToken = &v
+}
+
+// GetIdentifier returns the Identifier field value
+func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) GetIdentifier() string {
+	if o == nil {
+		var ret string
+		return ret
+	}
+
+	return o.Identifier
+}
+
+// GetIdentifierOk returns a tuple with the Identifier field value
+// and a boolean to check if the value has been set.
+func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) GetIdentifierOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.Identifier, true
+}
+
+// SetIdentifier sets field value
+func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) SetIdentifier(v string) {
+	o.Identifier = v
 }
 
 // GetMethod returns the Method field value
@@ -127,28 +153,36 @@ func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) SetPassword(v string)
 	o.Password = v
 }
 
-// GetPasswordIdentifier returns the PasswordIdentifier field value
+// GetPasswordIdentifier returns the PasswordIdentifier field value if set, zero value otherwise.
 func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) GetPasswordIdentifier() string {
-	if o == nil {
+	if o == nil || o.PasswordIdentifier == nil {
 		var ret string
 		return ret
 	}
-
-	return o.PasswordIdentifier
+	return *o.PasswordIdentifier
 }
 
-// GetPasswordIdentifierOk returns a tuple with the PasswordIdentifier field value
+// GetPasswordIdentifierOk returns a tuple with the PasswordIdentifier field value if set, nil otherwise
 // and a boolean to check if the value has been set.
 func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) GetPasswordIdentifierOk() (*string, bool) {
-	if o == nil {
+	if o == nil || o.PasswordIdentifier == nil {
 		return nil, false
 	}
-	return &o.PasswordIdentifier, true
+	return o.PasswordIdentifier, true
 }
 
-// SetPasswordIdentifier sets field value
+// HasPasswordIdentifier returns a boolean if a field has been set.
+func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) HasPasswordIdentifier() bool {
+	if o != nil && o.PasswordIdentifier != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetPasswordIdentifier gets a reference to the given string and assigns it to the PasswordIdentifier field.
 func (o *SubmitSelfServiceLoginFlowWithPasswordMethodBody) SetPasswordIdentifier(v string) {
-	o.PasswordIdentifier = v
+	o.PasswordIdentifier = &v
 }
 
 func (o SubmitSelfServiceLoginFlowWithPasswordMethodBody) MarshalJSON() ([]byte, error) {
@@ -157,12 +191,15 @@ func (o SubmitSelfServiceLoginFlowWithPasswordMethodBody) MarshalJSON() ([]byte,
 		toSerialize["csrf_token"] = o.CsrfToken
 	}
 	if true {
+		toSerialize["identifier"] = o.Identifier
+	}
+	if true {
 		toSerialize["method"] = o.Method
 	}
 	if true {
 		toSerialize["password"] = o.Password
 	}
-	if true {
+	if o.PasswordIdentifier != nil {
 		toSerialize["password_identifier"] = o.PasswordIdentifier
 	}
 	return json.Marshal(toSerialize)

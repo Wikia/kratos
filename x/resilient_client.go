@@ -1,11 +1,13 @@
 package x
 
 import (
-	"github.com/ory/x/httpx"
+	"context"
 
 	"github.com/hashicorp/go-retryablehttp"
+
+	"github.com/ory/x/httpx"
 )
 
 type ResilientClientProvider interface {
-	GetSpecializedResilientClient(name string, opts ...httpx.ResilientOptions) *retryablehttp.Client
+	NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client
 }

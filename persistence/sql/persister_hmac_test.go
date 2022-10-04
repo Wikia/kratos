@@ -5,14 +5,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ory/x/tracing"
-
 	"github.com/ory/x/configx"
+	"github.com/ory/x/otelx"
 
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,7 +25,7 @@ type logRegistryOnly struct {
 	c *config.Config
 }
 
-func (l *logRegistryOnly) IdentityTraitsSchemas(ctx context.Context) schema.Schemas {
+func (l *logRegistryOnly) IdentityTraitsSchemas(ctx context.Context) (schema.Schemas, error) {
 	panic("implement me")
 }
 
@@ -49,8 +48,8 @@ func (l *logRegistryOnly) Audit() *logrusx.Logger {
 	panic("implement me")
 }
 
-func (l *logRegistryOnly) Tracer(ctx context.Context) *tracing.Tracer {
-	return nil
+func (l *logRegistryOnly) Tracer(ctx context.Context) *otelx.Tracer {
+	return otelx.NewNoop(l.l, new(otelx.Config))
 }
 
 var _ persisterDependencies = &logRegistryOnly{}

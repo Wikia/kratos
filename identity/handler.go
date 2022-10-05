@@ -34,7 +34,7 @@ const RouteValidate = RouteCollection + "/validate"
 // fandom-end
 
 // fandom-start allow admins to remove multifactor authentication for an identity
-const RouteMultifactor = RouteItem + "/:id/credential/:credentialType"
+const RouteMultifactor = RouteItem + "/credential/:credentialType"
 
 // fandom-end
 

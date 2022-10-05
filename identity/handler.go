@@ -32,9 +32,11 @@ const RouteItem = RouteCollection + "/:id"
 const RouteValidate = RouteCollection + "/validate"
 
 // fandom-end
-const RouteMultifactorDelete = RouteCollection + "/:id/credential/:credentialType"
 
-// fandom-start -  allow admins to remove multifactor authentication for an identity
+// fandom-start allow admins to remove multifactor authentication for an identity
+const RouteMultifactor = RouteItem + "/:id/credential/:credentialType"
+
+// fandom-end
 
 type (
 	handlerDependencies interface {
@@ -97,9 +99,9 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	// fandom-end
 	admin.PUT(RouteItem, h.update)
 
-	//fandom-start - allow admins to remove multifactor authentication for an identity
-	admin.DELETE(RouteMultifactorDelete, h.deleteMultifactorCredential)
-	//fandom-end
+	// fandom-start - allow admins to remove multifactor authentication for an identity
+	admin.DELETE(RouteMultifactor, h.deleteMultifactorCredential)
+	// fandom-end
 }
 
 // A list of identities.

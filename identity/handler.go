@@ -117,23 +117,23 @@ type adminListIdentities struct {
 
 // swagger:route GET /admin/identities v0alpha2 adminListIdentities
 //
-// List Identities
+// # List Identities
 //
 // Lists all identities. Does not support search at the moment.
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: identityList
-//       500: jsonError
+//	Responses:
+//	  200: identityList
+//	  500: jsonError
 func (h *Handler) list(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	page, itemsPerPage := x.ParsePagination(r)
 	is, err := h.r.IdentityPool().ListIdentities(r.Context(), page, itemsPerPage)
@@ -173,25 +173,25 @@ type adminGetIdentity struct {
 
 // swagger:route GET /admin/identities/{id} v0alpha2 adminGetIdentity
 //
-// Get an Identity
+// # Get an Identity
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Consumes:
-//     - application/json
+//	Consumes:
+//	- application/json
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: identity
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: identity
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) get(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	i, err := h.r.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), x.ParseUUID(ps.ByName("id")))
 	if err != nil {
@@ -322,26 +322,26 @@ type AdminCreateIdentityImportCredentialsOidcProvider struct {
 
 // swagger:route POST /admin/identities v0alpha2 adminCreateIdentity
 //
-// Create an Identity
+// # Create an Identity
 //
 // This endpoint creates an identity. Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Consumes:
-//     - application/json
+//	    Consumes:
+//	    - application/json
 //
-//     Produces:
-//     - application/json
+//	    Produces:
+//	    - application/json
 //
-//     Schemes: http, https
+//	    Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	    Security:
+//	      oryAccessToken:
 //
-//     Responses:
-//       201: identity
-//       400: jsonError
-//		 409: jsonError
-//       500: jsonError
+//	    Responses:
+//	      201: identity
+//	      400: jsonError
+//			 409: jsonError
+//	      500: jsonError
 func (h *Handler) create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var cr AdminCreateIdentityBody
 	if err := jsonx.NewStrictDecoder(r.Body).Decode(&cr); err != nil {
@@ -432,29 +432,29 @@ type AdminUpdateIdentityBody struct {
 
 // swagger:route PUT /admin/identities/{id} v0alpha2 adminUpdateIdentity
 //
-// Update an Identity
+// # Update an Identity
 //
 // This endpoint updates an identity. The full identity payload (except credentials) is expected. This endpoint does not support patching.
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Consumes:
-//     - application/json
+//	    Consumes:
+//	    - application/json
 //
-//     Produces:
-//     - application/json
+//	    Produces:
+//	    - application/json
 //
-//     Schemes: http, https
+//	    Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	    Security:
+//	      oryAccessToken:
 //
-//     Responses:
-//       200: identity
-//       400: jsonError
-//       404: jsonError
-//		 409: jsonError
-//       500: jsonError
+//	    Responses:
+//	      200: identity
+//	      400: jsonError
+//	      404: jsonError
+//			 409: jsonError
+//	      500: jsonError
 func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var ur AdminUpdateIdentityBody
 	if err := h.dx.Decode(r, &ur,
@@ -505,25 +505,25 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 // swagger:route POST /identities/validate v0alpha2 AdminUpdateIdentityBody
 //
-// Validates provided traits and state
+// # Validates provided traits and state
 //
 // This endpoint validates traits against provided schema_id.
 // The full identity payload (except credentials) is expected. This endpoint does not support patching.
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Consumes:
-//     - application/json
+//	Consumes:
+//	- application/json
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       200: identity is valid
-//       400: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: identity is valid
+//	  400: jsonError
+//	  500: jsonError
 func (h *Handler) validate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	var ur AdminUpdateIdentityBody
 	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {
@@ -562,7 +562,7 @@ type adminDeleteIdentity struct {
 
 // swagger:route DELETE /admin/identities/{id} v0alpha2 adminDeleteIdentity
 //
-// Delete an Identity
+// # Delete an Identity
 //
 // Calling this endpoint irrecoverably and permanently deletes the identity given its ID. This action can not be undone.
 // This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
@@ -570,18 +570,18 @@ type adminDeleteIdentity struct {
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       204: emptyResponse
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  204: emptyResponse
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	if err := h.r.IdentityPool().(PrivilegedPool).DeleteIdentity(r.Context(), x.ParseUUID(ps.ByName("id"))); err != nil {
 		h.r.Writer().WriteError(w, r, err)
@@ -593,7 +593,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request, ps httprouter.P
 
 // fandom start - allow admins to remove multifactor authentication for an identity
 
-// swagger:parameters adminDeleteIdentity
+// swagger:parameters adminDeleteIdentityCredential
 // nolint:deadcode,unused
 type adminDeleteIdentityCredential struct {
 	// ID is the identity's ID.
@@ -608,7 +608,7 @@ type adminDeleteIdentityCredential struct {
 	CredentialType string `json:"credentialType"`
 }
 
-// swagger:route DELETE /identities/{id}/credential/{credentialType} v0alpha2 adminDeleteIdentity
+// swagger:route DELETE /identities/{id}/credential/{credentialType} v0alpha2 adminDeleteIdentityCredential
 //
 // # Update an Identity
 //

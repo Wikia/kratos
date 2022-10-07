@@ -2,6 +2,7 @@ package settings
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -18,6 +19,7 @@ import (
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/errorx"
 	"github.com/ory/kratos/selfservice/flow"
+	"github.com/ory/kratos/selfservice/flow/login"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
@@ -85,7 +87,17 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 		if x.IsJSONRequest(r) {
 			h.d.Writer().WriteError(w, r, session.NewErrNoActiveSessionFound())
 		} else {
-			http.Redirect(w, r, h.d.Config(r.Context()).SelfServiceFlowLoginUI().String(), http.StatusSeeOther)
+			// Fandom-start - take over return_to param from settings to login flow
+			// upstream PR https://github.com/ory/kratos/pull/2787
+			// TODO: use url.JoinPath (available in go 1.19)
+			loginPath := h.d.Config(r.Context()).SelfPublicURL().String() + strings.TrimLeft(login.RouteInitBrowserFlow, "/")
+			redirectUrl, err := x.TakeOverReturnToParameter(r.URL.String(), loginPath)
+			if err != nil {
+				http.Redirect(w, r, h.d.Config(r.Context()).SelfServiceFlowLoginUI().String(), http.StatusSeeOther)
+			} else {
+				http.Redirect(w, r, redirectUrl, http.StatusSeeOther)
+			}
+			// Fandom-end
 		}
 	}))
 

@@ -34,7 +34,7 @@ const RouteValidate = RouteCollection + "/validate"
 // fandom-end
 
 // fandom-start allow admins to remove multifactor authentication for an identity
-const RouteMultifactor = RouteItem + "/credential/:credentialType"
+const RouteMultifactor = RouteItem + "/credentials/:credentialType"
 
 // fandom-end
 
@@ -644,6 +644,14 @@ func (h *Handler) deleteMultifactorCredential(w http.ResponseWriter, r *http.Req
 	}
 
 	identity.DeleteCredentialsType(CredentialsType(credentialType))
+	if err := h.r.IdentityManager().Update(
+		r.Context(),
+		identity,
+		ManagerAllowWriteProtectedTraits,
+	); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
 	w.WriteHeader(http.StatusAccepted)
 	h.r.Writer().Write(w, r, "OK")
 }

@@ -90,7 +90,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 			// Fandom-start - take over return_to param from settings to login flow
 			// upstream PR https://github.com/ory/kratos/pull/2787
 			// TODO: use url.JoinPath (available in go 1.19)
-			loginPath := h.d.Config(r.Context()).SelfPublicURL().String() + strings.TrimLeft(login.RouteInitBrowserFlow, "/")
+			loginPath := strings.TrimRight(h.d.Config(r.Context()).SelfPublicURL().String(), "/") + login.RouteInitBrowserFlow
 			redirectUrl, err := x.TakeOverReturnToParameter(r.URL.String(), loginPath)
 			if err != nil {
 				http.Redirect(w, r, h.d.Config(r.Context()).SelfServiceFlowLoginUI().String(), http.StatusSeeOther)

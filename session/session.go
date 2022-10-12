@@ -28,6 +28,23 @@ type refreshWindowProvider interface {
 	SessionRefreshMinTimeLeft() time.Duration
 }
 
+// fandom-start
+
+// PiggybackLifespanProvider used to create short piggyback sessions
+type PiggybackLifespanProvider struct {
+	e time.Duration
+}
+
+func (p *PiggybackLifespanProvider) SessionLifespan() time.Duration {
+	return p.e
+}
+
+func NewPiggybackLifespanProvider(expiresIn time.Duration) *PiggybackLifespanProvider {
+	return &PiggybackLifespanProvider{e: expiresIn}
+}
+
+// fandom-end
+
 // A Session
 //
 // swagger:model session

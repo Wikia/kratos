@@ -85,7 +85,7 @@ jobs:
         name: Install node deps
       - name: Run prettier
         run: npm run format:check
-# Fandom-start skip linter checks
+# Fandom-start skip linter checks - noop
 #      - name: Run golangci-lint
 #        uses: golangci/golangci-lint-action@v2
 #        env:

@@ -120,7 +120,7 @@ func (h *LegacyFandomCrypt) Understands(hash []byte) bool {
 	return IsFandomLegacyHash(hash)
 }
 
-//CompareLegacyFandom will try to compare password against Fandom's legacy password hash
+// CompareLegacyFandom will try to compare password against Fandom's legacy password hash
 func CompareLegacyFandom(_ context.Context, cfg *config.Config, identityId uuid.UUID, password, hash []byte) error {
 	if len(hash) == 0 {
 		return errors.WithStack(ErrEmptyHashCompare)

@@ -148,15 +148,15 @@ type AdminIdentitySessionResponse struct {
 //
 // - Issuing session or session token for a given identity without authenticating
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: successfulAdminIdentitySession
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: successfulAdminIdentitySession
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")))
 	if err != nil {
@@ -203,7 +203,7 @@ type toSession struct {
 
 // swagger:route GET /sessions/whoami v0alpha2 toSession
 //
-// Check Who the Current HTTP Session Belongs To
+// # Check Who the Current HTTP Session Belongs To
 //
 // Uses the HTTP Headers in the GET request to determine (e.g. by using checking the cookies) who is authenticated.
 // Returns a session object in the body or 401 if the credentials are invalid or no credentials were sent.
@@ -218,24 +218,24 @@ type toSession struct {
 //
 // If you call this endpoint from a server-side application, you must forward the HTTP Cookie Header to this endpoint:
 //
-//	```js
-//	// pseudo-code example
-//	router.get('/protected-endpoint', async function (req, res) {
-//	  const session = await client.toSession(undefined, req.header('cookie'))
+//		```js
+//		// pseudo-code example
+//		router.get('/protected-endpoint', async function (req, res) {
+//		  const session = await client.toSession(undefined, req.header('cookie'))
 //
-//    // console.log(session)
-//	})
-//	```
+//	   // console.log(session)
+//		})
+//		```
 //
 // When calling this endpoint from a non-browser application (e.g. mobile app) you must include the session token:
 //
-//	```js
-//	// pseudo-code example
-//	// ...
-//	const session = await client.toSession("the-session-token")
+//		```js
+//		// pseudo-code example
+//		// ...
+//		const session = await client.toSession("the-session-token")
 //
-//  // console.log(session)
-//	```
+//	 // console.log(session)
+//		```
 //
 // Depending on your configuration this endpoint might return a 403 status code if the session has a lower Authenticator
 // Assurance Level (AAL) than is possible for the identity. This can happen if the identity has password + webauthn
@@ -249,7 +249,7 @@ type toSession struct {
 // - Server-side calls - use the `X-Session-Token` header!
 // - Session refresh
 //
-// This endpoint authenticates users by checking
+// # This endpoint authenticates users by checking
 //
 // - if the `Cookie` HTTP header was set containing an Ory Kratos Session Cookie;
 // - if the `Authorization: bearer <ory-session-token>` HTTP header was set with a valid Ory Kratos Session Token;
@@ -262,16 +262,16 @@ type toSession struct {
 // - `session_inactive`: No active session was found in the request (e.g. no Ory Session Cookie / Ory Session Token).
 // - `session_aal2_required`: An active session was found but it does not fulfil the Authenticator Assurance Level, implying that the session must (e.g.) authenticate the second factor.
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       200: session
-//       401: jsonError
-//       403: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: session
+//	  401: jsonError
+//	  403: jsonError
+//	  500: jsonError
 func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
@@ -333,17 +333,17 @@ type adminDeleteIdentitySessions struct {
 //
 // - To forcefully logout Identity from all devices and sessions
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       204: emptyResponse
-//       400: jsonError
-//       401: jsonError
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  204: emptyResponse
+//	  400: jsonError
+//	  401: jsonError
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) adminDeleteIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	iID, err := uuid.FromString(ps.ByName("id"))
 	if err != nil {
@@ -379,17 +379,17 @@ type adminListIdentitySessions struct {
 //
 // - Listing all sessions that belong to an Identity in an administrative context.
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: sessionList
-//       400: jsonError
-//       401: jsonError
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: sessionList
+//	  400: jsonError
+//	  401: jsonError
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) adminListIdentitySessions(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	iID, err := uuid.FromString(ps.ByName("id"))
 	if err != nil {
@@ -434,14 +434,14 @@ type revokeSessions struct {
 //
 // - To forcefully logout the current user from all other devices and sessions
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       200: revokedSessions
-//       400: jsonError
-//       401: jsonError
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: revokedSessions
+//	  400: jsonError
+//	  401: jsonError
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) revokeSessions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
@@ -478,13 +478,13 @@ type revokeSession struct {
 //
 // - To forcefully logout the current user from another device or session
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       204: emptyResponse
-//       400: jsonError
-//       401: jsonError
-//       500: jsonError
+//	Responses:
+//	  204: emptyResponse
+//	  400: jsonError
+//	  401: jsonError
+//	  500: jsonError
 func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	sid := ps.ByName("id")
 	if sid == "whoami" {
@@ -537,14 +537,14 @@ type sessionList []*Session
 //
 // - Displaying all other sessions that belong to the logged-in user
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       200: sessionList
-//       400: jsonError
-//       401: jsonError
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: sessionList
+//	  400: jsonError
+//	  401: jsonError
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
@@ -584,15 +584,15 @@ type adminSessionRefresh struct {
 //
 // - Session refresh
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: session
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: session
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) adminCurrentSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
 	if err != nil {
@@ -646,16 +646,16 @@ type adminExtendSession struct {
 //
 // Retrieve the session ID from the `/sessions/whoami` endpoint / `toSession` SDK method.
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Security:
-//       oryAccessToken:
+//	Security:
+//	  oryAccessToken:
 //
-//     Responses:
-//       200: session
-//       400: jsonError
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  200: session
+//	  400: jsonError
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) adminSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	iID, err := uuid.FromString(ps.ByName("id"))
 	if err != nil {

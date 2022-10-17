@@ -12,8 +12,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/pquerna/otp"
 
+	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/hash"
+	"github.com/ory/kratos/selfservice/strategy/totp"
 	"github.com/ory/x/snapshotx"
 
 	"github.com/bxcodec/faker/v3"
@@ -87,6 +90,40 @@ func TestHandler(t *testing.T) {
 
 		require.EqualValues(t, expectCode, res.StatusCode, "%s", body)
 		return gjson.ParseBytes(body)
+	}
+
+	var createTotpIdentity = func(t *testing.T, reg driver.Registry) (*identity.Identity, string, *otp.Key) {
+		identifier := x.NewUUID().String() + "@ory.sh"
+		password := x.NewUUID().String()
+		key, err := totp.NewKey(context.Background(), "foo", reg)
+		require.NoError(t, err)
+		p, err := reg.Hasher().Generate(context.Background(), []byte(password))
+		require.NoError(t, err)
+		i := &identity.Identity{
+			Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+			VerifiableAddresses: []identity.VerifiableAddress{
+				{
+					Value:     identifier,
+					Verified:  false,
+					CreatedAt: time.Now(),
+				},
+			},
+		}
+		require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
+		i.Credentials = map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+			identity.CredentialsTypeTOTP: {
+				Type:        identity.CredentialsTypeTOTP,
+				Identifiers: []string{i.ID.String()},
+				Config:      sqlxx.JSONRawMessage(`{"totp_url":"` + string(key.URL()) + `"}`),
+			},
+		}
+		require.NoError(t, reg.PrivilegedIdentityPool().UpdateIdentity(context.Background(), i))
+		return i, password, key
 	}
 
 	t.Run("case=should return an empty list", func(t *testing.T) {
@@ -468,6 +505,22 @@ func TestHandler(t *testing.T) {
 					_ = get(t, ts, "/identities/"+res.Get("id").String(), http.StatusNotFound)
 				})
 			}
+		})
+	})
+
+	t.Run("suite=create and delete credentials", func(t *testing.T) {
+		i, _, _ := createTotpIdentity(t, reg)
+
+		t.Run("case=should delete TOTP credentials", func(t *testing.T) {
+			actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), i.ID)
+			require.NoError(t, err)
+			require.NotEmpty(t, actual.Credentials[identity.CredentialsTypeTOTP])
+
+			send(t, adminTS, "DELETE", fmt.Sprintf("/identities/%s/credentials/%s", i.ID.String(), identity.CredentialsTypeTOTP.String()), http.StatusAccepted, nil)
+
+			actual, err = reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), i.ID)
+			require.NoError(t, err)
+			assert.Empty(t, actual.Credentials[identity.CredentialsTypeTOTP])
 		})
 	})
 

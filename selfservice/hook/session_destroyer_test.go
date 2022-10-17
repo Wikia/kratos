@@ -10,9 +10,10 @@ import (
 	"github.com/bxcodec/faker/v3"
 	"github.com/gobuffalo/httptest"
 	"github.com/gofrs/uuid"
-	"github.com/ory/kratos/corpx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ory/kratos/corpx"
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"

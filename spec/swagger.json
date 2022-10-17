@@ -61,7 +61,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "List Identities",
+        "summary": "# List Identities",
         "operationId": "adminListIdentities",
         "parameters": [
           {
@@ -119,7 +119,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "Create an Identity",
+        "summary": "# Create an Identity",
         "operationId": "adminCreateIdentity",
         "parameters": [
           {
@@ -179,7 +179,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "Get an Identity",
+        "summary": "# Get an Identity",
         "operationId": "adminGetIdentity",
         "parameters": [
           {
@@ -240,7 +240,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "Update an Identity",
+        "summary": "# Update an Identity",
         "operationId": "adminUpdateIdentity",
         "parameters": [
           {
@@ -308,7 +308,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "Delete an Identity",
+        "summary": "# Delete an Identity",
         "operationId": "adminDeleteIdentity",
         "parameters": [
           {
@@ -693,7 +693,7 @@
         "tags": [
           "v0alpha2"
         ],
-        "summary": "Validates provided traits and state",
+        "summary": "# Validates provided traits and state",
         "operationId": "AdminUpdateIdentityBody",
         "responses": {
           "200": {
@@ -703,6 +703,64 @@
             }
           },
           "400": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          },
+          "500": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          }
+        }
+      }
+    },
+    "/identities/{id}/credential/{credentialType}": {
+      "delete": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "Allow admins to remove multifactor authentication for an identity",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "v0alpha2"
+        ],
+        "summary": "# Update an Identity",
+        "operationId": "adminDeleteIdentityCredential",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the identity's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "credentialType is the type of credential",
+            "name": "credentialType",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/responses/emptyResponse"
+          },
+          "404": {
             "description": "jsonError",
             "schema": {
               "$ref": "#/definitions/jsonError"

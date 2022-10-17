@@ -2329,7 +2329,7 @@
             "oryAccessToken": []
           }
         ],
-        "summary": "List Identities",
+        "summary": "# List Identities",
         "tags": [
           "v0alpha2"
         ]
@@ -2394,7 +2394,7 @@
             "oryAccessToken": []
           }
         ],
-        "summary": "Create an Identity",
+        "summary": "# Create an Identity",
         "tags": [
           "v0alpha2"
         ]
@@ -2445,7 +2445,7 @@
             "oryAccessToken": []
           }
         ],
-        "summary": "Delete an Identity",
+        "summary": "# Delete an Identity",
         "tags": [
           "v0alpha2"
         ]
@@ -2512,7 +2512,7 @@
             "oryAccessToken": []
           }
         ],
-        "summary": "Get an Identity",
+        "summary": "# Get an Identity",
         "tags": [
           "v0alpha2"
         ]
@@ -2598,7 +2598,7 @@
             "oryAccessToken": []
           }
         ],
-        "summary": "Update an Identity",
+        "summary": "# Update an Identity",
         "tags": [
           "v0alpha2"
         ]
@@ -3086,7 +3086,67 @@
             "description": "jsonError"
           }
         },
-        "summary": "Validates provided traits and state",
+        "summary": "# Validates provided traits and state",
+        "tags": [
+          "v0alpha2"
+        ]
+      }
+    },
+    "/identities/{id}/credential/{credentialType}": {
+      "delete": {
+        "description": "Allow admins to remove multifactor authentication for an identity",
+        "operationId": "adminDeleteIdentityCredential",
+        "parameters": [
+          {
+            "description": "ID is the identity's ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "credentialType is the type of credential",
+            "in": "path",
+            "name": "credentialType",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "$ref": "#/components/responses/emptyResponse"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "summary": "# Update an Identity",
         "tags": [
           "v0alpha2"
         ]

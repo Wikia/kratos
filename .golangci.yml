@@ -34,5 +34,5 @@ issues:
   exclude-rules:
     - linters:
       - staticcheck
-      text: "SA9003:"
+      text: "SA1019:"
 # fandom-end

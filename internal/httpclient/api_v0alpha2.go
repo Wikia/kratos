@@ -29,7 +29,7 @@ var (
 type V0alpha2Api interface {
 
 	/*
-	 * AdminCreateIdentity # Create an Identity
+	 * AdminCreateIdentity Create an Identity
 	 * This endpoint creates an identity. Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	 * @return V0alpha2ApiApiAdminCreateIdentityRequest
@@ -58,7 +58,7 @@ type V0alpha2Api interface {
 	AdminCreateSelfServiceRecoveryLinkExecute(r V0alpha2ApiApiAdminCreateSelfServiceRecoveryLinkRequest) (*SelfServiceRecoveryLink, *http.Response, error)
 
 	/*
-			 * AdminDeleteIdentity # Delete an Identity
+			 * AdminDeleteIdentity Delete an Identity
 			 * Calling this endpoint irrecoverably and permanently deletes the identity given its ID. This action can not be undone.
 		This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
 		assumed that is has been deleted already.
@@ -76,7 +76,7 @@ type V0alpha2Api interface {
 	AdminDeleteIdentityExecute(r V0alpha2ApiApiAdminDeleteIdentityRequest) (*http.Response, error)
 
 	/*
-	 * AdminDeleteIdentityCredential # Update an Identity
+	 * AdminDeleteIdentityCredential Update an Identity
 	 * Allow admins to remove multifactor authentication for an identity
 	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	 * @param id ID is the identity's ID.
@@ -122,7 +122,7 @@ type V0alpha2Api interface {
 	AdminExtendSessionExecute(r V0alpha2ApiApiAdminExtendSessionRequest) (*Session, *http.Response, error)
 
 	/*
-	 * AdminGetIdentity # Get an Identity
+	 * AdminGetIdentity Get an Identity
 	 * Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 	 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 	 * @param id ID must be set to the ID of identity you want to get
@@ -154,7 +154,7 @@ type V0alpha2Api interface {
 	AdminIdentitySessionExecute(r V0alpha2ApiApiAdminIdentitySessionRequest) (*SuccessfulAdminIdentitySession, *http.Response, error)
 
 	/*
-			 * AdminListIdentities # List Identities
+			 * AdminListIdentities List Identities
 			 * Lists all identities. Does not support search at the moment.
 
 		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
@@ -203,7 +203,7 @@ type V0alpha2Api interface {
 	AdminUpdateCredentialsExecute(r V0alpha2ApiApiAdminUpdateCredentialsRequest) (*http.Response, error)
 
 	/*
-			 * AdminUpdateIdentity # Update an Identity
+			 * AdminUpdateIdentity Update an Identity
 			 * This endpoint updates an identity. The full identity payload (except credentials) is expected. This endpoint does not support patching.
 
 		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
@@ -220,7 +220,7 @@ type V0alpha2Api interface {
 	AdminUpdateIdentityExecute(r V0alpha2ApiApiAdminUpdateIdentityRequest) (*Identity, *http.Response, error)
 
 	/*
-			 * AdminUpdateIdentityBody # Validates provided traits and state
+			 * AdminUpdateIdentityBody Validates provided traits and state
 			 * This endpoint validates traits against provided schema_id.
 		The full identity payload (except credentials) is expected. This endpoint does not support patching.
 
@@ -582,7 +582,6 @@ type V0alpha2Api interface {
 		you vulnerable to a variety of CSRF attacks.
 
 		This endpoint MUST ONLY be used in scenarios such as native mobile apps (React Native, Objective C, Swift, Java, ...).
-
 
 		More information can be found at [Ory Kratos Account Recovery Documentation](../self-service/flows/account-recovery).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
@@ -1139,7 +1138,7 @@ type V0alpha2Api interface {
 		Server-side calls - use the `X-Session-Token` header!
 		Session refresh
 
-		This endpoint authenticates users by checking
+		# This endpoint authenticates users by checking
 
 		if the `Cookie` HTTP header was set containing an Ory Kratos Session Cookie;
 		if the `Authorization: bearer <ory-session-token>` HTTP header was set with a valid Ory Kratos Session Token;
@@ -1182,7 +1181,7 @@ func (r V0alpha2ApiApiAdminCreateIdentityRequest) Execute() (*Identity, *http.Re
 }
 
 /*
- * AdminCreateIdentity # Create an Identity
+ * AdminCreateIdentity Create an Identity
  * This endpoint creates an identity. Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @return V0alpha2ApiApiAdminCreateIdentityRequest
@@ -1469,7 +1468,7 @@ func (r V0alpha2ApiApiAdminDeleteIdentityRequest) Execute() (*http.Response, err
 }
 
 /*
-  - AdminDeleteIdentity # Delete an Identity
+  - AdminDeleteIdentity Delete an Identity
   - Calling this endpoint irrecoverably and permanently deletes the identity given its ID. This action can not be undone.
 
 This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
@@ -1602,7 +1601,7 @@ func (r V0alpha2ApiApiAdminDeleteIdentityCredentialRequest) Execute() (*http.Res
 }
 
 /*
- * AdminDeleteIdentityCredential # Update an Identity
+ * AdminDeleteIdentityCredential Update an Identity
  * Allow admins to remove multifactor authentication for an identity
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @param id ID is the identity's ID.
@@ -2035,7 +2034,7 @@ func (r V0alpha2ApiApiAdminGetIdentityRequest) Execute() (*Identity, *http.Respo
 }
 
 /*
- * AdminGetIdentity # Get an Identity
+ * AdminGetIdentity Get an Identity
  * Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
  * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
  * @param id ID must be set to the ID of identity you want to get
@@ -2334,7 +2333,7 @@ func (r V0alpha2ApiApiAdminListIdentitiesRequest) Execute() ([]Identity, *http.R
 }
 
 /*
-  - AdminListIdentities # List Identities
+  - AdminListIdentities List Identities
   - Lists all identities. Does not support search at the moment.
 
 Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
@@ -2773,7 +2772,7 @@ func (r V0alpha2ApiApiAdminUpdateIdentityRequest) Execute() (*Identity, *http.Re
 }
 
 /*
-  - AdminUpdateIdentity # Update an Identity
+  - AdminUpdateIdentity Update an Identity
   - This endpoint updates an identity. The full identity payload (except credentials) is expected. This endpoint does not support patching.
 
 Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
@@ -2934,7 +2933,7 @@ func (r V0alpha2ApiApiAdminUpdateIdentityBodyRequest) Execute() (*Identity, *htt
 }
 
 /*
-  - AdminUpdateIdentityBody # Validates provided traits and state
+  - AdminUpdateIdentityBody Validates provided traits and state
   - This endpoint validates traits against provided schema_id.
 
 The full identity payload (except credentials) is expected. This endpoint does not support patching.

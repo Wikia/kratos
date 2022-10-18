@@ -28,3 +28,11 @@ run:
   skip-files:
     - ".+_test.go"
     - "corpx/faker.go"
+
+# fandom-start
+issues:
+  exclude-rules:
+    - linters:
+      - staticcheck
+      text: "SA9003:"
+# fandom-end

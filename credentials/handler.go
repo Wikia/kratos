@@ -89,21 +89,21 @@ type adminUpdateCredentials struct {
 
 // swagger:route PUT /identities/{id}/credentials v0alpha2 adminUpdateCredentials
 //
-// Update Identity Credentials
+// # Update Identity Credentials
 //
 // Calling this endpoint updates the credentials according to the specification provided.
 //
 // Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
-//     Produces:
-//     - application/json
+//	Produces:
+//	- application/json
 //
-//     Schemes: http, https
+//	Schemes: http, https
 //
-//     Responses:
-//       204: emptyResponse
-//       404: jsonError
-//       500: jsonError
+//	Responses:
+//	  204: emptyResponse
+//	  404: jsonError
+//	  500: jsonError
 func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var ur AdminUpdateIdentityCredentialsBody
 	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {

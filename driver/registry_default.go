@@ -470,6 +470,7 @@ func (m *RegistryDefault) LegacyCookieManager(ctx context.Context) sessions.Stor
 	}
 	return cs
 }
+
 // fandom-end
 
 func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.StoreExact {

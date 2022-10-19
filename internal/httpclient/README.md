@@ -90,6 +90,7 @@ Class | Method | HTTP request | Description
 *V0alpha2Api* | [**AdminCreateIdentity**](docs/V0alpha2Api.md#admincreateidentity) | **Post** /admin/identities | Create an Identity
 *V0alpha2Api* | [**AdminCreateSelfServiceRecoveryLink**](docs/V0alpha2Api.md#admincreateselfservicerecoverylink) | **Post** /admin/recovery/link | Create a Recovery Link
 *V0alpha2Api* | [**AdminDeleteIdentity**](docs/V0alpha2Api.md#admindeleteidentity) | **Delete** /admin/identities/{id} | Delete an Identity
+*V0alpha2Api* | [**AdminDeleteIdentityCredential**](docs/V0alpha2Api.md#admindeleteidentitycredential) | **Delete** /identities/{id}/credential/{credentialType} | Update an Identity
 *V0alpha2Api* | [**AdminDeleteIdentitySessions**](docs/V0alpha2Api.md#admindeleteidentitysessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminExtendSession**](docs/V0alpha2Api.md#adminextendsession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
 *V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /admin/identities/{id} | Get an Identity
@@ -162,7 +163,7 @@ Class | Method | HTTP request | Description
  - [JsonError](docs/JsonError.md)
  - [NeedsPrivilegedSessionError](docs/NeedsPrivilegedSessionError.md)
  - [Pagination](docs/Pagination.md)
- - [RecoveryAddress](docs/RecoveryAddress.md)
+ - [RecoveryIdentityAddress](docs/RecoveryIdentityAddress.md)
  - [RevokedSessions](docs/RevokedSessions.md)
  - [SelfServiceBrowserLocationChangeRequiredError](docs/SelfServiceBrowserLocationChangeRequiredError.md)
  - [SelfServiceError](docs/SelfServiceError.md)

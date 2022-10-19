@@ -4,19 +4,19 @@ All URIs are relative to *http://localhost*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**AdminCreateIdentity**](V0alpha2Api.md#AdminCreateIdentity) | **Post** /admin/identities | # Create an Identity
+[**AdminCreateIdentity**](V0alpha2Api.md#AdminCreateIdentity) | **Post** /admin/identities | Create an Identity
 [**AdminCreateSelfServiceRecoveryLink**](V0alpha2Api.md#AdminCreateSelfServiceRecoveryLink) | **Post** /admin/recovery/link | Create a Recovery Link
-[**AdminDeleteIdentity**](V0alpha2Api.md#AdminDeleteIdentity) | **Delete** /admin/identities/{id} | # Delete an Identity
-[**AdminDeleteIdentityCredential**](V0alpha2Api.md#AdminDeleteIdentityCredential) | **Delete** /identities/{id}/credential/{credentialType} | # Update an Identity
+[**AdminDeleteIdentity**](V0alpha2Api.md#AdminDeleteIdentity) | **Delete** /admin/identities/{id} | Delete an Identity
+[**AdminDeleteIdentityCredential**](V0alpha2Api.md#AdminDeleteIdentityCredential) | **Delete** /identities/{id}/credential/{credentialType} | Update an Identity
 [**AdminDeleteIdentitySessions**](V0alpha2Api.md#AdminDeleteIdentitySessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 [**AdminExtendSession**](V0alpha2Api.md#AdminExtendSession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
-[**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id} | # Get an Identity
+[**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id} | Get an Identity
 [**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
-[**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities | # List Identities
+[**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities | List Identities
 [**AdminListIdentitySessions**](V0alpha2Api.md#AdminListIdentitySessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
-[**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /admin/identities/{id} | # Update an Identity
-[**AdminUpdateIdentityBody**](V0alpha2Api.md#AdminUpdateIdentityBody) | **Post** /identities/validate | # Validates provided traits and state
+[**AdminUpdateIdentity**](V0alpha2Api.md#AdminUpdateIdentity) | **Put** /admin/identities/{id} | Update an Identity
+[**AdminUpdateIdentityBody**](V0alpha2Api.md#AdminUpdateIdentityBody) | **Post** /identities/validate | Validates provided traits and state
 [**CreateSelfServiceLogoutFlowUrlForBrowsers**](V0alpha2Api.md#CreateSelfServiceLogoutFlowUrlForBrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
 [**GetJsonSchema**](V0alpha2Api.md#GetJsonSchema) | **Get** /schemas/{id} | 
 [**GetSelfServiceError**](V0alpha2Api.md#GetSelfServiceError) | **Get** /self-service/errors | Get Self-Service Errors
@@ -55,7 +55,7 @@ Method | HTTP request | Description
 
 > Identity AdminCreateIdentity(ctx).AdminCreateIdentityBody(adminCreateIdentityBody).Execute()
 
-# Create an Identity
+Create an Identity
 
 
 
@@ -187,7 +187,7 @@ No authorization required
 
 > AdminDeleteIdentity(ctx, id).Execute()
 
-# Delete an Identity
+Delete an Identity
 
 
 
@@ -255,7 +255,7 @@ Name | Type | Description  | Notes
 
 > AdminDeleteIdentityCredential(ctx, id, credentialType).Execute()
 
-# Update an Identity
+Update an Identity
 
 
 
@@ -464,7 +464,7 @@ Name | Type | Description  | Notes
 
 > Identity AdminGetIdentity(ctx, id).IncludeCredential(includeCredential).Execute()
 
-# Get an Identity
+Get an Identity
 
 
 
@@ -606,7 +606,7 @@ Name | Type | Description  | Notes
 
 > []Identity AdminListIdentities(ctx).PerPage(perPage).Page(page).Execute()
 
-# List Identities
+List Identities
 
 
 
@@ -818,7 +818,7 @@ No authorization required
 
 > Identity AdminUpdateIdentity(ctx, id).AdminUpdateIdentityBody(adminUpdateIdentityBody).Execute()
 
-# Update an Identity
+Update an Identity
 
 
 
@@ -890,7 +890,7 @@ Name | Type | Description  | Notes
 
 > Identity AdminUpdateIdentityBody(ctx).Execute()
 
-# Validates provided traits and state
+Validates provided traits and state
 
 
 

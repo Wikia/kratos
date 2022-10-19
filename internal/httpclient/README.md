@@ -87,19 +87,19 @@ Class | Method | HTTP request | Description
 *MetadataApi* | [**GetVersion**](docs/MetadataApi.md#getversion) | **Get** /version | Return Running Software Version.
 *MetadataApi* | [**IsAlive**](docs/MetadataApi.md#isalive) | **Get** /health/alive | Check HTTP Server Status
 *MetadataApi* | [**IsReady**](docs/MetadataApi.md#isready) | **Get** /health/ready | Check HTTP Server and Database Status
-*V0alpha2Api* | [**AdminCreateIdentity**](docs/V0alpha2Api.md#admincreateidentity) | **Post** /admin/identities | # Create an Identity
+*V0alpha2Api* | [**AdminCreateIdentity**](docs/V0alpha2Api.md#admincreateidentity) | **Post** /admin/identities | Create an Identity
 *V0alpha2Api* | [**AdminCreateSelfServiceRecoveryLink**](docs/V0alpha2Api.md#admincreateselfservicerecoverylink) | **Post** /admin/recovery/link | Create a Recovery Link
-*V0alpha2Api* | [**AdminDeleteIdentity**](docs/V0alpha2Api.md#admindeleteidentity) | **Delete** /admin/identities/{id} | # Delete an Identity
-*V0alpha2Api* | [**AdminDeleteIdentityCredential**](docs/V0alpha2Api.md#admindeleteidentitycredential) | **Delete** /identities/{id}/credential/{credentialType} | # Update an Identity
+*V0alpha2Api* | [**AdminDeleteIdentity**](docs/V0alpha2Api.md#admindeleteidentity) | **Delete** /admin/identities/{id} | Delete an Identity
+*V0alpha2Api* | [**AdminDeleteIdentityCredential**](docs/V0alpha2Api.md#admindeleteidentitycredential) | **Delete** /identities/{id}/credential/{credentialType} | Update an Identity
 *V0alpha2Api* | [**AdminDeleteIdentitySessions**](docs/V0alpha2Api.md#admindeleteidentitysessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminExtendSession**](docs/V0alpha2Api.md#adminextendsession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
-*V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /admin/identities/{id} | # Get an Identity
+*V0alpha2Api* | [**AdminGetIdentity**](docs/V0alpha2Api.md#admingetidentity) | **Get** /admin/identities/{id} | Get an Identity
 *V0alpha2Api* | [**AdminIdentitySession**](docs/V0alpha2Api.md#adminidentitysession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
-*V0alpha2Api* | [**AdminListIdentities**](docs/V0alpha2Api.md#adminlistidentities) | **Get** /admin/identities | # List Identities
+*V0alpha2Api* | [**AdminListIdentities**](docs/V0alpha2Api.md#adminlistidentities) | **Get** /admin/identities | List Identities
 *V0alpha2Api* | [**AdminListIdentitySessions**](docs/V0alpha2Api.md#adminlistidentitysessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
 *V0alpha2Api* | [**AdminUpdateCredentials**](docs/V0alpha2Api.md#adminupdatecredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
-*V0alpha2Api* | [**AdminUpdateIdentity**](docs/V0alpha2Api.md#adminupdateidentity) | **Put** /admin/identities/{id} | # Update an Identity
-*V0alpha2Api* | [**AdminUpdateIdentityBody**](docs/V0alpha2Api.md#adminupdateidentitybody) | **Post** /identities/validate | # Validates provided traits and state
+*V0alpha2Api* | [**AdminUpdateIdentity**](docs/V0alpha2Api.md#adminupdateidentity) | **Put** /admin/identities/{id} | Update an Identity
+*V0alpha2Api* | [**AdminUpdateIdentityBody**](docs/V0alpha2Api.md#adminupdateidentitybody) | **Post** /identities/validate | Validates provided traits and state
 *V0alpha2Api* | [**CreateSelfServiceLogoutFlowUrlForBrowsers**](docs/V0alpha2Api.md#createselfservicelogoutflowurlforbrowsers) | **Get** /self-service/logout/browser | Create a Logout URL for Browsers
 *V0alpha2Api* | [**GetJsonSchema**](docs/V0alpha2Api.md#getjsonschema) | **Get** /schemas/{id} | 
 *V0alpha2Api* | [**GetSelfServiceError**](docs/V0alpha2Api.md#getselfserviceerror) | **Get** /self-service/errors | Get Self-Service Errors
@@ -163,7 +163,7 @@ Class | Method | HTTP request | Description
  - [JsonError](docs/JsonError.md)
  - [NeedsPrivilegedSessionError](docs/NeedsPrivilegedSessionError.md)
  - [Pagination](docs/Pagination.md)
- - [RecoveryAddress](docs/RecoveryAddress.md)
+ - [RecoveryIdentityAddress](docs/RecoveryIdentityAddress.md)
  - [RevokedSessions](docs/RevokedSessions.md)
  - [SelfServiceBrowserLocationChangeRequiredError](docs/SelfServiceBrowserLocationChangeRequiredError.md)
  - [SelfServiceError](docs/SelfServiceError.md)

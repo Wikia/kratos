@@ -193,7 +193,7 @@ const (
 // DefaultSessionCookieName returns the default cookie name for the kratos session.
 const DefaultSessionCookieName = "ory_kratos_session"
 
-//fandom-start
+// fandom-start
 type PersistencePhase string
 
 const (
@@ -504,7 +504,7 @@ func (p *Config) HasherBcrypt() *Bcrypt {
 	return &Bcrypt{Cost: cost}
 }
 
-//fandom-start
+// fandom-start
 func (p *Config) HasherLegacyFandom() (*LegacyFandom, error) {
 	// warn about usage of default values and point to the docs
 	// warning will require https://github.com/ory/viper/issues/19

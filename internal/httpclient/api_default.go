@@ -56,12 +56,12 @@ func (r DefaultApiApiV0alpha2Request) Execute() (*Session, *http.Response, error
 }
 
 /*
- * V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
- * This endpoint is useful for:
+  - V0alpha2 Calling this endpoint refreshes a current user session. If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
+  - This endpoint is useful for:
 
 Session refresh
- * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
- * @return DefaultApiApiV0alpha2Request
+  - @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
+  - @return DefaultApiApiV0alpha2Request
 */
 func (a *DefaultApiService) V0alpha2(ctx context.Context) DefaultApiApiV0alpha2Request {
 	return DefaultApiApiV0alpha2Request{

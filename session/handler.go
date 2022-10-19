@@ -140,7 +140,9 @@ type AdminIdentitySessionResponse struct {
 	Identity *identity.Identity `json:"identity"`
 }
 
-// swagger:route GET /identities/{id}/session v0alpha2 adminIdentitySession
+// fandom-start
+
+// swagger:route GET /admin/identities/{id}/session v0alpha2 adminIdentitySession
 //
 // Calling this endpoint issues a session for a given identity.
 //
@@ -164,11 +166,15 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 		return
 	}
 
-	s, err := NewActiveSession(i, h.r.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+	s, err := NewActiveSession(i, NewPiggybackLifespanProvider(time.Hour*24), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return
 	}
+
+	// User need to go through all authentication steps for session to be on AAL2 level
+	s.CompletedLoginFor(identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel2)
+	s.SetAuthenticatorAssuranceLevel()
 
 	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
 		h.r.Writer().WriteError(w, r, err)
@@ -182,6 +188,8 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 
 	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
 }
+
+// fandom-end
 
 // nolint:deadcode,unused
 // swagger:parameters toSession revokeSessions listSessions

@@ -304,6 +304,7 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
+	// Fandom-start handle 2FA authentication https://github.com/Wikia/kratos/pull/84
 	return s.handleAALLevels(w, r, sf, sess, id)
 }
 
@@ -331,6 +332,8 @@ func (s *Strategy) handleAALLevels(w http.ResponseWriter, r *http.Request, sf *s
 	http.Redirect(w, r, urlx.CopyWithQuery(loginPath, url.Values{"aal": {"aal2"}, "return_to": {settingFlowUrl}}).String(), http.StatusSeeOther)
 	return errors.WithStack(flow.ErrCompletedByStrategy)
 }
+
+// Fandom-end
 
 func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, body *recoverySubmitPayload) error {
 	token, err := s.d.RecoveryTokenPersister().UseRecoveryToken(r.Context(), body.Token)

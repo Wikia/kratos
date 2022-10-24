@@ -233,11 +233,13 @@ func (s *ManagerHTTP) DoesSessionSatisfy(r *http.Request, sess *Session, request
 			return nil
 		}
 	case config.HighestAvailableAAL:
+		// Fandom-start logic moved to GetIdentityHighestAAL() -> https://github.com/Wikia/kratos/pull/84
 		if available, err := s.r.IdentityManager().GetIdentityHighestAAL(r.Context(), sess.IdentityID); err != nil {
 			return err
 		} else if sess.AuthenticatorAssuranceLevel >= available {
 			return nil
 		}
+		// Fandom-start
 
 		return NewErrAALNotSatisfied(
 			urlx.CopyWithQuery(urlx.AppendPaths(s.r.Config(r.Context()).SelfPublicURL(), "/self-service/login/browser"), url.Values{"aal": {"aal2"}}).String())

@@ -192,6 +192,7 @@ func (m *Manager) CountActiveMultiFactorCredentials(ctx context.Context, i *Iden
 	return count, nil
 }
 
+// Fandom-start https://github.com/Wikia/kratos/pull/84
 func (m *Manager) GetIdentityHighestAAL(ctx context.Context, identityId uuid.UUID) (available AuthenticatorAssuranceLevel, err error) {
 	available = NoAuthenticatorAssuranceLevel
 	identity, err := m.r.PrivilegedIdentityPool().GetIdentityConfidential(ctx, identityId)
@@ -211,3 +212,5 @@ func (m *Manager) GetIdentityHighestAAL(ctx context.Context, identityId uuid.UUI
 	}
 	return available, nil
 }
+
+// Fandom-end

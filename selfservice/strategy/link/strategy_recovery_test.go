@@ -299,6 +299,7 @@ func TestRecovery(t *testing.T) {
 			})
 		}
 	})
+	//
 
 	t.Run("description=should try to submit the form while authenticated", func(t *testing.T) {
 		run := func(t *testing.T, flow string) {

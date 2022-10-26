@@ -159,6 +159,8 @@ github.com/Shopify/sarama v1.30.0/go.mod h1:zujlQQx1kzHsh4jfV1USnptCQrHAEZ2Hk8fT
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
 github.com/Shopify/toxiproxy/v2 v2.1.6-0.20210914104332-15ea381dcdae/go.mod h1:/cvHQkZ1fst0EmZnA5dFtiQdWCNCFYzb+uE2vqVgvx0=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
+github.com/Wikia/x v0.0.338-0.20221026080858-acc95efca731 h1:oQF+d//xXj11720C76kCnRFXXBB1PuqSY4rzhwW/OW4=
+github.com/Wikia/x v0.0.338-0.20221026080858-acc95efca731/go.mod h1:FRfCy/kGTj71VVJ8BpA8IX11H6hYqcHaJNyYnbZavjg=
 github.com/a8m/envsubst v1.3.0 h1:GmXKmVssap0YtlU3E230W98RWtWCyIZzjtf1apWWyAg=
 github.com/a8m/envsubst v1.3.0/go.mod h1:MVUTQNGQ3tsjOOtKCNd+fl8RzhsXcDvvAEzkhGtlsbY=
 github.com/aeneasr/cupaloy/v2 v2.6.1-0.20210924214125-3dfdd01210a3 h1:/SkiUr3JJzun9QN9cpUVCPri2ZwOFJ3ani+F3vdoCiY=
@@ -1514,8 +1516,6 @@ github.com/ory/sessions v1.2.2-0.20220110165800-b09c17334dc2 h1:zm6sDvHy/U9XrGpi
 github.com/ory/sessions v1.2.2-0.20220110165800-b09c17334dc2/go.mod h1:dk2InVEVJ0sfLlnXv9EAgkf6ecYs/i80K/zI+bUmuGM=
 github.com/ory/viper v1.7.5 h1:+xVdq7SU3e1vNaCsk/ixsfxE4zylk1TJUiJrY647jUE=
 github.com/ory/viper v1.7.5/go.mod h1:ypOuyJmEUb3oENywQZRgeAMwqgOyDqwboO1tj3DjTaM=
-github.com/ory/x v0.0.392 h1:Cqm5wEXMT328/VJbZZftQosBS6x+V+s0RaHAWYpxlhM=
-github.com/ory/x v0.0.392/go.mod h1:FRfCy/kGTj71VVJ8BpA8IX11H6hYqcHaJNyYnbZavjg=
 github.com/otiai10/copy v1.2.0/go.mod h1:rrF5dJ5F0t/EWSYODDu4j9/vEeYHMkc8jt0zJChqQWw=
 github.com/otiai10/curr v0.0.0-20150429015615-9b4961190c95/go.mod h1:9qAhocn7zKJG+0mI8eUu6xqkFDYS2kb2saOteoSB3cE=
 github.com/otiai10/curr v1.0.0/go.mod h1:LskTG5wDwr8Rs+nNQ+1LlxRjAtTZZjtJW4rMXl6j4vs=

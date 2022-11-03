@@ -276,6 +276,56 @@ paths:
       summary: Update an Identity
       tags:
       - v0alpha2
+  /admin/identities/{id}/session:
+    get:
+      description: |-
+        This endpoint is useful for:
+
+        Issuing session or session token for a given identity without authenticating
+      operationId: adminIdentitySession
+      parameters:
+      - description: ID is the identity's ID.
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: |-
+          Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level.
+          If no value is provided, session returned is set with AAL1 level.
+        explode: true
+        in: query
+        name: upgrade
+        required: false
+        schema:
+          type: boolean
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/successfulAdminIdentitySession'
+          description: successfulAdminIdentitySession
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/jsonError'
+          description: jsonError
+      security:
+      - oryAccessToken: []
+      summary: Calling this endpoint issues a session for a given identity.
+      tags:
+      - v0alpha2
   /admin/identities/{id}/sessions:
     delete:
       description: |-
@@ -690,46 +740,6 @@ paths:
                 $ref: '#/components/schemas/jsonError'
           description: jsonError
       summary: Update Identity Credentials
-      tags:
-      - v0alpha2
-  /identities/{id}/session:
-    get:
-      description: |-
-        This endpoint is useful for:
-
-        Issuing session or session token for a given identity without authenticating
-      operationId: adminIdentitySession
-      parameters:
-      - description: ID is the identity's ID.
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/successfulAdminIdentitySession'
-          description: successfulAdminIdentitySession
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/jsonError'
-          description: jsonError
-      security:
-      - oryAccessToken: []
-      summary: Calling this endpoint issues a session for a given identity.
       tags:
       - v0alpha2
   /schemas:

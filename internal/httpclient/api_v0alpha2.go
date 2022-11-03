@@ -2176,6 +2176,12 @@ type V0alpha2ApiApiAdminIdentitySessionRequest struct {
 	ctx        context.Context
 	ApiService V0alpha2Api
 	id         string
+	upgrade    *bool
+}
+
+func (r V0alpha2ApiApiAdminIdentitySessionRequest) Upgrade(upgrade bool) V0alpha2ApiApiAdminIdentitySessionRequest {
+	r.upgrade = &upgrade
+	return r
 }
 
 func (r V0alpha2ApiApiAdminIdentitySessionRequest) Execute() (*SuccessfulAdminIdentitySession, *http.Response, error) {
@@ -2218,13 +2224,16 @@ func (a *V0alpha2ApiService) AdminIdentitySessionExecute(r V0alpha2ApiApiAdminId
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/identities/{id}/session"
+	localVarPath := localBasePath + "/admin/identities/{id}/session"
 	localVarPath = strings.Replace(localVarPath, "{"+"id"+"}", url.PathEscape(parameterToString(r.id, "")), -1)
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
 	localVarFormParams := url.Values{}
 
+	if r.upgrade != nil {
+		localVarQueryParams.Add("upgrade", parameterToString(*r.upgrade, ""))
+	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
 

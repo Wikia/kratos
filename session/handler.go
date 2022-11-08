@@ -108,6 +108,13 @@ type adminIdentitySession struct {
 	// required: true
 	// in: path
 	ID string `json:"id"`
+
+	// Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level.
+	// If no value is provided, session returned is set with AAL1 level.
+	//
+	// required: false
+	// in: query
+	Upgrade bool `json:"upgrade"`
 }
 
 // swagger:model successfulAdminIdentitySession
@@ -140,8 +147,6 @@ type AdminIdentitySessionResponse struct {
 	Identity *identity.Identity `json:"identity"`
 }
 
-// fandom-start
-
 // swagger:route GET /admin/identities/{id}/session v0alpha2 adminIdentitySession
 //
 // Calling this endpoint issues a session for a given identity.
@@ -172,9 +177,18 @@ func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.
 		return
 	}
 
+	upgrade := r.URL.Query().Get("upgrade")
+	upgradeBool, err := strconv.ParseBool(upgrade)
+	if upgrade != "" && err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError("could not parse parameter upgrade"))
+		return
+	}
+
 	// User need to go through all authentication steps for session to be on AAL2 level
-	s.CompletedLoginFor(identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel2)
-	s.SetAuthenticatorAssuranceLevel()
+	if upgradeBool {
+		s.CompletedLoginFor(identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel2)
+		s.SetAuthenticatorAssuranceLevel()
+	}
 
 	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
 		h.r.Writer().WriteError(w, r, err)

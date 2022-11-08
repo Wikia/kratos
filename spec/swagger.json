@@ -338,6 +338,60 @@
         }
       }
     },
+    "/admin/identities/{id}/session": {
+      "get": {
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
+        "schemes": [
+          "http",
+          "https"
+        ],
+        "tags": [
+          "v0alpha2"
+        ],
+        "summary": "Calling this endpoint issues a session for a given identity.",
+        "operationId": "adminIdentitySession",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "ID is the identity's ID.",
+            "name": "id",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "boolean",
+            "description": "Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level.\nIf no value is provided, session returned is set with AAL1 level.",
+            "name": "upgrade",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successfulAdminIdentitySession",
+            "schema": {
+              "$ref": "#/definitions/successfulAdminIdentitySession"
+            }
+          },
+          "404": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          },
+          "500": {
+            "description": "jsonError",
+            "schema": {
+              "$ref": "#/definitions/jsonError"
+            }
+          }
+        }
+      }
+    },
     "/admin/identities/{id}/sessions": {
       "get": {
         "security": [
@@ -802,54 +856,6 @@
         "responses": {
           "204": {
             "$ref": "#/responses/emptyResponse"
-          },
-          "404": {
-            "description": "jsonError",
-            "schema": {
-              "$ref": "#/definitions/jsonError"
-            }
-          },
-          "500": {
-            "description": "jsonError",
-            "schema": {
-              "$ref": "#/definitions/jsonError"
-            }
-          }
-        }
-      }
-    },
-    "/identities/{id}/session": {
-      "get": {
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
-        "schemes": [
-          "http",
-          "https"
-        ],
-        "tags": [
-          "v0alpha2"
-        ],
-        "summary": "Calling this endpoint issues a session for a given identity.",
-        "operationId": "adminIdentitySession",
-        "parameters": [
-          {
-            "type": "string",
-            "description": "ID is the identity's ID.",
-            "name": "id",
-            "in": "path",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successfulAdminIdentitySession",
-            "schema": {
-              "$ref": "#/definitions/successfulAdminIdentitySession"
-            }
           },
           "404": {
             "description": "jsonError",

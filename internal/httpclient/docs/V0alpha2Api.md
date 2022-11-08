@@ -11,7 +11,7 @@ Method | HTTP request | Description
 [**AdminDeleteIdentitySessions**](V0alpha2Api.md#AdminDeleteIdentitySessions) | **Delete** /admin/identities/{id}/sessions | Calling this endpoint irrecoverably and permanently deletes and invalidates all sessions that belong to the given Identity.
 [**AdminExtendSession**](V0alpha2Api.md#AdminExtendSession) | **Patch** /admin/sessions/{id}/extend | Calling this endpoint extends the given session ID. If &#x60;session.earliest_possible_extend&#x60; is set it will only extend the session after the specified time has passed.
 [**AdminGetIdentity**](V0alpha2Api.md#AdminGetIdentity) | **Get** /admin/identities/{id} | Get an Identity
-[**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /identities/{id}/session | Calling this endpoint issues a session for a given identity.
+[**AdminIdentitySession**](V0alpha2Api.md#AdminIdentitySession) | **Get** /admin/identities/{id}/session | Calling this endpoint issues a session for a given identity.
 [**AdminListIdentities**](V0alpha2Api.md#AdminListIdentities) | **Get** /admin/identities | List Identities
 [**AdminListIdentitySessions**](V0alpha2Api.md#AdminListIdentitySessions) | **Get** /admin/identities/{id}/sessions | This endpoint returns all sessions that belong to the given Identity.
 [**AdminUpdateCredentials**](V0alpha2Api.md#AdminUpdateCredentials) | **Put** /identities/{id}/credentials | Update Identity Credentials
@@ -534,7 +534,7 @@ Name | Type | Description  | Notes
 
 ## AdminIdentitySession
 
-> SuccessfulAdminIdentitySession AdminIdentitySession(ctx, id).Execute()
+> SuccessfulAdminIdentitySession AdminIdentitySession(ctx, id).Upgrade(upgrade).Execute()
 
 Calling this endpoint issues a session for a given identity.
 
@@ -554,10 +554,11 @@ import (
 
 func main() {
     id := "id_example" // string | ID is the identity's ID.
+    upgrade := true // bool | Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level. If no value is provided, session returned is set with AAL1 level. (optional)
 
     configuration := openapiclient.NewConfiguration()
     apiClient := openapiclient.NewAPIClient(configuration)
-    resp, r, err := apiClient.V0alpha2Api.AdminIdentitySession(context.Background(), id).Execute()
+    resp, r, err := apiClient.V0alpha2Api.AdminIdentitySession(context.Background(), id).Upgrade(upgrade).Execute()
     if err != nil {
         fmt.Fprintf(os.Stderr, "Error when calling `V0alpha2Api.AdminIdentitySession``: %v\n", err)
         fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
@@ -583,6 +584,7 @@ Other parameters are passed through a pointer to a apiAdminIdentitySessionReques
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
+ **upgrade** | **bool** | Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level. If no value is provided, session returned is set with AAL1 level. | 
 
 ### Return type
 

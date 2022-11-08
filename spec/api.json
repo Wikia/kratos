@@ -2630,6 +2630,72 @@
         ]
       }
     },
+    "/admin/identities/{id}/session": {
+      "get": {
+        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
+        "operationId": "adminIdentitySession",
+        "parameters": [
+          {
+            "description": "ID is the identity's ID.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level.\nIf no value is provided, session returned is set with AAL1 level.",
+            "in": "query",
+            "name": "upgrade",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/successfulAdminIdentitySession"
+                }
+              }
+            },
+            "description": "successfulAdminIdentitySession"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/jsonError"
+                }
+              }
+            },
+            "description": "jsonError"
+          }
+        },
+        "security": [
+          {
+            "oryAccessToken": []
+          }
+        ],
+        "summary": "Calling this endpoint issues a session for a given identity.",
+        "tags": [
+          "v0alpha2"
+        ]
+      }
+    },
     "/admin/identities/{id}/sessions": {
       "delete": {
         "description": "This endpoint is useful for:\n\nTo forcefully logout Identity from all devices and sessions",
@@ -3219,64 +3285,6 @@
           }
         },
         "summary": "Update Identity Credentials",
-        "tags": [
-          "v0alpha2"
-        ]
-      }
-    },
-    "/identities/{id}/session": {
-      "get": {
-        "description": "This endpoint is useful for:\n\nIssuing session or session token for a given identity without authenticating",
-        "operationId": "adminIdentitySession",
-        "parameters": [
-          {
-            "description": "ID is the identity's ID.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/successfulAdminIdentitySession"
-                }
-              }
-            },
-            "description": "successfulAdminIdentitySession"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/jsonError"
-                }
-              }
-            },
-            "description": "jsonError"
-          }
-        },
-        "security": [
-          {
-            "oryAccessToken": []
-          }
-        ],
-        "summary": "Calling this endpoint issues a session for a given identity.",
         "tags": [
           "v0alpha2"
         ]

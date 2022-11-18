@@ -96,7 +96,6 @@ func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	s.d.Logger().Warn("lookup secrets status: %v", enabled)
 	if enabled {
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
@@ -349,7 +348,6 @@ func (s *Strategy) PopulateSettingsMethod(r *http.Request, id *identity.Identity
 	if err != nil {
 		return err
 	}
-	s.d.Logger().Warn("lookup secrets status: ", enabled)
 	if !enabled {
 		return nil
 	}

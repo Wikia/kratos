@@ -84,6 +84,18 @@
         "hook"
       ]
     },
+    "selfServiceTotpSecretsDestroyerHook": {
+      "type": "object",
+      "properties": {
+        "hook": {
+          "const": "totp_destroys_lookup_secrets"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hook"
+      ]
+    },
     "webHookAuthBasicAuthProperties": {
       "properties": {
         "type": {
@@ -640,6 +652,9 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/selfServiceWebHook"
+              },
+              {
+                "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
               }
             ]
           },

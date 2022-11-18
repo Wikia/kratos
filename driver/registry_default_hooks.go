@@ -33,12 +33,16 @@ func (m *RegistryDefault) HookAddressVerifier() *hook.AddressVerifier {
 	return m.hookAddressVerifier
 }
 
+// fandom-start
+
 func (m *RegistryDefault) HookTotpSecretsDestroyer() *hook.TotpSecretsDestroyer {
 	if m.hookTotpSecretsDestroyer == nil {
 		m.hookTotpSecretsDestroyer = hook.NewTotpSecretsDestroyer(m)
 	}
 	return m.hookTotpSecretsDestroyer
 }
+
+// fandom-end
 
 func (m *RegistryDefault) WithHooks(hooks map[string]func(config.SelfServiceHook) interface{}) {
 	m.injectedSelfserviceHooks = hooks
@@ -55,8 +59,10 @@ func (m *RegistryDefault) getHooks(credentialsType string, configs []config.Self
 			i = append(i, hook.NewWebHook(m, h.Config))
 		case hook.KeyAddressVerifier:
 			i = append(i, m.HookAddressVerifier())
+			// fandom-start
 		case hook.KeyTotpLookupSecretsDestroyer:
 			i = append(i, m.HookTotpSecretsDestroyer())
+			// fandom-end
 		default:
 			var found bool
 			for name, m := range m.injectedSelfserviceHooks {

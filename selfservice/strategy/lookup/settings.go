@@ -92,6 +92,7 @@ func (p *submitSelfServiceSettingsFlowWithLookupMethodBody) SetFlowID(rid uuid.U
 }
 
 func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (*settings.UpdateContext, error) {
+	// fandom-start
 	enabled, err := s.isEnabledForIdentity(r.Context(), ss.IdentityID)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -99,6 +100,7 @@ func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.
 	if !enabled {
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
+	// fandom-end
 	var p submitSelfServiceSettingsFlowWithLookupMethodBody
 	ctxUpdate, err := settings.PrepareUpdate(s.d, w, r, f, ss, settings.ContinuityKey(s.SettingsStrategyID()), &p)
 	if errors.Is(err, settings.ErrContinuePreviousAction) {

@@ -7,6 +7,6 @@ const (
 	KeyAddressVerifier  = "require_verified_address"
 	// fandom-start
 
-	KeyTotpLookupSecretsDestroyer = "totp_destroys_lookup_secrets"
+	KeyTotpLookupSecretsDestroyer = "totp_destroys_lookup_secrets" // nolint:gosec
 	// fandom-end
 )

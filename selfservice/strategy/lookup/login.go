@@ -38,6 +38,17 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 		return err
 	}
 
+	// fandom-start
+	enabled, err := s.isEnabledForIdentity(r.Context(), sess.IdentityID)
+	if err != nil {
+		return err
+	}
+
+	if !enabled {
+		return nil
+	}
+	// fandom-end
+
 	id, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), sess.IdentityID)
 	if err != nil {
 		return err

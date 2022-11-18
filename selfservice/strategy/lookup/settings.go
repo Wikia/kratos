@@ -1,14 +1,18 @@
 package lookup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
+	"github.com/ory/kratos/selfservice/strategy/totp"
+	"github.com/ory/x/jsonx"
 	"github.com/ory/x/randx"
 
 	"github.com/ory/herodot"
@@ -88,6 +92,14 @@ func (p *submitSelfServiceSettingsFlowWithLookupMethodBody) SetFlowID(rid uuid.U
 }
 
 func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (*settings.UpdateContext, error) {
+	enabled, err := s.isEnabledForIdentity(r.Context(), ss.IdentityID)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	s.d.Logger().Warn("lookup secrets status: %v", enabled)
+	if enabled {
+		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
+	}
 	var p submitSelfServiceSettingsFlowWithLookupMethodBody
 	ctxUpdate, err := settings.PrepareUpdate(s.d, w, r, f, ss, settings.ContinuityKey(s.SettingsStrategyID()), &p)
 	if errors.Is(err, settings.ErrContinuePreviousAction) {
@@ -332,6 +344,17 @@ func (s *Strategy) identityHasLookup(ctx context.Context, id uuid.UUID) (bool, e
 func (s *Strategy) PopulateSettingsMethod(r *http.Request, id *identity.Identity, f *settings.Flow) error {
 	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 
+	// fandom-start
+	enabled, err := s.isEnabledForIdentity(r.Context(), id.ID)
+	if err != nil {
+		return err
+	}
+	s.d.Logger().Warn("lookup secrets status: ", enabled)
+	if !enabled {
+		return nil
+	}
+	// fandom-end
+
 	hasLookup, err := s.identityHasLookup(r.Context(), id.ID)
 	if err != nil {
 		return err
@@ -362,3 +385,69 @@ func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, c
 
 	return err
 }
+
+// fandom-start
+
+type StrategyConfiguration struct {
+	EnabledOnlyIn2FA bool `json:"enabled_only_in_2fa"`
+}
+
+func (s *Strategy) Config(ctx context.Context) (*StrategyConfiguration, error) {
+	var c StrategyConfiguration
+
+	conf := s.d.Config(ctx).SelfServiceStrategy(string(s.ID())).Config
+	if err := jsonx.
+		NewStrictDecoder(bytes.NewBuffer(conf)).
+		Decode(&c); err != nil {
+		s.d.Logger().WithError(err).WithField("config", conf)
+		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to decode Lookup Secret configuration: %s", err))
+	}
+
+	return &c, nil
+}
+
+func (s *Strategy) isEnabledForIdentity(ctx context.Context, id uuid.UUID) (bool, error) {
+	conf, err := s.Config(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	if !conf.EnabledOnlyIn2FA {
+		return false, nil
+	}
+
+	return s.identityHasTOTP(ctx, id)
+}
+
+func (s *Strategy) CountActiveTotpCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+	for _, c := range cc {
+		if c.Type == identity.CredentialsTypeTOTP && len(c.Config) > 0 {
+			var conf totp.CredentialsConfig
+			if err = json.Unmarshal(c.Config, &conf); err != nil {
+				return 0, errors.WithStack(err)
+			}
+
+			_, err := otp.NewKeyFromURL(conf.TOTPURL)
+			if len(c.Identifiers) > 0 && len(c.Identifiers[0]) > 0 && len(conf.TOTPURL) > 0 && err == nil {
+				count++
+			}
+		}
+	}
+	return
+}
+
+func (s *Strategy) identityHasTOTP(ctx context.Context, id uuid.UUID) (bool, error) {
+	confidential, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, id)
+	if err != nil {
+		return false, err
+	}
+
+	count, err := s.CountActiveTotpCredentials(confidential.Credentials)
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
+// fandom-end

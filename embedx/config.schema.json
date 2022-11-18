@@ -1348,6 +1348,17 @@
                   "type": "boolean",
                   "title": "Enables the lookup secret method",
                   "default": false
+                },
+                "config": {
+                  "type": "object",
+                  "title": "Lookup Secret Configuration",
+                  "properties": {
+                    "enabled_only_in_2fa": {
+                      "type": "boolean",
+                      "title": "Will enable lookup secret codes when 2FA is enabled for a user (i.e. TOTP)",
+                      "default": false
+                    }
+                  }
                 }
               }
             },

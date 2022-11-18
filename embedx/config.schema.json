@@ -618,6 +618,9 @@
         "anyOf": [
           {
             "$ref": "#/definitions/selfServiceWebHook"
+          },
+          {
+            "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
           }
         ]
       },
@@ -652,9 +655,6 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/selfServiceWebHook"
-              },
-              {
-                "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
               }
             ]
           },

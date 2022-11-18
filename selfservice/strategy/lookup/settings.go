@@ -96,7 +96,7 @@ func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	if enabled {
+	if !enabled {
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
 	var p submitSelfServiceSettingsFlowWithLookupMethodBody

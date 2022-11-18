@@ -618,9 +618,6 @@
         "anyOf": [
           {
             "$ref": "#/definitions/selfServiceWebHook"
-          },
-          {
-            "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
           }
         ]
       },
@@ -655,6 +652,9 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/selfServiceWebHook"
+              },
+              {
+                "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
               }
             ]
           },
@@ -762,6 +762,9 @@
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },
         "profile": {
+          "$ref": "#/definitions/selfServiceAfterSettingsMethod"
+        },
+        "totp": {
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },
         "hooks": {

@@ -409,11 +409,11 @@ func (s *Strategy) Config(ctx context.Context) (*StrategyConfiguration, error) {
 func (s *Strategy) isEnabledForIdentity(ctx context.Context, id uuid.UUID) (bool, error) {
 	conf, err := s.Config(ctx)
 	if err != nil {
-		return false, err
+		return true, err
 	}
 
 	if !conf.EnabledOnlyIn2FA {
-		return false, nil
+		return true, nil
 	}
 
 	return s.identityHasTOTP(ctx, id)

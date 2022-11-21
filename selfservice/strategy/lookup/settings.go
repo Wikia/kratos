@@ -389,7 +389,7 @@ func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, c
 // fandom-start
 
 type StrategyConfiguration struct {
-	EnabledOnlyIn2FA bool `json:"enabled_only_in_2fa"`
+	EnabledOnlyIn2FA bool `json:"enabled_only_in_2fa,omitempty"`
 }
 
 func (s *Strategy) Config(ctx context.Context) (*StrategyConfiguration, error) {

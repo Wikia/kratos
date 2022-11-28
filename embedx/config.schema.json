@@ -84,6 +84,18 @@
         "hook"
       ]
     },
+    "selfServiceTotpSecretsDestroyerHook": {
+      "type": "object",
+      "properties": {
+        "hook": {
+          "const": "totp_destroys_lookup_secrets"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hook"
+      ]
+    },
     "webHookAuthBasicAuthProperties": {
       "properties": {
         "type": {
@@ -640,6 +652,9 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/selfServiceWebHook"
+              },
+              {
+                "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
               }
             ]
           },
@@ -747,6 +762,9 @@
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },
         "profile": {
+          "$ref": "#/definitions/selfServiceAfterSettingsMethod"
+        },
+        "totp": {
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },
         "hooks": {
@@ -1348,6 +1366,17 @@
                   "type": "boolean",
                   "title": "Enables the lookup secret method",
                   "default": false
+                },
+                "config": {
+                  "type": "object",
+                  "title": "Lookup Secret Configuration",
+                  "properties": {
+                    "enabled_only_in_2fa": {
+                      "type": "boolean",
+                      "title": "Will enable lookup secret codes when 2FA is enabled for a user (i.e. TOTP)",
+                      "default": false
+                    }
+                  }
                 }
               }
             },

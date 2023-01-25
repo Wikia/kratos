@@ -86,10 +86,11 @@ type RegistryDefault struct {
 
 	persister persistence.Persister
 
-	hookVerifier         *hook.Verifier
-	hookSessionIssuer    *hook.SessionIssuer
-	hookSessionDestroyer *hook.SessionDestroyer
-	hookAddressVerifier  *hook.AddressVerifier
+	hookVerifier             *hook.Verifier
+	hookSessionIssuer        *hook.SessionIssuer
+	hookSessionDestroyer     *hook.SessionDestroyer
+	hookAddressVerifier      *hook.AddressVerifier
+	hookTotpSecretsDestroyer *hook.TotpSecretsDestroyer
 
 	credentialsHandler *credentials.Handler
 

@@ -15,7 +15,7 @@ replace (
 	// official SDK, allowing for the Ory CLI to consume Ory Kratos' CLI commands.
 	github.com/ory/kratos-client-go => ./internal/httpclient
 	// Please remove this override during next kratos update
-	github.com/ory/x => github.com/Wikia/x v0.0.338-0.20221026080858-acc95efca731
+	github.com/ory/x => github.com/Wikia/x v0.0.338-0.20230223150338-c29bd8976652
 
 	go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.4.6
 	golang.org/x/sys => golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8

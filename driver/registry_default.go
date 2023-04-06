@@ -500,6 +500,7 @@ func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.StoreExact
 	cs.Options.MaxAge = 0
 	if m.Config(ctx).SessionPersistentCookie() {
 		cs.Options.MaxAge = int(m.Config(ctx).SessionLifespan().Seconds())
+		cs.MaxAge(cs.Options.MaxAge)
 	}
 	return cs
 }

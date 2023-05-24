@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 
 	"github.com/gofrs/uuid"
@@ -137,6 +138,31 @@ func (m *Manager) SetTraits(ctx context.Context, id uuid.UUID, traits Traits, op
 	// original is used to check whether protected traits were modified
 	updated := deepcopy.Copy(original).(*Identity)
 	updated.Traits = traits
+
+	// fandom-start - update email verification status on email change
+	// this is hacky way to update metadata_public using json.RawMessage
+	origTraits := struct {
+		Email string `json:"email,omitempty"`
+	}{}
+	newTraits := origTraits
+	if json.Unmarshal(original.Traits, &origTraits) == nil && json.Unmarshal(traits, &newTraits) == nil && newTraits.Email != origTraits.Email {
+		if updated.MetadataPublic == nil {
+			updated.MetadataPublic = []byte(`{"email_verified": false}`)
+		} else {
+			var data map[string]json.RawMessage
+			if err = json.Unmarshal(updated.MetadataPublic, &data); err == nil {
+				if data == nil {
+					data = map[string]json.RawMessage{}
+				}
+				data["email_verified"] = []byte("false")
+			}
+			if payload, err := json.Marshal(data); err == nil {
+				updated.MetadataPublic = payload
+			}
+		}
+	}
+	// fandom-end
+
 	if err := m.validate(ctx, updated, o); err != nil {
 		return nil, err
 	}

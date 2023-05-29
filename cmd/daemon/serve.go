@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	stdctx "context"
 	"crypto/tls"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/ory/kratos/cmd/cleanup"
 
@@ -24,8 +26,6 @@ import (
 
 	"github.com/ory/x/healthx"
 	"github.com/ory/x/networkx"
-
-	stdctx "context"
 
 	"github.com/spf13/cobra"
 	"github.com/urfave/negroni"
@@ -129,7 +129,10 @@ func ServePublic(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args
 
 	// #nosec G112 - the correct settings are set by graceful.WithDefaults
 	server := graceful.WithDefaults(&http.Server{
-		Handler:   handler,
+		Handler: handler,
+		// fandom-start on some environments 10s timeout is not enough (DEV)
+		WriteTimeout: 15 * time.Second,
+		// fandom-end
 		TLSConfig: &tls.Config{Certificates: certs, MinVersion: tls.VersionTLS12},
 	})
 	addr := c.PublicListenOn()
@@ -190,7 +193,10 @@ func ServeAdmin(r driver.Registry, wg *sync.WaitGroup, cmd *cobra.Command, args 
 
 	// #nosec G112 - the correct settings are set by graceful.WithDefaults
 	server := graceful.WithDefaults(&http.Server{
-		Handler:   handler,
+		Handler: handler,
+		// fandom-start on some environments 10s timeout is not enough (DEV)
+		WriteTimeout: 15 * time.Second,
+		// fandom-end
 		TLSConfig: &tls.Config{Certificates: certs, MinVersion: tls.VersionTLS12},
 	})
 

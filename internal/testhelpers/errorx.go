@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package testhelpers
 
 import (
@@ -27,14 +30,14 @@ func NewErrorTestServer(t *testing.T, reg interface {
 	logger := logrusx.New("", "", logrusx.ForceLevel(logrus.TraceLevel))
 	writer := herodot.NewJSONWriter(logger)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		e, err := reg.SelfServiceErrorPersister().Read(r.Context(), x.ParseUUID(r.URL.Query().Get("id")))
+		e, err := reg.SelfServiceErrorPersister().ReadErrorContainer(r.Context(), x.ParseUUID(r.URL.Query().Get("id")))
 		require.NoError(t, err)
 		t.Logf("Found error in NewErrorTestServer: %s", e.Errors)
 		writer.Write(w, r, e.Errors)
 	}))
 	t.Cleanup(ts.Close)
 	ts.URL = strings.Replace(ts.URL, "127.0.0.1", "localhost", -1)
-	reg.Config(context.Background()).MustSet(config.ViperKeySelfServiceErrorUI, ts.URL)
+	reg.Config().MustSet(context.Background(), config.ViperKeySelfServiceErrorUI, ts.URL)
 	return ts
 }
 
@@ -47,7 +50,7 @@ func NewRedirTS(t *testing.T, body string, conf *config.Config) *httptest.Server
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(ts.Close)
-	conf.MustSet(config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL)
+	conf.MustSet(context.Background(), config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL)
 	return ts
 }
 
@@ -63,7 +66,7 @@ func NewRedirSessionEchoTS(t *testing.T, reg interface {
 		reg.Writer().Write(w, r, sess)
 	}))
 	t.Cleanup(ts.Close)
-	reg.Config(context.Background()).MustSet(config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/return-ts")
+	reg.Config().MustSet(context.Background(), config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/return-ts")
 	return ts
 }
 
@@ -79,6 +82,6 @@ func NewRedirNoSessionTS(t *testing.T, reg interface {
 		reg.Writer().Write(w, r, nil)
 	}))
 	t.Cleanup(ts.Close)
-	reg.Config(context.Background()).MustSet(config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/return-ts")
+	reg.Config().MustSet(context.Background(), config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/return-ts")
 	return ts
 }

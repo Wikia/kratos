@@ -1,3 +1,6 @@
+// Copyright © 2024 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package hash
 
 import (
@@ -78,7 +81,7 @@ func NewHasherLegacyFandom(c LegacyFandomCryptConfiguration) *LegacyFandomCrypt 
 }
 
 func (h *LegacyFandomCrypt) Generate(ctx context.Context, password []byte) ([]byte, error) {
-	cfg, err := h.c.Config(ctx).HasherLegacyFandom()
+	cfg, err := h.c.Config().HasherLegacyFandom(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -121,7 +124,7 @@ func (h *LegacyFandomCrypt) Understands(hash []byte) bool {
 }
 
 // CompareLegacyFandom will try to compare password against Fandom's legacy password hash
-func CompareLegacyFandom(_ context.Context, cfg *config.Config, identityId uuid.UUID, password, hash []byte) error {
+func CompareLegacyFandom(ctx context.Context, cfg *config.Config, identityId uuid.UUID, password, hash []byte) error {
 	if len(hash) == 0 {
 		return errors.WithStack(ErrEmptyHashCompare)
 	}
@@ -146,7 +149,7 @@ func CompareLegacyFandom(_ context.Context, cfg *config.Config, identityId uuid.
 
 	var lastError error
 	var aesDecrypted []byte
-	hasherCfg, err := cfg.HasherLegacyFandom()
+	hasherCfg, err := cfg.HasherLegacyFandom(ctx)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -156,7 +159,6 @@ func CompareLegacyFandom(_ context.Context, cfg *config.Config, identityId uuid.
 			break
 		}
 	}
-
 	if lastError != nil {
 		return errors.WithStack(lastError)
 	}

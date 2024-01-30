@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 //go:build tools
 // +build tools
 
@@ -12,7 +15,6 @@ import (
 	_ "github.com/gobuffalo/fizz"
 
 	_ "github.com/ory/go-acc"
-	_ "github.com/ory/x/tools/listx"
 
 	_ "github.com/jteeuwen/go-bindata"
 
@@ -21,5 +23,6 @@ import (
 	_ "github.com/cortesi/modd/cmd/modd"
 	_ "github.com/hashicorp/consul/api"
 
+	_ "github.com/mailhog/MailHog"
 	_ "github.com/mikefarah/yq/v4"
 )

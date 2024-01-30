@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package lookup
 
 import (
@@ -84,7 +87,7 @@ func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.Credentials
 			hasTotp = true
 		}
 		if c.Type == s.ID() && len(c.Config) > 0 {
-			var conf CredentialsConfig
+			var conf identity.CredentialsLookupConfig
 			if err = json.Unmarshal(c.Config, &conf); err != nil {
 				return 0, errors.WithStack(err)
 			}

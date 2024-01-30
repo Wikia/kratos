@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package oidc
 
 import (
@@ -26,9 +29,15 @@ type Configuration struct {
 	// - discord
 	// - slack
 	// - facebook
+	// - auth0
 	// - vk
 	// - yandex
 	// - apple
+	// - spotify
+	// - netid
+	// - dingtalk
+	// - linkedin
+	// - patreon
 	Provider string `json:"provider"`
 
 	// Label represents an optional label which can be used in the UI generation.
@@ -152,6 +161,14 @@ func (c ConfigurationCollection) Provider(id string, reg dependencies) (Provider
 				return NewProviderSpotify(&p, reg), nil
 			case addProviderName("netid"):
 				return NewProviderNetID(&p, reg), nil
+			case addProviderName("dingtalk"):
+				return NewProviderDingTalk(&p, reg), nil
+			case addProviderName("linkedin"):
+				return NewProviderLinkedIn(&p, reg), nil
+			case addProviderName("patreon"):
+				return NewProviderPatreon(&p, reg), nil
+			case addProviderName("lark"):
+				return NewProviderLark(&p, reg), nil
 			}
 			return nil, errors.Errorf("provider type %s is not supported, supported are: %v", p.Provider, providerNames)
 		}

@@ -1,7 +1,9 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package link_test
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -35,6 +37,7 @@ import (
 )
 
 func TestVerification(t *testing.T) {
+	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	initViper(t, conf)
 
@@ -69,7 +72,7 @@ func TestVerification(t *testing.T) {
 		}
 
 		return testhelpers.SubmitVerificationForm(t, isAPI, isSPA, hc, public, values, c,
-			testhelpers.ExpectURL(isAPI || isSPA, public.URL+verification.RouteSubmitFlow, conf.SelfServiceFlowVerificationUI().String()))
+			testhelpers.ExpectURL(isAPI || isSPA, public.URL+verification.RouteSubmitFlow, conf.SelfServiceFlowVerificationUI(ctx).String()))
 	}
 
 	var expectValidationError = func(t *testing.T, hc *http.Client, isAPI, isSPA bool, values func(url.Values)) string {
@@ -103,7 +106,7 @@ func TestVerification(t *testing.T) {
 		res, err := c.PostForm(rs.Ui.Action, url.Values{"method": {"not-link"}, "email": {verificationEmail}})
 		require.NoError(t, err)
 		assert.EqualValues(t, http.StatusOK, res.StatusCode)
-		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI().String())
+		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 
 		body := ioutilx.MustReadAll(res.Body)
 		require.NoError(t, res.Body.Close())
@@ -163,6 +166,11 @@ func TestVerification(t *testing.T) {
 	})
 
 	t.Run("description=should try to verify an email that does not exist", func(t *testing.T) {
+		conf.Set(ctx, config.ViperKeySelfServiceVerificationNotifyUnknownRecipients, true)
+
+		t.Cleanup(func() {
+			conf.Set(ctx, config.ViperKeySelfServiceVerificationNotifyUnknownRecipients, false)
+		})
 		var email string
 		var check = func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.LinkGroup), gjson.Get(actual, "active").String(), "%s", actual)
@@ -199,19 +207,19 @@ func TestVerification(t *testing.T) {
 		res, err := c.Get(public.URL + verification.RouteSubmitFlow + "?flow=" + f.Id + "&token=i-do-not-exist")
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, res.StatusCode)
-		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI().String()+"?flow=")
+		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String()+"?flow=")
 
-		sr, _, err := testhelpers.NewSDKCustomClient(public, c).V0alpha2Api.GetSelfServiceVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendApi.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 		require.NoError(t, err)
 
 		require.Len(t, sr.Ui.Messages, 1)
 		assert.Equal(t, "The verification token is invalid or has already been used. Please retry the flow.", sr.Ui.Messages[0].Text)
 	})
 
-	t.Run("description=should not be able to use an outdated link", func(t *testing.T) {
-		conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Millisecond*200)
+	t.Run("description=should not be able to request link with an outdated flow", func(t *testing.T) {
+		conf.MustSet(ctx, config.ViperKeySelfServiceVerificationRequestLifespan, time.Millisecond*200)
 		t.Cleanup(func() {
-			conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Minute)
+			conf.MustSet(ctx, config.ViperKeySelfServiceVerificationRequestLifespan, time.Minute)
 		})
 
 		c := testhelpers.NewClientWithCookies(t)
@@ -223,13 +231,13 @@ func TestVerification(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, http.StatusOK, res.StatusCode)
 		assert.NotContains(t, res.Request.URL.String(), "flow="+rs.Id)
-		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI().String())
+		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 	})
 
-	t.Run("description=should not be able to use an outdated flow", func(t *testing.T) {
-		conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Millisecond*200)
+	t.Run("description=should not be able to use link with an outdated flow", func(t *testing.T) {
+		conf.MustSet(ctx, config.ViperKeySelfServiceVerificationRequestLifespan, time.Millisecond*200)
 		t.Cleanup(func() {
-			conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Minute)
+			conf.MustSet(ctx, config.ViperKeySelfServiceVerificationRequestLifespan, time.Minute)
 		})
 
 		c := testhelpers.NewClientWithCookies(t)
@@ -244,14 +252,16 @@ func TestVerification(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 201)
 
+		//Clear cookies as link might be opened in another browser
+		c = testhelpers.NewClientWithCookies(t)
 		res, err := c.Get(verificationLink)
 		require.NoError(t, err)
 
 		assert.EqualValues(t, http.StatusOK, res.StatusCode)
-		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI().String())
+		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 		assert.NotContains(t, res.Request.URL.String(), gjson.Get(body, "id").String())
 
-		sr, _, err := testhelpers.NewSDKCustomClient(public, c).V0alpha2Api.GetSelfServiceVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendApi.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 		require.NoError(t, err)
 
 		require.Len(t, sr.Ui.Messages, 1)
@@ -278,7 +288,7 @@ func TestVerification(t *testing.T) {
 			defer res.Body.Close()
 
 			assert.Equal(t, http.StatusOK, res.StatusCode)
-			assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI().String())
+			assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 			body := string(ioutilx.MustReadAll(res.Body))
 			assert.EqualValues(t, "passed_challenge", gjson.Get(body, "state").String())
 			assert.EqualValues(t, text.NewInfoSelfServiceVerificationSuccessful().Text, gjson.Get(body, "ui.messages.0.text").String())
@@ -341,8 +351,8 @@ func TestVerification(t *testing.T) {
 		check(t, expectSuccess(t, nil, false, false, values))
 	})
 
-	newValidFlow := func(t *testing.T, requestURL string) (*verification.Flow, *link.VerificationToken) {
-		f, err := verification.NewFlow(conf, time.Hour, x.FakeCSRFToken, httptest.NewRequest("GET", requestURL, nil), nil, flow.TypeBrowser)
+	newValidFlow := func(t *testing.T, fType flow.Type, requestURL string) (*verification.Flow, *link.VerificationToken) {
+		f, err := verification.NewFlow(conf, time.Hour, x.FakeCSRFToken, httptest.NewRequest("GET", requestURL, nil), nil, fType)
 		require.NoError(t, err)
 		f.State = verification.StateEmailSent
 		require.NoError(t, reg.VerificationFlowPersister().CreateVerificationFlow(context.Background(), f))
@@ -355,31 +365,68 @@ func TestVerification(t *testing.T) {
 		return f, token
 	}
 
+	newValidBrowserFlow := func(t *testing.T, requestURL string) (*verification.Flow, *link.VerificationToken) {
+		return newValidFlow(t, flow.TypeBrowser, requestURL)
+	}
+
 	t.Run("case=respects return_to URI parameter", func(t *testing.T) {
 		returnToURL := public.URL + "/after-verification"
-		conf.MustSet(config.ViperKeyURLsAllowedReturnToDomains, []string{returnToURL})
-		client := &http.Client{
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+		conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnToURL})
+
+		for _, fType := range []flow.Type{flow.TypeBrowser, flow.TypeAPI} {
+			t.Run(fmt.Sprintf("type=%s", fType), func(t *testing.T) {
+				client := testhelpers.NewClientWithCookies(t)
+				flow, token := newValidFlow(t, fType, public.URL+verification.RouteInitBrowserFlow+"?"+url.Values{"return_to": {returnToURL}}.Encode())
+
+				res, err := client.Get(public.URL + verification.RouteSubmitFlow + "?" + url.Values{"flow": {flow.ID.String()}, "token": {token.Token}}.Encode())
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				responseBody := gjson.ParseBytes(ioutilx.MustReadAll(res.Body))
+
+				assert.Equal(t, responseBody.Get("state").String(), "passed_challenge", "%v", responseBody)
+				assert.True(t, responseBody.Get("ui.nodes.#(attributes.id==continue)").Exists(), "%v", responseBody)
+				assert.Equal(t, returnToURL, responseBody.Get("ui.nodes.#(attributes.id==continue).attributes.href").String(), "%v", responseBody)
+			})
 		}
+	})
 
-		conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Millisecond*200)
-		t.Cleanup(func() {
-			conf.MustSet(config.ViperKeySelfServiceVerificationRequestLifespan, time.Minute)
-		})
+	t.Run("case=contains default return to url", func(t *testing.T) {
+		globalReturnTo := public.URL + "/global"
+		conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, globalReturnTo)
 
-		flow, token := newValidFlow(t, public.URL+verification.RouteInitBrowserFlow+"?"+url.Values{"return_to": {returnToURL}}.Encode())
+		for _, fType := range []flow.Type{flow.TypeBrowser, flow.TypeAPI} {
+			t.Run(fmt.Sprintf("type=%s", fType), func(t *testing.T) {
+				client := testhelpers.NewClientWithCookies(t)
+				flow, token := newValidFlow(t, fType, public.URL+verification.RouteInitBrowserFlow)
 
-		body := fmt.Sprintf(
-			`{"csrf_token":"%s","email":"%s"}`, flow.CSRFToken, verificationEmail,
-		)
+				res, err := client.Get(public.URL + verification.RouteSubmitFlow + "?" + url.Values{"flow": {flow.ID.String()}, "token": {token.Token}}.Encode())
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				responseBody := gjson.ParseBytes(ioutilx.MustReadAll(res.Body))
 
-		res, err := client.Post(public.URL+verification.RouteSubmitFlow+"?"+url.Values{"flow": {flow.ID.String()}, "token": {token.Token}}.Encode(), "application/json", bytes.NewBuffer([]byte(body)))
+				assert.Equal(t, responseBody.Get("state").String(), "passed_challenge", "%v", responseBody)
+				assert.True(t, responseBody.Get("ui.nodes.#(attributes.id==continue)").Exists(), "%v", responseBody)
+				assert.Equal(t, globalReturnTo, responseBody.Get("ui.nodes.#(attributes.id==continue).attributes.href").String(), "%v", responseBody)
+			})
+		}
+	})
+
+	t.Run("case=should not be able to use code from different flow", func(t *testing.T) {
+
+		f1, _ := newValidBrowserFlow(t, public.URL+verification.RouteInitBrowserFlow)
+
+		_, t2 := newValidBrowserFlow(t, public.URL+verification.RouteInitBrowserFlow)
+
+		formValues := url.Values{
+			"flow":  {f1.ID.String()},
+			"token": {t2.Token},
+		}
+		submitUrl := public.URL + verification.RouteSubmitFlow + "?" + formValues.Encode()
+
+		res, err := public.Client().Get(submitUrl)
 		require.NoError(t, err)
-		assert.Equal(t, http.StatusSeeOther, res.StatusCode)
-		redirectURL, err := res.Location()
-		require.NoError(t, err)
-		assert.Equal(t, returnToURL+"?flow="+flow.ID.String(), redirectURL.String())
+		body := ioutilx.MustReadAll(res.Body)
+
+		assert.Equal(t, "The verification token is invalid or has already been used. Please retry the flow.", gjson.GetBytes(body, "ui.messages.0.text").String())
 	})
 }

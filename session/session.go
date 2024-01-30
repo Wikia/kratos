@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package session
 
 import (
@@ -5,27 +8,67 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
+
+	"github.com/ory/kratos/x"
+
+	"github.com/ory/x/httpx"
+	"github.com/ory/x/pagination/keysetpagination"
+	"github.com/ory/x/stringsx"
 
 	"github.com/pkg/errors"
 
 	"github.com/gofrs/uuid"
 
 	"github.com/ory/herodot"
-	"github.com/ory/kratos/corp"
 	"github.com/ory/kratos/identity"
-	"github.com/ory/kratos/x"
 	"github.com/ory/x/randx"
 )
 
 var ErrIdentityDisabled = herodot.ErrUnauthorized.WithError("identity is disabled").WithReason("This account was disabled.")
 
 type lifespanProvider interface {
-	SessionLifespan() time.Duration
+	SessionLifespan(ctx context.Context) time.Duration
 }
 
 type refreshWindowProvider interface {
-	SessionRefreshMinTimeLeft() time.Duration
+	SessionRefreshMinTimeLeft(ctx context.Context) time.Duration
+}
+
+// Device corresponding to a Session
+//
+// swagger:model sessionDevice
+type Device struct {
+	// Device record ID
+	//
+	// required: true
+	ID uuid.UUID `json:"id" faker:"-" db:"id"`
+
+	// SessionID is a helper struct field for gobuffalo.pop.
+	SessionID uuid.UUID `json:"-" faker:"-" db:"session_id"`
+
+	// IPAddress of the client
+	IPAddress *string `json:"ip_address" faker:"ptr_ipv4" db:"ip_address"`
+
+	// UserAgent of the client
+	UserAgent *string `json:"user_agent" faker:"-" db:"user_agent"`
+
+	// Geo Location corresponding to the IP Address
+	Location *string `json:"location" faker:"ptr_geo_location" db:"location"`
+
+	// Time of capture
+	CreatedAt time.Time `json:"-" faker:"-" db:"created_at"`
+
+	// Last updated at
+	UpdatedAt time.Time `json:"-" faker:"-" db:"updated_at"`
+
+	NID uuid.UUID `json:"-"  faker:"-" db:"nid"`
+}
+
+func (m Device) TableName(ctx context.Context) string {
+	return "session_devices"
 }
 
 // fandom-start
@@ -35,7 +78,7 @@ type PiggybackLifespanProvider struct {
 	e time.Duration
 }
 
-func (p *PiggybackLifespanProvider) SessionLifespan() time.Duration {
+func (p *PiggybackLifespanProvider) SessionLifespan(ctx context.Context) time.Duration {
 	return p.e
 }
 
@@ -97,6 +140,9 @@ type Session struct {
 	// required: true
 	Identity *identity.Identity `json:"identity" faker:"identity" db:"-" belongs_to:"identities" fk_id:"IdentityID"`
 
+	// Devices has history of all endpoints where the session was used
+	Devices []Device `json:"devices" faker:"-" has_many:"session_devices" fk_id:"session_id"`
+
 	// IdentityID is a helper struct field for gobuffalo.pop.
 	IdentityID uuid.UUID `json:"-" faker:"-" db:"identity_id"`
 
@@ -113,12 +159,33 @@ type Session struct {
 	NID   uuid.UUID `json:"-"  faker:"-" db:"nid"`
 }
 
+func (s Session) PageToken() keysetpagination.PageToken {
+	return keysetpagination.StringPageToken(s.ID.String())
+}
+
+func (s Session) DefaultPageToken() keysetpagination.PageToken {
+	return keysetpagination.StringPageToken(uuid.Nil.String())
+}
+
 func (s Session) TableName(ctx context.Context) string {
-	return corp.ContextualizeTableName(ctx, "sessions")
+	return "sessions"
 }
 
 func (s *Session) CompletedLoginFor(method identity.CredentialsType, aal identity.AuthenticatorAssuranceLevel) {
 	s.AMR = append(s.AMR, AuthenticationMethod{Method: method, AAL: aal, CompletedAt: time.Now().UTC()})
+}
+
+func (s *Session) CompletedLoginForWithProvider(method identity.CredentialsType, aal identity.AuthenticatorAssuranceLevel, providerID string) {
+	s.AMR = append(s.AMR, AuthenticationMethod{Method: method, AAL: aal, Provider: providerID, CompletedAt: time.Now().UTC()})
+}
+
+func (s *Session) AuthenticatedVia(method identity.CredentialsType) bool {
+	for _, authMethod := range s.AMR {
+		if authMethod.Method == method {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Session) SetAuthenticatorAssuranceLevel() {
@@ -139,6 +206,7 @@ func (s *Session) SetAuthenticatorAssuranceLevel() {
 			// be part of the AMR.
 			switch amr.Method {
 			case identity.CredentialsTypeRecoveryLink:
+			case identity.CredentialsTypeRecoveryCode:
 				isAAL1 = true
 			case identity.CredentialsTypeOIDC:
 				isAAL1 = true
@@ -166,10 +234,10 @@ func (s *Session) SetAuthenticatorAssuranceLevel() {
 	}
 }
 
-func NewActiveSession(i *identity.Identity, c lifespanProvider, authenticatedAt time.Time, completedLoginFor identity.CredentialsType, completedLoginAAL identity.AuthenticatorAssuranceLevel) (*Session, error) {
+func NewActiveSession(r *http.Request, i *identity.Identity, c lifespanProvider, authenticatedAt time.Time, completedLoginFor identity.CredentialsType, completedLoginAAL identity.AuthenticatorAssuranceLevel) (*Session, error) {
 	s := NewInactiveSession()
 	s.CompletedLoginFor(completedLoginFor, completedLoginAAL)
-	if err := s.Activate(i, c, authenticatedAt); err != nil {
+	if err := s.Activate(r, i, c, authenticatedAt); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -177,52 +245,77 @@ func NewActiveSession(i *identity.Identity, c lifespanProvider, authenticatedAt 
 
 func NewInactiveSession() *Session {
 	return &Session{
-		ID:                          x.NewUUID(),
-		Token:                       randx.MustString(32, randx.AlphaNum),
-		LogoutToken:                 randx.MustString(32, randx.AlphaNum),
+		ID:                          uuid.Nil,
+		Token:                       x.OrySessionToken + randx.MustString(32, randx.AlphaNum),
+		LogoutToken:                 x.OryLogoutToken + randx.MustString(32, randx.AlphaNum),
 		Active:                      false,
 		AuthenticatorAssuranceLevel: identity.NoAuthenticatorAssuranceLevel,
 	}
 }
 
-func (s *Session) Activate(i *identity.Identity, c lifespanProvider, authenticatedAt time.Time) error {
+func (s *Session) Activate(r *http.Request, i *identity.Identity, c lifespanProvider, authenticatedAt time.Time) error {
 	if i != nil && !i.IsActive() {
-		return ErrIdentityDisabled
+		return ErrIdentityDisabled.WithDetail("identity_id", i.ID)
 	}
 
 	s.Active = true
-	s.ExpiresAt = authenticatedAt.Add(c.SessionLifespan())
+	s.ExpiresAt = authenticatedAt.Add(c.SessionLifespan(r.Context()))
 	s.AuthenticatedAt = authenticatedAt
 	s.IssuedAt = authenticatedAt
 	s.Identity = i
 	s.IdentityID = i.ID
 
+	s.SetSessionDeviceInformation(r)
 	s.SetAuthenticatorAssuranceLevel()
 	return nil
 }
 
-// swagger:model sessionDevice
-type Device struct {
-	// UserAgent of this device
-	UserAgent string `json:"user_agent"`
+func (s *Session) SetSessionDeviceInformation(r *http.Request) {
+	device := Device{
+		SessionID: s.ID,
+		IPAddress: stringsx.GetPointer(httpx.ClientIP(r)),
+	}
+
+	agent := r.Header["User-Agent"]
+	if len(agent) > 0 {
+		device.UserAgent = stringsx.GetPointer(strings.Join(agent, " "))
+	}
+
+	var clientGeoLocation []string
+	if r.Header.Get("Cf-Ipcity") != "" {
+		clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcity"))
+	}
+	if r.Header.Get("Cf-Ipcountry") != "" {
+		clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcountry"))
+	}
+	device.Location = stringsx.GetPointer(strings.Join(clientGeoLocation, ", "))
+
+	s.Devices = append(s.Devices, device)
 }
 
-func (s *Session) Declassify() *Session {
+func (s Session) Declassified() *Session {
 	s.Identity = s.Identity.CopyWithoutCredentials()
-	return s
+	return &s
 }
 
 func (s *Session) IsActive() bool {
 	return s.Active && s.ExpiresAt.After(time.Now()) && (s.Identity == nil || s.Identity.IsActive())
 }
 
-func (s *Session) Refresh(c lifespanProvider) *Session {
-	s.ExpiresAt = time.Now().Add(c.SessionLifespan()).UTC()
+func (s *Session) Refresh(ctx context.Context, c lifespanProvider) *Session {
+	s.ExpiresAt = time.Now().Add(c.SessionLifespan(ctx)).UTC()
 	return s
 }
 
-func (s *Session) CanBeRefreshed(c refreshWindowProvider) bool {
-	return s.ExpiresAt.Add(-c.SessionRefreshMinTimeLeft()).Before(time.Now())
+func (s *Session) MarshalJSON() ([]byte, error) {
+	type ss Session
+	out := ss(*s)
+	out.Active = s.IsActive()
+	return json.Marshal(out)
+}
+
+func (s *Session) CanBeRefreshed(ctx context.Context, c refreshWindowProvider) bool {
+	return s.ExpiresAt.Add(-c.SessionRefreshMinTimeLeft(ctx)).Before(time.Now())
 }
 
 // List of (Used) AuthenticationMethods
@@ -246,6 +339,9 @@ type AuthenticationMethod struct {
 
 	// When the authentication challenge was completed.
 	CompletedAt time.Time `json:"completed_at"`
+
+	// OIDC or SAML provider id used for authentication
+	Provider string `json:"provider,omitempty"`
 }
 
 // Scan implements the Scanner interface.

@@ -1,5 +1,25 @@
 #!/bin/bash
 
+echo "Running Ory Kratos E2E Tests..."
+echo ""
+
+NODE_VERSION=$(node -v)
+
+if [[ $NODE_VERSION =~ v([0-9]{1,2}).* ]]; then
+  MAJOR_NODE_VERSION=${BASH_REMATCH[1]}
+  if [[ $MAJOR_NODE_VERSION -gt 16 ]]; then
+    echo "It seems you are running this script using a node version newer than 16 ($NODE_VERSION)."
+    echo "Currently, this script will not work if not run using Node 16 (or lower) due to changes in the way Node 18 does network requests."
+    echo "Please use Node 16 instead."
+    echo ""
+    echo "  Using nvm (https://github.com/nvm-sh/nvm):"
+    echo "   $ nvm install 16"
+    exit
+  fi
+else
+  echo "could not detect node version from string $NODE_VERSION. Continuing..."
+fi
+
 set -euxo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
@@ -12,9 +32,9 @@ export PATH=.bin:$PATH
 export KRATOS_PUBLIC_URL=http://localhost:4433/
 export KRATOS_BROWSER_URL=http://localhost:4433/
 export KRATOS_ADMIN_URL=http://localhost:4434/
-export KRATOS_UI_URL=http://127.0.0.1:4456/
-export KRATOS_UI_REACT_URL=http://127.0.0.1:4458/
-export KRATOS_UI_REACT_NATIVE_URL=http://127.0.0.1:4457/
+export KRATOS_UI_URL=http://localhost:4456/
+export KRATOS_UI_REACT_URL=http://localhost:4458/
+export KRATOS_UI_REACT_NATIVE_URL=http://localhost:4457/
 export LOG_LEAK_SENSITIVE_VALUES=true
 export DEV_DISABLE_API_FLOW_ENFORCEMENT=true
 
@@ -23,6 +43,7 @@ base=$(pwd)
 setup=yes
 dev=no
 nokill=no
+cleanup=no
 for i in "$@"; do
   case $i in
   --no-kill)
@@ -41,22 +62,33 @@ for i in "$@"; do
     dev=yes
     shift # past argument=value
     ;;
+  --cleanup)
+    cleanup=yes
+    shift # past argument=value
+    ;;
   esac
 done
 
-prepare() {
-  if [[ "${nokill}" == "no" ]]; then
+cleanup() {
     killall node || true
     killall modd || true
+    killall webhook || true
     killall hydra || true
     killall hydra-login-consent || true
+    killall hydra-kratos-login-consent || true
+    docker kill kratos_test_hydra || true
+}
+
+prepare() {
+  if [[ "${nokill}" == "no" ]]; then
+    cleanup
   fi
 
   if [ -z ${TEST_DATABASE_POSTGRESQL+x} ]; then
     docker rm -f kratos_test_database_mysql kratos_test_database_postgres kratos_test_database_cockroach || true
     docker run --platform linux/amd64 --name kratos_test_database_mysql -p 3444:3306 -e MYSQL_ROOT_PASSWORD=secret -d mysql:5.7
     docker run --name kratos_test_database_postgres -p 3445:5432 -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=postgres -d postgres:9.6 postgres -c log_statement=all
-    docker run --name kratos_test_database_cockroach -p 3446:26257 -d cockroachdb/cockroach:v20.2.4 start-single-node --insecure
+    docker run --name kratos_test_database_cockroach -p 3446:26257 -d cockroachdb/cockroach:v22.2.6 start-single-node --insecure
 
     export TEST_DATABASE_MYSQL="mysql://root:secret@(localhost:3444)/mysql?parseTime=true&multiStatements=true"
     export TEST_DATABASE_POSTGRESQL="postgres://postgres:secret@localhost:3445/postgres?sslmode=disable"
@@ -66,7 +98,7 @@ prepare() {
   if [ -z ${NODE_UI_PATH+x} ]; then
     node_ui_dir="$(mktemp -d -t ci-XXXXXXXXXX)/kratos-selfservice-ui-node"
     git clone --depth 1 --branch master https://github.com/ory/kratos-selfservice-ui-node.git "$node_ui_dir"
-    (cd "$node_ui_dir" && npm i && npm run build)
+    (cd "$node_ui_dir" && npm i --legacy-peer-deps && npm run build)
   else
     node_ui_dir="${NODE_UI_PATH}"
   fi
@@ -100,11 +132,15 @@ prepare() {
   fi
 
   # Check if any ports that we need are open already
-  ! nc -zv localhost 4446
-  ! nc -zv localhost 4455
-  ! nc -zv localhost 4456
-  ! nc -zv localhost 4457
-  ! nc -zv localhost 4458
+  nc -zv localhost 4444 && exit 1
+  nc -zv localhost 4445 && exit 1
+  nc -zv localhost 4446 && exit 1
+  nc -zv localhost 4455 && exit 1
+  nc -zv localhost 4456 && exit 1
+  nc -zv localhost 4457 && exit 1
+  nc -zv localhost 4458 && exit 1
+  nc -zv localhost 4744 && exit 1
+  nc -zv localhost 4745 && exit 1
 
   (
     cd "$rn_ui_dir"
@@ -113,44 +149,74 @@ prepare() {
       >"${base}/test/e2e/rn-profile-app.e2e.log" 2>&1 &
   )
 
-  DSN=memory URLS_SELF_ISSUER=http://localhost:4444 \
+  hydra serve all -c test/e2e/hydra.yml --dev >"${base}/test/e2e/hydra.e2e.log" 2>&1 &
+
+  (cd test/e2e; npm run wait-on -- -l -t 300000 http-get://localhost:4445/health/alive)
+
+  hydra_client=$(hydra create oauth2-client \
+    --endpoint http://localhost:4445 \
+    --grant-type authorization_code --grant-type refresh_token \
+    --response-type code --response-type id_token \
+    --scope openid --scope offline \
+    --redirect-uri http://localhost:4455/self-service/methods/oidc/callback/hydra \
+    --format json)
+  export OIDC_HYDRA_CLIENT_ID=$(jq -r '.client_id' <<< "$hydra_client" )
+  export OIDC_HYDRA_CLIENT_SECRET=$(jq -r '.client_secret' <<< "$hydra_client" )
+
+  google_client=$(hydra create oauth2-client \
+    --endpoint http://localhost:4445 \
+    --grant-type authorization_code --grant-type refresh_token \
+    --response-type code --response-type id_token \
+    --scope openid --scope offline \
+    --redirect-uri http://localhost:4455/self-service/methods/oidc/callback/google \
+    --format json)
+  export OIDC_GOOGLE_CLIENT_ID=$(jq -r '.client_id' <<< "$google_client" )
+  export OIDC_GOOGLE_CLIENT_SECRET=$(jq -r '.client_secret' <<< "$google_client" )
+
+  github_client=$(hydra create oauth2-client \
+    --endpoint http://localhost:4445 \
+    --grant-type authorization_code --grant-type refresh_token \
+    --response-type code --response-type id_token \
+    --scope openid --scope offline \
+    --redirect-uri http://localhost:4455/self-service/methods/oidc/callback/github \
+    --format json)
+  export OIDC_GITHUB_CLIENT_ID=$(jq -r '.client_id' <<< "$github_client" )
+  export OIDC_GITHUB_CLIENT_SECRET=$(jq -r '.client_secret' <<< "$github_client" )
+
+  (
+    cd test/e2e/hydra-login-consent
+    go build .
+    PORT=4446 HYDRA_ADMIN_URL=http://localhost:4445 ./hydra-login-consent >"${base}/test/e2e/hydra-ui.e2e.log" 2>&1 &
+  )
+
+  # Spin up another Hydra instance with the express node app used as the login UI for kratos-hydra OIDC provider tests
+  DSN=memory SERVE_PUBLIC_PORT=4744 \
+    SERVE_ADMIN_PORT=4745 \
+    URLS_SELF_ISSUER=http://localhost:4744 \
     LOG_LEVEL=trace \
-    URLS_LOGIN=http://localhost:4446/login \
-    URLS_CONSENT=http://localhost:4446/consent \
-    hydra serve all --dangerous-force-http >"${base}/test/e2e/hydra.e2e.log" 2>&1 &
+    URLS_LOGIN=http://localhost:4455/login \
+    URLS_CONSENT=http://localhost:4746/consent \
+    hydra serve all --dev >"${base}/test/e2e/hydra-kratos.e2e.log" 2>&1 &
 
-  (cd test/e2e; npm run wait-on -- -l -t 300000 http-get://127.0.0.1:4445/health/alive)
+  (cd test/e2e; npm run wait-on -- -l -t 300000 http-get://127.0.0.1:4745/health/alive)
 
-  hydra clients delete \
-    --endpoint http://localhost:4445 \
-    kratos-client google-client github-client || true
+  dummy_client=$(hydra create oauth2-client \
+    --endpoint http://localhost:4745 \
+    --token-endpoint-auth-method client_secret_basic \
+    --grant-type authorization_code --grant-type refresh_token \
+    --response-type code --response-type id_token \
+    --scope openid --scope offline --scope email --scope website \
+    --redirect-uri http://localhost:5555/callback \
+    --redirect-uri https://httpbin.org/anything \
+    --format json)
+  export CYPRESS_OIDC_DUMMY_CLIENT_ID=$(jq -r '.client_id' <<< "$dummy_client" )
+  export CYPRESS_OIDC_DUMMY_CLIENT_SECRET=$(jq -r '.client_secret' <<< "$dummy_client" )
 
-  hydra clients create \
-    --endpoint http://localhost:4445 \
-    --id kratos-client \
-    --secret kratos-secret \
-    --grant-types authorization_code,refresh_token \
-    --response-types code,id_token \
-    --scope openid,offline \
-    --callbacks http://localhost:4455/self-service/methods/oidc/callback/hydra
-
-  hydra clients create \
-    --endpoint http://localhost:4445 \
-    --id google-client \
-    --secret kratos-secret \
-    --grant-types authorization_code,refresh_token \
-    --response-types code,id_token \
-    --scope openid,offline \
-    --callbacks http://localhost:4455/self-service/methods/oidc/callback/google
-
-  hydra clients create \
-    --endpoint http://localhost:4445 \
-    --id github-client \
-    --secret kratos-secret \
-    --grant-types authorization_code,refresh_token \
-    --response-types code,id_token \
-    --scope openid,offline \
-    --callbacks http://localhost:4455/self-service/methods/oidc/callback/github
+  (
+    cd test/e2e/hydra-kratos-login-consent
+    go build .
+    PORT=4746 HYDRA_ADMIN_URL=http://localhost:4745 ./hydra-kratos-login-consent >"${base}/test/e2e/hydra-kratos-ui.e2e.log" 2>&1 &
+  )
 
   if [ -z ${NODE_UI_PATH+x} ]; then
     (
@@ -187,11 +253,13 @@ prepare() {
       >"${base}/test/e2e/proxy.e2e.log" 2>&1 &
   )
 
-  (
-    cd test/e2e/hydra-login-consent
-    go build .
-    PORT=4446 HYDRA_ADMIN_URL=http://localhost:4445 ./hydra-login-consent >"${base}/test/e2e/hydra-ui.e2e.log" 2>&1 &
-  )
+  # Make the environment available to Playwright
+  env | grep KRATOS_                         >  test/e2e/playwright/playwright.env
+  env | grep TEST_DATABASE_                  >> test/e2e/playwright/playwright.env
+  env | grep OIDC_                           >> test/e2e/playwright/playwright.env
+  env | grep CYPRESS_                        >> test/e2e/playwright/playwright.env
+  echo LOG_LEAK_SENSITIVE_VALUES=true        >> test/e2e/playwright/playwright.env
+  echo DEV_DISABLE_API_FLOW_ENFORCEMENT=true >> test/e2e/playwright/playwright.env
 }
 
 run() {
@@ -200,33 +268,36 @@ run() {
 
   export DSN=${1}
 
-  ! nc -zv localhost 4434
-  ! nc -zv localhost 4433
+  nc -zv localhost 4434 && exit 1
+  nc -zv localhost 4433 && exit 1
 
   ls -la .
-  for profile in email mobile oidc recovery verification mfa spa network passwordless; do
+  for profile in email mobile oidc recovery recovery-mfa verification mfa spa network passwordless webhooks oidc-provider oidc-provider-mfa; do
     yq ea '. as $item ireduce ({}; . * $item )' test/e2e/profiles/kratos.base.yml "test/e2e/profiles/${profile}/.kratos.yml" > test/e2e/kratos.${profile}.yml
-    cp test/e2e/kratos.email.yml test/e2e/kratos.generated.yml
+    cat "test/e2e/kratos.${profile}.yml" | envsubst | sponge "test/e2e/kratos.${profile}.yml"
   done
+  cp test/e2e/kratos.email.yml test/e2e/kratos.generated.yml
 
   (modd -f test/e2e/modd.conf >"${base}/test/e2e/kratos.e2e.log" 2>&1 &)
 
-  npm run wait-on -- -v -l -t 300000 http-get://127.0.0.1:4434/health/ready \
-    http-get://127.0.0.1:4455/health/ready \
-    http-get://127.0.0.1:4445/health/ready \
-    http-get://127.0.0.1:4446/ \
-    http-get://127.0.0.1:4456/health/alive \
-    http-get://127.0.0.1:4457/ \
-    http-get://127.0.0.1:4437/mail \
-    http-get://127.0.0.1:4458/
+  npm run wait-on -- -v -l -t 300000 http-get://localhost:4434/health/ready \
+    http-get://localhost:4444/.well-known/openid-configuration \
+    http-get://localhost:4455/health/ready \
+    http-get://localhost:4445/health/ready \
+    http-get://localhost:4446/ \
+    http-get://localhost:4456/health/alive \
+    http-get://localhost:4457/ \
+    http-get://localhost:4437/mail \
+    http-get://localhost:4458/ \
+    http-get://localhost:4459/health
 
   if [[ $dev == "yes" ]]; then
-    (cd test/e2e; npm run test:watch -- --config integrationFolder="cypress/integration")
+    (cd test/e2e; npm run test:watch --)
   else
     if [ -z ${CYPRESS_RECORD_KEY+x} ]; then
-      (cd test/e2e; npm run test -- --config integrationFolder="cypress/integration")
+      (cd test/e2e; npm run test --)
     else
-      (cd test/e2e; npm run test -- --record --config integrationFolder="cypress/integration")
+      (cd test/e2e; npm run test -- --record)
     fi
   fi
 }
@@ -286,6 +357,11 @@ the path where the kratos-selfservice-ui-node project is checked out:
   $0 ..."
 }
 
+if [[ "${cleanup}" == "yes" ]]; then
+  cleanup
+  exit 0
+fi
+
 export TEST_DATABASE_SQLITE="sqlite:///$(mktemp -d -t ci-XXXXXXXXXX)/db.sqlite?_fk=true"
 export TEST_DATABASE_MEMORY="memory"
 
@@ -321,4 +397,5 @@ esac
 if [[ "${setup}" == "yes" ]]; then
   prepare
 fi
+
 run "${db}"

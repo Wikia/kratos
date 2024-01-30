@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package sql
 
 import (
@@ -5,9 +8,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/ory/kratos/identity"
+	"github.com/ory/kratos/persistence/sql/update"
 
-	"github.com/ory/kratos/corp"
+	"github.com/gofrs/uuid"
 
 	"github.com/ory/x/sqlcon"
 
@@ -20,7 +24,7 @@ func (p *Persister) CreateSettingsFlow(ctx context.Context, r *settings.Flow) er
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.CreateSettingsFlow")
 	defer span.End()
 
-	r.NID = corp.ContextualizeNID(ctx, p.nid)
+	r.NID = p.NetworkID(ctx)
 	r.EnsureInternalContext()
 	return sqlcon.HandleError(p.GetConnection(ctx).Create(r))
 }
@@ -31,12 +35,12 @@ func (p *Persister) GetSettingsFlow(ctx context.Context, id uuid.UUID) (*setting
 
 	var r settings.Flow
 
-	err := p.GetConnection(ctx).Where("id = ? AND nid = ?", id, corp.ContextualizeNID(ctx, p.nid)).First(&r)
+	err := p.GetConnection(ctx).Where("id = ? AND nid = ?", id, p.NetworkID(ctx)).First(&r)
 	if err != nil {
 		return nil, sqlcon.HandleError(err)
 	}
 
-	r.Identity, err = p.GetIdentity(ctx, r.IdentityID)
+	r.Identity, err = p.PrivilegedPool.GetIdentity(ctx, r.IdentityID, identity.ExpandDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -50,18 +54,20 @@ func (p *Persister) UpdateSettingsFlow(ctx context.Context, r *settings.Flow) er
 
 	r.EnsureInternalContext()
 	cp := *r
-	cp.NID = corp.ContextualizeNID(ctx, p.nid)
-	return p.update(ctx, cp)
+	cp.NID = p.NetworkID(ctx)
+	return update.Generic(ctx, p.GetConnection(ctx), p.r.Tracer(ctx).Tracer(), cp)
 }
 
 func (p *Persister) DeleteExpiredSettingsFlows(ctx context.Context, expiresAt time.Time, limit int) error {
-	// #nosec G201
+	//#nosec G201 -- TableName is static
 	err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE expires_at <= ? LIMIT ?",
+		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? and nid = ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
 		new(settings.Flow).TableName(ctx),
+		new(settings.Flow).TableName(ctx),
+		limit,
 	),
 		expiresAt,
-		limit,
+		p.NetworkID(ctx),
 	).Exec()
 	if err != nil {
 		return sqlcon.HandleError(err)

@@ -27,9 +27,23 @@
 
 
 - op: replace
-  path: /components/schemas/selfServiceError/properties/error
+  path: /components/schemas/flowError/properties/error
   value:
     type: object
 
 - op: remove
   path: "#/components/schemas/identityTraits/type"
+
+- op: add
+  path: /components/schemas/continueWith/discriminator
+  value:
+    propertyName: action
+    mapping:
+      show_verification_ui: "#/components/schemas/continueWithVerificationUi"
+      set_ory_session_token: "#/components/schemas/continueWithSetOrySessionToken"
+
+- op: add
+  path: /components/schemas/continueWith/oneOf
+  value:
+    - "$ref": "#/components/schemas/continueWithVerificationUi"
+    - "$ref": "#/components/schemas/continueWithSetOrySessionToken"

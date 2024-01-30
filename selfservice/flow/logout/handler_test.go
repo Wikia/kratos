@@ -1,13 +1,19 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package logout_test
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"testing"
+
+	"github.com/ory/kratos/session"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +48,7 @@ func TestLogout(t *testing.T) {
 	publicRouter.POST("/csrf/check", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	conf.MustSet(config.ViperKeySelfServiceLogoutBrowserDefaultReturnTo, public.URL+"/session/browser/get")
+	conf.MustSet(ctx, config.ViperKeySelfServiceLogoutBrowserDefaultReturnTo, public.URL+"/session/browser/get")
 
 	t.Run("case=successful logout for API clients", func(t *testing.T) {
 		hc := testhelpers.NewDebugClient(t)
@@ -51,7 +57,7 @@ func TestLogout(t *testing.T) {
 		_, res := testhelpers.HTTPRequestJSON(t, hc, "DELETE", public.URL+"/self-service/logout/api", json.RawMessage(`{"session_token": "`+sess.Token+`"}`))
 		assert.Equal(t, http.StatusNoContent, res.StatusCode)
 
-		actual, err := reg.SessionPersister().GetSession(ctx, sess.ID)
+		actual, err := reg.SessionPersister().GetSession(ctx, sess.ID, session.ExpandNothing)
 		require.NoError(t, err)
 		assert.False(t, actual.IsActive())
 
@@ -81,15 +87,27 @@ func TestLogout(t *testing.T) {
 		return x.MustReadAll(res.Body), res
 	}
 
-	getLogoutUrl := func(t *testing.T) (hc *http.Client, logoutUrl string) {
+	getLogoutUrl := func(t *testing.T, params url.Values) (hc *http.Client, logoutUrl string) {
 		hc = testhelpers.NewSessionClient(t, public.URL+"/session/browser/set")
 
-		body, res := testhelpers.HTTPRequestJSON(t, hc, "GET", public.URL+"/self-service/logout/browser", nil)
+		u, err := url.Parse(public.URL)
+		require.NoError(t, err)
+		u.Path = "/self-service/logout/browser"
+		if params != nil {
+			u.RawQuery = params.Encode()
+		}
+
+		body, res := testhelpers.HTTPRequestJSON(t, hc, "GET", u.String(), nil)
 		assert.EqualValues(t, http.StatusOK, res.StatusCode)
 
 		logoutUrl = gjson.GetBytes(body, "logout_url").String()
 		logoutToken := gjson.GetBytes(body, "logout_token").String()
-		assert.Contains(t, logoutUrl, public.URL+"/self-service/logout?token="+logoutToken, "%s", body)
+
+		logoutUrlParsed, err := url.Parse(logoutUrl)
+		require.NoError(t, err)
+
+		assert.Equalf(t, logoutUrlParsed.Query().Get("token"), logoutToken, "%s", body)
+		assert.Equalf(t, logoutUrlParsed.Path, "/self-service/logout", "%s", body)
 		return
 	}
 
@@ -107,7 +125,7 @@ func TestLogout(t *testing.T) {
 		}
 
 		t.Run("type=browser", func(t *testing.T) {
-			hc, logoutUrl := getLogoutUrl(t)
+			hc, logoutUrl := getLogoutUrl(t, nil)
 			originalCookies := hc.Jar.Cookies(urlx.ParseOrPanic(public.URL))
 			require.Contains(t, fmt.Sprintf("%v", hc.Jar.Cookies(urlx.ParseOrPanic(public.URL))), "ory_kratos_session")
 
@@ -123,7 +141,7 @@ func TestLogout(t *testing.T) {
 		})
 
 		t.Run("type=ajax", func(t *testing.T) {
-			hc, logoutUrl := getLogoutUrl(t)
+			hc, logoutUrl := getLogoutUrl(t, nil)
 			originalCookies := hc.Jar.Cookies(urlx.ParseOrPanic(public.URL))
 			require.Contains(t, fmt.Sprintf("%v", hc.Jar.Cookies(urlx.ParseOrPanic(public.URL))), "ory_kratos_session")
 
@@ -158,7 +176,7 @@ func TestLogout(t *testing.T) {
 
 	t.Run("case=calling submission with token but without session", func(t *testing.T) {
 		t.Run("type=browser", func(t *testing.T) {
-			_, logoutUrl := getLogoutUrl(t)
+			_, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := makeBrowserLogout(t, http.DefaultClient, logoutUrl)
 			assert.Contains(t, res.Request.URL.String(), errTS.URL)
@@ -167,7 +185,7 @@ func TestLogout(t *testing.T) {
 		})
 
 		t.Run("type=ajax", func(t *testing.T) {
-			_, logoutUrl := getLogoutUrl(t)
+			_, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := testhelpers.HTTPRequestJSON(t, http.DefaultClient, "GET", logoutUrl, nil)
 			assert.EqualValues(t, logoutUrl, res.Request.URL.String())
@@ -179,7 +197,7 @@ func TestLogout(t *testing.T) {
 	t.Run("case=calling submission with token but with session from another user", func(t *testing.T) {
 		t.Run("type=browser", func(t *testing.T) {
 			otherUser := testhelpers.NewSessionClient(t, public.URL+"/session/browser/set")
-			_, logoutUrl := getLogoutUrl(t)
+			_, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := makeBrowserLogout(t, otherUser, logoutUrl)
 			assert.Contains(t, res.Request.URL.String(), errTS.URL)
@@ -189,7 +207,7 @@ func TestLogout(t *testing.T) {
 
 		t.Run("type=ajax", func(t *testing.T) {
 			otherUser := testhelpers.NewSessionClient(t, public.URL+"/session/browser/set")
-			_, logoutUrl := getLogoutUrl(t)
+			_, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := testhelpers.HTTPRequestJSON(t, otherUser, "GET", logoutUrl, nil)
 			assert.EqualValues(t, logoutUrl, res.Request.URL.String())
@@ -200,7 +218,7 @@ func TestLogout(t *testing.T) {
 
 	t.Run("case=calling submission with invalid token", func(t *testing.T) {
 		t.Run("type=browser", func(t *testing.T) {
-			hc, logoutUrl := getLogoutUrl(t)
+			hc, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := makeBrowserLogout(t, hc, logoutUrl+"invalid")
 			assert.Contains(t, res.Request.URL.String(), errTS.URL)
@@ -209,7 +227,7 @@ func TestLogout(t *testing.T) {
 		})
 
 		t.Run("type=ajax", func(t *testing.T) {
-			hc, logoutUrl := getLogoutUrl(t)
+			hc, logoutUrl := getLogoutUrl(t, nil)
 
 			body, res := testhelpers.HTTPRequestJSON(t, hc, "GET", logoutUrl+"invalid", nil)
 			assert.EqualValues(t, logoutUrl+"invalid", res.Request.URL.String())
@@ -226,7 +244,7 @@ func TestLogout(t *testing.T) {
 
 	t.Run("case=init logout through browser does 303 redirect", func(t *testing.T) {
 		// init the logout
-		hc, logoutUrl := getLogoutUrl(t)
+		hc, logoutUrl := getLogoutUrl(t, nil)
 		// prevent the redirect, so we can get check the status code
 		hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -237,8 +255,47 @@ func TestLogout(t *testing.T) {
 
 		res, err := hc.Do(req)
 		require.NoError(t, err)
+		defer res.Body.Close()
 		// here we check that the redirect status is 303
 		require.Equal(t, http.StatusSeeOther, res.StatusCode)
-		defer res.Body.Close()
+	})
+
+	t.Run("case=init logout with return_to should carry over return_to", func(t *testing.T) {
+		reg.Config().MustSet(context.Background(), config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.sh"})
+
+		hc, logoutUrl := getLogoutUrl(t, url.Values{"return_to": {"https://www.ory.sh"}})
+
+		logoutUrlParsed, err := url.Parse(logoutUrl)
+		require.NoError(t, err)
+
+		assert.Equal(t, "https://www.ory.sh", logoutUrlParsed.Query().Get("return_to"))
+
+		hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+
+		body, res := makeBrowserLogout(t, hc, logoutUrl)
+		assert.EqualValues(t, http.StatusSeeOther, res.StatusCode, "%s", body)
+		assert.EqualValues(t, "https://www.ory.sh", res.Header.Get("Location"))
+	})
+
+	t.Run("case=init logout with return_to should not carry over return_to if not allowed", func(t *testing.T) {
+		hc := testhelpers.NewSessionClient(t, public.URL+"/session/browser/set")
+
+		logoutUrl := public.URL + "/self-service/logout/browser?return_to=https://www.ory.com"
+
+		r, err := http.NewRequest("GET", logoutUrl, nil)
+		require.NoError(t, err)
+		r.Header.Set("Accept", "application/json")
+
+		resp, err := hc.Do(r)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.EqualValues(t, "Requested return_to URL \"https://www.ory.com\" is not allowed.", gjson.GetBytes(body, "error.reason").String(), "%s", body)
+		assert.EqualValues(t, http.StatusBadRequest, resp.StatusCode, "%s", body)
 	})
 }

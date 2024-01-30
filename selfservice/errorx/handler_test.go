@@ -1,10 +1,13 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package errorx_test
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -39,7 +42,7 @@ func TestHandler(t *testing.T) {
 			w.WriteHeader(http.StatusNoContent)
 		})
 		router.GET("/set-error", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-			id, err := reg.SelfServiceErrorPersister().Add(context.Background(), nosurf.Token(r), herodot.ErrNotFound.WithReason("foobar"))
+			id, err := reg.SelfServiceErrorPersister().CreateErrorContainer(context.Background(), nosurf.Token(r), herodot.ErrNotFound.WithReason("foobar"))
 			require.NoError(t, err)
 			_, _ = w.Write([]byte(id.String()))
 		})
@@ -52,7 +55,7 @@ func TestHandler(t *testing.T) {
 			require.NoError(t, err)
 			defer res.Body.Close()
 			require.EqualValues(t, expectedCode, res.StatusCode)
-			body, err := ioutil.ReadAll(res.Body)
+			body, err := io.ReadAll(res.Body)
 			require.NoError(t, err)
 			return body
 		}
@@ -79,7 +82,7 @@ func TestHandler(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, http.StatusOK, res.StatusCode)
 
-		actual, err := ioutil.ReadAll(res.Body)
+		actual, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 
 		assert.EqualValues(t, "This is a stub error.", gjson.GetBytes(actual, "error.reason").String())
@@ -101,7 +104,7 @@ func TestHandler(t *testing.T) {
 		} {
 			t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
 				csrf := x.NewUUID()
-				id, err := reg.SelfServiceErrorPersister().Add(context.Background(), csrf.String(), tc.gave)
+				id, err := reg.SelfServiceErrorPersister().CreateErrorContainer(context.Background(), csrf.String(), tc.gave)
 				require.NoError(t, err)
 
 				res, err := ts.Client().Get(ts.URL + errorx.RouteGet + "?id=" + id.String())
@@ -109,7 +112,7 @@ func TestHandler(t *testing.T) {
 				defer res.Body.Close()
 				assert.EqualValues(t, http.StatusOK, res.StatusCode)
 
-				actual, err := ioutil.ReadAll(res.Body)
+				actual, err := io.ReadAll(res.Body)
 				require.NoError(t, err)
 
 				gg := errorsx.Cause(tc.gave)

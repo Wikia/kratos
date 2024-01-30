@@ -1,9 +1,12 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package identity_test
 
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,8 +30,8 @@ import (
 func TestSchemaValidatorDisallowsInternalNetworkRequests(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 
-	conf.MustSet(config.ViperKeyClientHTTPNoPrivateIPRanges, true)
-	conf.MustSet(config.ViperKeyIdentitySchemas, []config.Schema{
+	conf.MustSet(ctx, config.ViperKeyClientHTTPNoPrivateIPRanges, true)
+	conf.MustSet(ctx, config.ViperKeyIdentitySchemas, []config.Schema{
 		{ID: "localhost", URL: "https://localhost/schema/whatever"},
 		{ID: "privateRef", URL: "file://stub/localhost-ref.schema.json"},
 	})
@@ -53,14 +56,14 @@ func TestSchemaValidatorDisallowsInternalNetworkRequests(t *testing.T) {
 		res, err := ts.Client().Get(ts.URL + "/" + id)
 		require.NoError(t, err)
 		defer res.Body.Close()
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		return string(body)
 	}
 
 	for _, tc := range [][2]string{
-		{"localhost", "ip 127.0.0.1 is in the 127.0.0.0/8 range"},
-		{"privateRef", "ip 192.168.178.1 is in the 192.168.0.0/16 range"},
+		{"localhost", "is not a public IP address"},
+		{"privateRef", "is not a public IP address"},
 	} {
 		t.Run(fmt.Sprintf("case=%s", tc[0]), func(t *testing.T) {
 			assert.Contains(t, do(t, tc[0]), tc[1])
@@ -73,7 +76,7 @@ func TestSchemaValidator(t *testing.T) {
 	defer ctrl.Finish()
 
 	router := httprouter.New()
-	router.GET("/schema/:name", func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	router.GET("/schema/:name", func(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
 		_, _ = w.Write([]byte(`{
   "$id": "https://example.com/person.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -108,7 +111,7 @@ func TestSchemaValidator(t *testing.T) {
 	defer ts.Close()
 
 	conf, reg := internal.NewFastRegistryWithMocks(t)
-	conf.MustSet(config.ViperKeyIdentitySchemas, []config.Schema{
+	conf.MustSet(ctx, config.ViperKeyIdentitySchemas, []config.Schema{
 		{ID: "default", URL: ts.URL + "/schema/firstName"},
 		{ID: "whatever", URL: ts.URL + "/schema/whatever"},
 		{ID: "unreachable-url", URL: ts.URL + "/404-not-found"},

@@ -1,3 +1,6 @@
+// Copyright © 2024 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package cleanup
 
 import (
@@ -15,8 +18,13 @@ func BackgroundCleanup(ctx cx.Context, r driver.Registry) {
 	if err := graceful.Graceful(func() error {
 		for {
 			select {
-			case <-time.After(r.Config(ctx).DatabaseCleanupSleepBackground()):
-				err := r.Persister().CleanupDatabase(ctx, r.Config(ctx).DatabaseCleanupSleepTables())
+			case <-time.After(r.Config().DatabaseCleanupSleepBackground()):
+				err := r.Persister().CleanupDatabase(
+					ctx,
+					r.Config().DatabaseCleanupSleepTables(ctx),
+					0,
+					r.Config().DatabaseCleanupBatchSize(ctx),
+				)
 				r.Logger().Error(err)
 			case <-ctx.Done():
 				return nil

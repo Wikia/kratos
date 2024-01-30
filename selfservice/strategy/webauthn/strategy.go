@@ -1,10 +1,11 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package webauthn
 
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/duo-labs/webauthn/webauthn"
 
 	"github.com/pkg/errors"
 
@@ -88,7 +89,7 @@ func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.Credentials
 func (s *Strategy) countCredentials(cc map[identity.CredentialsType]identity.Credentials, passwordless bool) (count int, err error) {
 	for _, c := range cc {
 		if c.Type == s.ID() && len(c.Config) > 0 && len(c.Identifiers) > 0 {
-			var conf CredentialsConfig
+			var conf identity.CredentialsWebAuthnConfig
 			if err = json.Unmarshal(c.Config, &conf); err != nil {
 				return 0, errors.WithStack(err)
 			}
@@ -111,19 +112,9 @@ func (s *Strategy) NodeGroup() node.UiNodeGroup {
 	return node.WebAuthnGroup
 }
 
-func (s *Strategy) newWebAuthn(ctx context.Context) (*webauthn.WebAuthn, error) {
-	c := s.d.Config(ctx)
-	web, err := webauthn.New(c.WebAuthnConfig())
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return web, nil
-}
-
 func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod {
 	aal := identity.AuthenticatorAssuranceLevel1
-	if !s.d.Config(ctx).WebAuthnForPasswordless() {
+	if !s.d.Config().WebAuthnForPasswordless(ctx) {
 		aal = identity.AuthenticatorAssuranceLevel2
 	}
 	return session.AuthenticationMethod{

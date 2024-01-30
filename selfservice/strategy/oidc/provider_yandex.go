@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package oidc
 
 import (
@@ -42,7 +45,7 @@ func (g *ProviderYandex) oauth2(ctx context.Context) *oauth2.Config {
 			TokenURL: "https://oauth.yandex.com/token",
 		},
 		Scopes:      g.config.Scope,
-		RedirectURL: g.config.Redir(g.reg.Config(ctx).OIDCRedirectURIBase()),
+		RedirectURL: g.config.Redir(g.reg.Config().OIDCRedirectURIBase(ctx)),
 	}
 }
 
@@ -71,6 +74,10 @@ func (g *ProviderYandex) Claims(ctx context.Context, exchange *oauth2.Token, que
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 	defer resp.Body.Close()
+
+	if err := logUpstreamError(g.reg.Logger(), resp); err != nil {
+		return nil, err
+	}
 
 	var user struct {
 		Id           string `json:"id,omitempty"`

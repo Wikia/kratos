@@ -1,3 +1,6 @@
+// Copyright © 2024 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package credentials
 
 import (
@@ -87,7 +90,7 @@ type adminUpdateCredentials struct {
 	ID string `json:"id"`
 }
 
-// swagger:route PUT /identities/{id}/credentials v0alpha2 adminUpdateCredentials
+// swagger:route PUT /identities/{id}/credentials identity adminUpdateCredentials
 //
 // # Update Identity Credentials
 //
@@ -102,8 +105,8 @@ type adminUpdateCredentials struct {
 //
 //	Responses:
 //	  204: emptyResponse
-//	  404: jsonError
-//	  500: jsonError
+//	  404: errorGeneric
+//	  500: errorGeneric
 func (h *Handler) update(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var ur AdminUpdateIdentityCredentialsBody
 	if err := errors.WithStack(jsonx.NewStrictDecoder(r.Body).Decode(&ur)); err != nil {
@@ -219,7 +222,7 @@ func (h *Handler) createCredentials(ctx context.Context, identityId uuid.UUID, n
 			return nil, err
 		}
 		if newConfig.HashedPassword == "" && newConfig.Password != "" {
-			hpw, err := h.r.Hasher().Generate(ctx, []byte(newConfig.Password))
+			hpw, err := h.r.Hasher(ctx).Generate(ctx, []byte(newConfig.Password))
 			if err != nil {
 				return nil, err
 			}
@@ -292,7 +295,7 @@ func (h *Handler) updateCredentials(ctx context.Context, identityId uuid.UUID, o
 			return err
 		}
 		if newConfig.HashedPassword == "" && newConfig.Password != "" {
-			hpw, err := h.r.Hasher().Generate(ctx, []byte(newConfig.Password))
+			hpw, err := h.r.Hasher(ctx).Generate(ctx, []byte(newConfig.Password))
 			if err != nil {
 				return err
 			}

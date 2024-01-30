@@ -1,10 +1,13 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package hash
 
 import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha1" // #nosec G505 - compatibility for imported passwords
+	"crypto/sha1" //#nosec G505 -- compatibility for imported passwords
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"

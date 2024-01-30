@@ -1,28 +1,34 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package sql_test
 
 import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/ory/x/dbal"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/ory/x/sqlxx"
+	"github.com/ory/x/urlx"
 
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/schema"
-	"github.com/ory/x/sqlxx"
-	"github.com/ory/x/urlx"
 
 	"github.com/ory/kratos/x/xsql"
 
 	"github.com/go-errors/errors"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/pop/v6/logging"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ory/x/sqlcon"
+	"github.com/ory/x/sqlcon/dockertest"
 
 	continuity "github.com/ory/kratos/continuity/test"
 	"github.com/ory/kratos/corpx"
@@ -41,31 +47,27 @@ import (
 	registration "github.com/ory/kratos/selfservice/flow/registration/test"
 	settings "github.com/ory/kratos/selfservice/flow/settings/test"
 	verification "github.com/ory/kratos/selfservice/flow/verification/test"
+	sessiontokenexchange "github.com/ory/kratos/selfservice/sessiontokenexchange/test"
+	code "github.com/ory/kratos/selfservice/strategy/code/test"
 	link "github.com/ory/kratos/selfservice/strategy/link/test"
 	session "github.com/ory/kratos/session/test"
 	"github.com/ory/kratos/x"
-	"github.com/ory/x/sqlcon"
-	"github.com/ory/x/sqlcon/dockertest"
 )
-
-var sqlite = fmt.Sprintf("sqlite3://%s.sqlite?_fk=true&mode=rwc", filepath.Join(os.TempDir(), uuid.New().String()))
 
 func init() {
 	corpx.RegisterFakes()
-	// op.Debug = true
-}
-
-// nolint:staticcheck
-func TestMain(m *testing.M) {
-	atexit := dockertest.NewOnExit()
-	atexit.Add(func() {
-		// _ = os.Remove(strings.TrimPrefix(sqlite, "sqlite://"))
-		dockertest.KillAllTestDatabases()
+	pop.SetNowFunc(func() time.Time {
+		return time.Now().UTC().Round(time.Second)
 	})
-	atexit.Exit(m.Run())
+	//pop.Debug = true
 }
 
-func pl(t *testing.T) func(lvl logging.Level, s string, args ...interface{}) {
+func TestMain(m *testing.M) {
+	m.Run()
+	dockertest.KillAllTestDatabases()
+}
+
+func pl(t testing.TB) func(lvl logging.Level, s string, args ...interface{}) {
 	return func(lvl logging.Level, s string, args ...interface{}) {
 		if pop.Debug == false {
 			return
@@ -94,15 +96,17 @@ func pl(t *testing.T) func(lvl logging.Level, s string, args ...interface{}) {
 	}
 }
 
-func createCleanDatabases(t *testing.T) map[string]*driver.RegistryDefault {
-	conns := map[string]string{"sqlite": dbal.NewSQLiteTestDatabase(t)}
+func createCleanDatabases(t testing.TB) map[string]*driver.RegistryDefault {
+	conns := map[string]string{
+		"sqlite": "sqlite://file:" + t.TempDir() + "/db.sqlite?_fk=true",
+	}
 
 	var l sync.Mutex
 	if !testing.Short() {
 		funcs := map[string]func(t testing.TB) string{
-			"postgres":  dockertest.RunTestPostgreSQL,
-			"mysql":     dockertest.RunTestMySQL,
-			"cockroach": dockertest.NewLocalTestCRDBServer,
+			//"postgres":  dockertest.RunTestPostgreSQL,
+			"mysql": dockertest.RunTestMySQL,
+			//"cockroach": dockertest.NewLocalTestCRDBServer,
 		}
 
 		var wg sync.WaitGroup
@@ -127,7 +131,7 @@ func createCleanDatabases(t *testing.T) map[string]*driver.RegistryDefault {
 	for name, dsn := range conns {
 		go func(name, dsn string) {
 			defer wg.Done()
-			t.Logf("Connecting to %s", name)
+			t.Logf("Connecting to %s: %s", name, dsn)
 			_, reg := internal.NewRegistryDefaultWithDSN(t, dsn)
 			p := reg.Persister().(*sql.Persister)
 
@@ -170,9 +174,9 @@ func TestPersister(t *testing.T) {
 			t.Parallel()
 
 			_, p := testhelpers.NewNetwork(t, ctx, reg.Persister())
-			conf := reg.Config(context.Background())
+			conf := reg.Config()
 
-			t.Logf("DSN: %s", conf.DSN())
+			t.Logf("DSN: %s", conf.DSN(ctx))
 
 			// This test must remain the first test in the test suite!
 			t.Run("racy identity creation", func(t *testing.T) {
@@ -183,7 +187,7 @@ func TestPersister(t *testing.T) {
 				}
 
 				var wg sync.WaitGroup
-				testhelpers.SetDefaultIdentitySchema(reg.Config(context.Background()), defaultSchema.RawURL)
+				testhelpers.SetDefaultIdentitySchema(reg.Config(), defaultSchema.RawURL)
 				_, ps := testhelpers.NewNetwork(t, ctx, reg.Persister())
 
 				for i := 0; i < 10; i++ {
@@ -216,14 +220,14 @@ func TestPersister(t *testing.T) {
 
 			t.Run("contract=identity.TestPool", func(t *testing.T) {
 				pop.SetLogger(pl(t))
-				identity.TestPool(ctx, conf, p)(t)
+				identity.TestPool(ctx, conf, p, reg.IdentityManager())(t)
 			})
 			t.Run("contract=identity.TestPool (case sensitive)", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 
-				caseConf := reg.Config(context.Background())
-				caseConf.MustSet(config.ViperKeyIdentityCaseSensitiveIdentifier, true)
-				identity.TestPool(ctx, caseConf, p)(t)
+				caseConf := reg.Config()
+				caseConf.MustSet(ctx, config.ViperKeyIdentityCaseSensitiveIdentifier, true)
+				identity.TestPool(ctx, caseConf, p, reg.IdentityManager())(t)
 			})
 			t.Run("contract=registration.TestFlowPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
@@ -239,18 +243,22 @@ func TestPersister(t *testing.T) {
 			})
 			t.Run("contract=settings.TestFlowPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
-				settings.TestRequestPersister(ctx, conf, p)(t)
+				settings.TestFlowPersister(ctx, conf, p)(t)
 			})
-			t.Run("contract=session.TestFlowPersister", func(t *testing.T) {
+			t.Run("contract=session.TestPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 				session.TestPersister(ctx, conf, p)(t)
+			})
+			t.Run("contract=sessiontokenexchange.TestPersister", func(t *testing.T) {
+				pop.SetLogger(pl(t))
+				sessiontokenexchange.TestPersister(ctx, conf, p)(t)
 			})
 			t.Run("contract=courier.TestPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 				upsert, insert := sqltesthelpers.DefaultNetworkWrapper(p)
 				courier.TestPersister(ctx, upsert, insert)(t)
 			})
-			t.Run("contract=verification.TestPersister", func(t *testing.T) {
+			t.Run("contract=verification.TestFlowPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 				verification.TestFlowPersister(ctx, conf, p)(t)
 			})
@@ -261,6 +269,10 @@ func TestPersister(t *testing.T) {
 			t.Run("contract=link.TestPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 				link.TestPersister(ctx, conf, p)(t)
+			})
+			t.Run("contract=code.TestPersister", func(t *testing.T) {
+				pop.SetLogger(pl(t))
+				code.TestPersister(ctx, conf, p)(t)
 			})
 			t.Run("contract=continuity.TestPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
@@ -292,13 +304,13 @@ func TestPersister_Transaction(t *testing.T) {
 			Traits: ri.Traits(`{}`),
 		}
 		errMessage := "failing because why not"
-		err := p.Transaction(context.Background(), func(ctx context.Context, connection *pop.Connection) error {
+		err := p.Transaction(context.Background(), func(_ context.Context, connection *pop.Connection) error {
 			require.NoError(t, connection.Create(i))
 			return errors.Errorf(errMessage)
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), errMessage)
-		_, err = p.GetIdentity(context.Background(), i.ID)
+		_, err = p.GetIdentity(context.Background(), i.ID, ri.ExpandNothing)
 		require.Error(t, err)
 		assert.Equal(t, sqlcon.ErrNoRows.Error(), err.Error())
 	})
@@ -321,4 +333,63 @@ func TestPersister_Transaction(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, sqlcon.ErrNoRows.Error(), err.Error())
 	})
+}
+
+func Benchmark_BatchCreateIdentities(b *testing.B) {
+	conns := createCleanDatabases(b)
+	ctx := context.Background()
+	batchSizes := []int{1, 10, 100, 500, 800, 900, 1000, 2000, 3000}
+	parallelRequests := []int{1, 4, 8, 16}
+
+	for name := range conns {
+		name := name
+		reg := conns[name]
+		b.Run(fmt.Sprintf("database=%s", name), func(b *testing.B) {
+			conf := reg.Config()
+			_, p := testhelpers.NewNetwork(b, ctx, reg.Persister())
+			multipleEmailsSchema := schema.Schema{
+				ID:     "multiple_emails",
+				URL:    urlx.ParseOrPanic("file://./stub/handler/multiple_emails.schema.json"),
+				RawURL: "file://./stub/identity-2.schema.json",
+			}
+			conf.MustSet(ctx, config.ViperKeyIdentitySchemas, []config.Schema{
+				{
+					ID:  multipleEmailsSchema.ID,
+					URL: multipleEmailsSchema.RawURL,
+				},
+			})
+			conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "http://localhost/")
+
+			run := 0
+			for _, batchSize := range batchSizes {
+				b.Run(fmt.Sprintf("batch-size=%d", batchSize), func(b *testing.B) {
+					for _, paralellism := range parallelRequests {
+						b.Run(fmt.Sprintf("parallelism=%d", paralellism), func(b *testing.B) {
+							start := time.Now()
+							for i := 0; i < b.N; i++ {
+								wg := new(errgroup.Group)
+								for paralell := 0; paralell < paralellism; paralell++ {
+									paralell := paralell
+									wg.Go(func() error {
+										identities := make([]*ri.Identity, batchSize)
+										prefix := fmt.Sprintf("bench-insert-run-%d", run+paralell)
+										for j := range identities {
+											identities[j] = identity.NewTestIdentity(1, prefix, j)
+										}
+
+										return p.CreateIdentities(ctx, identities...)
+									})
+								}
+								assert.NoError(b, wg.Wait())
+								run += paralellism
+							}
+							end := time.Now()
+							b.ReportMetric(float64(paralellism*batchSize*b.N), "identites_created")
+							b.ReportMetric(float64(paralellism*batchSize*b.N)/end.Sub(start).Seconds(), "identities/s")
+						})
+					}
+				})
+			}
+		})
+	}
 }

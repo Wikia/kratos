@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package argon2
 
 import (
@@ -69,6 +72,8 @@ func newLoadTestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			flagConf.ctx = cmd.Context()
 
 			conf, err := configProvider(cmd, flagConf)
 			if err != nil {
@@ -183,7 +188,7 @@ func runLoadTest(cmd *cobra.Command, conf *argon2Config, reqPerMin int) (*result
 		eg.Go(func(i int) func() error {
 			return func() error {
 				// wait randomly before starting, max. sample time
-				// #nosec G404 - just a timeout to collect statistical data
+				//#nosec G404 -- just a timeout to collect statistical data
 				t := time.Duration(rand.Intn(int(sampleTime)))
 				timer := time.NewTimer(t)
 				defer timer.Stop()

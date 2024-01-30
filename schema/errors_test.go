@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package schema
 
 import (
@@ -11,7 +14,7 @@ import (
 )
 
 func TestListValidationErrors(t *testing.T) {
-	testErr := NewValidationListError()
+	testErr := ValidationListError{}
 
 	assert.False(t, testErr.HasErrors())
 

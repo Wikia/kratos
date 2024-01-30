@@ -1,13 +1,17 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package registration
 
 import (
 	"github.com/ory/kratos/identity"
+	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/session"
 )
 
 // The Response for Registration Flows via API
 //
-// swagger:model successfulSelfServiceRegistrationWithoutBrowser
+// swagger:model successfulNativeRegistration
 type APIFlowResponse struct {
 	// The Session Token
 	//
@@ -35,4 +39,12 @@ type APIFlowResponse struct {
 	//
 	// required: true
 	Identity *identity.Identity `json:"identity"`
+
+	// Contains a list of actions, that could follow this flow
+	//
+	// It can, for example, this will contain a reference to the verification flow, created as part of the user's
+	// registration or the token of the session.
+	//
+	// required: false
+	ContinueWith []flow.ContinueWith `json:"continue_with"`
 }

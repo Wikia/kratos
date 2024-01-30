@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package hash
 
 import (
@@ -43,7 +46,7 @@ func toKB(mem bytesize.ByteSize) uint32 {
 func (h *Argon2) Generate(ctx context.Context, password []byte) ([]byte, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(tracingComponent).Start(ctx, "hash.Argon2.Generate")
 	defer span.End()
-	p := h.c.Config(ctx).HasherArgon2()
+	p := h.c.Config().HasherArgon2(ctx)
 	span.SetAttributes(attribute.String("argon2.config", fmt.Sprintf("#%v", p)))
 
 	salt := make([]byte, p.SaltLength)
@@ -54,7 +57,7 @@ func (h *Argon2) Generate(ctx context.Context, password []byte) ([]byte, error) 
 	// Pass the plaintext password, salt and parameters to the argon2.IDKey
 	// function. This will generate a hash of the password using the Argon2id
 	// variant.
-	hash := argon2.IDKey([]byte(password), salt, p.Iterations, toKB(p.Memory), p.Parallelism, p.KeyLength)
+	hash := argon2.IDKey(password, salt, p.Iterations, toKB(p.Memory), p.Parallelism, p.KeyLength)
 
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(

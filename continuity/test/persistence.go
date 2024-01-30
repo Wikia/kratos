@@ -1,9 +1,14 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package test
 
 import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/ory/kratos/internal/testhelpers"
 
@@ -24,7 +29,7 @@ func TestPersister(ctx context.Context, p interface {
 	identity.PrivilegedPool
 }) func(t *testing.T) {
 	var createIdentity = func(t *testing.T) *identity.Identity {
-		id := identity.Identity{ID: x.NewUUID()}
+		id := identity.Identity{}
 		require.NoError(t, p.CreateIdentity(ctx, &id))
 		return &id
 	}
@@ -59,6 +64,7 @@ func TestPersister(ctx context.Context, p interface {
 			expected := createContainer(t)
 
 			require.NoError(t, p.SaveContinuitySession(ctx, &expected))
+			require.NotEqual(t, uuid.Nil, expected.ID)
 			require.NoError(t, p.DeleteContinuitySession(ctx, expected.ID))
 
 			_, err := p.GetContinuitySession(ctx, expected.ID)
@@ -92,6 +98,29 @@ func TestPersister(ctx context.Context, p interface {
 				_, p := testhelpers.NewNetwork(t, ctx, p)
 				err := p.DeleteContinuitySession(ctx, id)
 				require.ErrorIs(t, err, sqlcon.ErrNoRows)
+			})
+		})
+
+		t.Run("case=cleanup", func(t *testing.T) {
+			id := x.NewUUID()
+			yesterday := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+			m := sqlxx.NullJSONRawMessage(`{"foo": "bar"}`)
+			expected := continuity.Container{Name: "foo", IdentityID: x.PointToUUID(createIdentity(t).ID),
+				ExpiresAt: yesterday,
+				Payload:   m,
+			}
+			expected.ID = id
+
+			t.Run("can cleanup", func(t *testing.T) {
+				require.NoError(t, p.SaveContinuitySession(ctx, &expected))
+
+				assert.EqualValues(t, id, expected.ID)
+				assert.EqualValues(t, nid, expected.NID)
+
+				require.NoError(t, p.DeleteExpiredContinuitySessions(ctx, time.Now(), 5))
+
+				_, err := p.GetContinuitySession(ctx, id)
+				require.Error(t, err)
 			})
 		})
 	}

@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package oidc
 
 import (
@@ -5,6 +8,8 @@ import (
 	"encoding/json"
 	"net/url"
 	"path"
+
+	"github.com/ory/x/stringsx"
 
 	"github.com/hashicorp/go-retryablehttp"
 
@@ -56,7 +61,7 @@ func (g *ProviderGitLab) oauth2(ctx context.Context) (*oauth2.Config, error) {
 			TokenURL: tokenUrl.String(),
 		},
 		Scopes:      g.config.Scope,
-		RedirectURL: g.config.Redir(g.reg.Config(ctx).OIDCRedirectURIBase()),
+		RedirectURL: g.config.Redir(g.reg.Config().OIDCRedirectURIBase(ctx)),
 	}, nil
 }
 
@@ -82,17 +87,23 @@ func (g *ProviderGitLab) Claims(ctx context.Context, exchange *oauth2.Token, que
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 
+	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 	defer resp.Body.Close()
 
+	if err := logUpstreamError(g.reg.Logger(), resp); err != nil {
+		return nil, err
+	}
+
 	var claims Claims
 	if err := json.NewDecoder(resp.Body).Decode(&claims); err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 
+	claims.Issuer = stringsx.Coalesce(claims.Issuer, g.config.IssuerURL)
 	return &claims, nil
 }
 

@@ -1,15 +1,21 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package schema_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/ory/client-go"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +30,7 @@ import (
 )
 
 func TestHandler(t *testing.T) {
+	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	router := x.NewRouterPublic()
 	reg.SchemaHandler().RegisterPublicRoutes(router)
@@ -77,7 +84,7 @@ func TestHandler(t *testing.T) {
 	getFromTS := func(url string, expectCode int) []byte {
 		res, err := ts.Client().Get(url)
 		require.NoError(t, err)
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		require.NoError(t, res.Body.Close())
 
@@ -117,11 +124,11 @@ func TestHandler(t *testing.T) {
 				URL: s.RawURL,
 			})
 		}
-		conf.MustSet(config.ViperKeyIdentitySchemas, schemasConfig)
+		conf.MustSet(ctx, config.ViperKeyIdentitySchemas, schemasConfig)
 	}
 
-	conf.MustSet(config.ViperKeyPublicBaseURL, ts.URL)
-	conf.MustSet(config.ViperKeyDefaultIdentitySchemaID, config.DefaultIdentityTraitsSchemaID)
+	conf.MustSet(ctx, config.ViperKeyPublicBaseURL, ts.URL)
+	conf.MustSet(ctx, config.ViperKeyDefaultIdentitySchemaID, config.DefaultIdentityTraitsSchemaID)
 	setSchemas(schemas)
 
 	t.Run("case=get default schema", func(t *testing.T) {
@@ -183,7 +190,7 @@ func TestHandler(t *testing.T) {
 
 		body := getFromTSPaginated(0, 2, http.StatusOK)
 
-		var result schema.IdentitySchemas
+		var result []client.IdentitySchemaContainer
 		require.NoError(t, json.Unmarshal(body, &result))
 
 		ids_orig := []string{}
@@ -192,7 +199,7 @@ func TestHandler(t *testing.T) {
 		}
 		ids_list := []string{}
 		for _, s := range result {
-			ids_list = append(ids_list, s.ID)
+			ids_list = append(ids_list, *s.Id)
 		}
 		for _, id := range ids_orig {
 			require.Contains(t, ids_list, id)
@@ -200,8 +207,10 @@ func TestHandler(t *testing.T) {
 
 		for _, s := range schemas {
 			for _, r := range result {
-				if r.ID == s.ID {
-					assert.JSONEq(t, string(getFromFS(s.ID)), string(r.Schema))
+				if *r.Id == s.ID {
+					j, err := json.Marshal(r.Schema)
+					require.NoError(t, err)
+					assert.JSONEq(t, string(getFromFS(s.ID)), string(j))
 				}
 			}
 		}

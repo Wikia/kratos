@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package errorx
 
 import (
@@ -40,14 +43,14 @@ func NewManager(d managerDependencies) *Manager {
 func (m *Manager) Create(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) (string, error) {
 	m.d.Logger().WithError(err).WithRequest(r).Errorf("An error occurred and is being forwarded to the error user interface.")
 
-	id, addErr := m.d.SelfServiceErrorPersister().Add(ctx, m.d.GenerateCSRFToken(r), err)
+	id, addErr := m.d.SelfServiceErrorPersister().CreateErrorContainer(ctx, m.d.GenerateCSRFToken(r), err)
 	if addErr != nil {
 		return "", addErr
 	}
 	q := url.Values{}
 	q.Set("id", id.String())
 
-	return urlx.CopyWithQuery(m.d.Config(ctx).SelfServiceFlowErrorURL(), q).String(), nil
+	return urlx.CopyWithQuery(m.d.Config().SelfServiceFlowErrorURL(ctx), q).String(), nil
 }
 
 // Forward is a simple helper that saves all errors in the store and forwards the HTTP Request
@@ -61,7 +64,8 @@ func (m *Manager) Forward(ctx context.Context, w http.ResponseWriter, r *http.Re
 	to, errCreate := m.Create(ctx, w, r, err)
 	if errCreate != nil {
 		// Everything failed. Resort to standard error output.
-		m.d.Writer().WriteError(w, r, errCreate)
+		m.d.Logger().WithError(errCreate).WithRequest(r).Error("Failed to create error container.")
+		m.d.Writer().WriteError(w, r, err)
 		return
 	}
 

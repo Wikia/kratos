@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package settings
 
 import (
@@ -5,6 +8,12 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ory/kratos/x/events"
+
+	"github.com/ory/kratos/session"
 
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/container"
@@ -24,21 +33,31 @@ import (
 )
 
 type (
+	PreHookExecutor interface {
+		ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, a *Flow) error
+	}
+	PreHookExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow) error
+
 	PostHookPrePersistExecutor interface {
 		ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
 	PostHookPrePersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
-	PostHookPostPersistExecutor    interface {
+
+	PostHookPostPersistExecutor interface {
 		ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
 	}
-	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error
-	HooksProvider                   interface {
+	PostHookPostPersistExecutorFunc func(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error
+
+	HooksProvider interface {
+		PreSettingsHooks(ctx context.Context) []PreHookExecutor
 		PostSettingsPrePersistHooks(ctx context.Context, settingsType string) []PostHookPrePersistExecutor
 		PostSettingsPostPersistHooks(ctx context.Context, settingsType string) []PostHookPostPersistExecutor
 	}
+
 	executorDependencies interface {
 		identity.ManagementProvider
 		identity.ValidationProvider
+		session.ManagementProvider
 		config.Provider
 
 		HandlerProvider
@@ -57,12 +76,16 @@ type (
 	}
 )
 
+func (f PreHookExecutorFunc) ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, a *Flow) error {
+	return f(w, r, a)
+}
+
 func (f PostHookPrePersistExecutorFunc) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error {
 	return f(w, r, a, s)
 }
 
-func (f PostHookPostPersistExecutorFunc) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity) error {
-	return f(w, r, a, s)
+func (f PostHookPostPersistExecutorFunc) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *Flow, s *identity.Identity, settingsType string) error {
+	return f(w, r, a, s, settingsType)
 }
 
 func PostHookPostPersistExecutorNames(e []PostHookPostPersistExecutor) []string {
@@ -110,7 +133,7 @@ func (e *HookExecutor) handleSettingsError(_ http.ResponseWriter, r *http.Reques
 
 			cont, err := container.NewFromStruct("", group, i.Traits, "traits")
 			if err != nil {
-				e.d.Logger().WithField("error", err).Warn("could not update flow UI")
+				e.d.Logger().WithError(err).Error("could not update flow UI")
 				return err
 			}
 
@@ -136,14 +159,14 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		Debug("Running PostSettingsPrePersistHooks.")
 
 	// Verify the redirect URL before we do any other processing.
-	c := e.d.Config(r.Context())
-	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
+	c := e.d.Config()
+	returnTo, err := x.SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(r.Context()),
 		x.SecureRedirectUseSourceURL(ctxUpdate.Flow.RequestURL),
-		x.SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains()),
-		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL()),
+		x.SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains(r.Context())),
+		x.SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(r.Context())),
 		x.SecureRedirectOverrideDefaultReturnTo(
-			e.d.Config(r.Context()).SelfServiceFlowSettingsReturnTo(settingsType,
-				ctxUpdate.Flow.AppendTo(e.d.Config(r.Context()).SelfServiceFlowSettingsUI()))),
+			e.d.Config().SelfServiceFlowSettingsReturnTo(r.Context(), settingsType,
+				ctxUpdate.Flow.AppendTo(e.d.Config().SelfServiceFlowSettingsUI(r.Context())))),
 	)
 	if err != nil {
 		return err
@@ -164,19 +187,30 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		}
 
 		if err := executor.ExecuteSettingsPrePersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
-			if errors.Is(err, ErrHookAbortRequest) {
+			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().WithRequest(r).WithFields(logFields).
 					Debug("A ExecuteSettingsPrePersistHook hook aborted early.")
 				return nil
 			}
-			return e.handleSettingsError(w, r, settingsType, ctxUpdate.Flow, i, err)
+			var group node.UiNodeGroup
+			switch settingsType {
+			case "password":
+				group = node.PasswordGroup
+			case "oidc":
+				group = node.OpenIDConnectGroup
+			}
+			var traits identity.Traits
+			if i != nil {
+				traits = i.Traits
+			}
+			return flow.HandleHookError(w, r, ctxUpdate.Flow, traits, group, err, e.d, e.d)
 		}
 
 		e.d.Logger().WithRequest(r).WithFields(logFields).Debug("ExecuteSettingsPrePersistHook completed successfully.")
 	}
 
 	options := []identity.ManagerOption{identity.ManagerExposeValidationErrorsForInternalTypeAssertion}
-	ttl := e.d.Config(r.Context()).SelfServiceFlowSettingsPrivilegedSessionMaxAge()
+	ttl := e.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(r.Context())
 	if ctxUpdate.Session.AuthenticatedAt.Add(ttl).After(time.Now()) {
 		options = append(options, identity.ManagerAllowWriteProtectedTraits)
 	}
@@ -212,13 +246,14 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 	ctxUpdate.Flow.UI = newFlow.UI
 	ctxUpdate.Flow.UI.ResetMessages()
 	ctxUpdate.Flow.UI.AddMessage(node.DefaultGroup, text.NewInfoSelfServiceSettingsUpdateSuccess())
+	ctxUpdate.Flow.InternalContext = newFlow.InternalContext
 	if err := e.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
 		return err
 	}
 
 	for k, executor := range e.d.PostSettingsPostPersistHooks(r.Context(), settingsType) {
 		if err := executor.ExecuteSettingsPostPersistHook(w, r, ctxUpdate.Flow, i, settingsType); err != nil {
-			if errors.Is(err, ErrHookAbortRequest) {
+			if errors.Is(err, ErrHookAbortFlow) {
 				e.d.Logger().
 					WithRequest(r).
 					WithField("executor", fmt.Sprintf("%T", executor)).
@@ -247,16 +282,48 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		WithField("flow_method", settingsType).
 		Debug("Completed all PostSettingsPrePersistHooks and PostSettingsPostPersistHooks.")
 
-	if ctxUpdate.Flow.Type == flow.TypeAPI || x.IsJSONRequest(r) {
+	trace.SpanFromContext(r.Context()).AddEvent(events.NewSettingsSucceeded(r.Context(), i.ID, string(ctxUpdate.Flow.Type), ctxUpdate.Flow.Active.String()))
+
+	if ctxUpdate.Flow.Type == flow.TypeAPI {
 		updatedFlow, err := e.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), ctxUpdate.Flow.ID)
 		if err != nil {
 			return err
 		}
+		// ContinueWith items are transient items, not stored in the database, and need to be carried over here, so
+		// they can be returned to the client.
+		updatedFlow.ContinueWithItems = ctxUpdate.Flow.ContinueWithItems
+
+		e.d.Writer().Write(w, r, updatedFlow)
+		return nil
+	}
+
+	if err := e.d.SessionManager().IssueCookie(r.Context(), w, r, ctxUpdate.Session); err != nil {
+		return errors.WithStack(err)
+	}
+
+	if x.IsJSONRequest(r) {
+		updatedFlow, err := e.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), ctxUpdate.Flow.ID)
+		if err != nil {
+			return err
+		}
+		// ContinueWith items are transient items, not stored in the database, and need to be carried over here, so
+		// they can be returned to the client.
+		updatedFlow.ContinueWithItems = ctxUpdate.Flow.ContinueWithItems
 
 		e.d.Writer().Write(w, r, updatedFlow)
 		return nil
 	}
 
 	x.ContentNegotiationRedirection(w, r, i.CopyWithoutCredentials(), e.d.Writer(), returnTo.String())
+	return nil
+}
+
+func (e *HookExecutor) PreSettingsHook(w http.ResponseWriter, r *http.Request, a *Flow) error {
+	for _, executor := range e.d.PreSettingsHooks(r.Context()) {
+		if err := executor.ExecuteSettingsPreHook(w, r, a); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

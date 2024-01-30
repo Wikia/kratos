@@ -1,10 +1,17 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package flow
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
 	"github.com/pkg/errors"
+
+	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/ui/container"
 
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/x"
@@ -31,4 +38,9 @@ type Flow interface {
 	GetType() Type
 	GetRequestURL() string
 	AppendTo(*url.URL) *url.URL
+	GetUI() *container.Container
+}
+
+type FlowWithRedirect interface {
+	SecureRedirectToOpts(ctx context.Context, cfg config.Provider) (opts []x.SecureRedirectOption)
 }

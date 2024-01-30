@@ -1,9 +1,13 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package totp
 
 import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -13,7 +17,6 @@ import (
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/login"
-	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
@@ -64,10 +67,10 @@ func (s *Strategy) handleLoginError(r *http.Request, f *login.Flow, err error) e
 	return err
 }
 
-// submitSelfServiceLoginFlowWithTotpMethodBody is used to decode the login form payload.
+// Update Login Flow with TOTP Method
 //
-// swagger:model submitSelfServiceLoginFlowWithTotpMethodBody
-type submitSelfServiceLoginFlowWithTotpMethodBody struct {
+// swagger:model updateLoginFlowWithTotpMethod
+type updateLoginFlowWithTotpMethod struct {
 	// Method should be set to "totp" when logging in using the TOTP strategy.
 	//
 	// required: true
@@ -82,7 +85,7 @@ type submitSelfServiceLoginFlowWithTotpMethodBody struct {
 	TOTPCode string `json:"totp_code"`
 }
 
-func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, ss *session.Session) (i *identity.Identity, err error) {
+func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, identityID uuid.UUID) (i *identity.Identity, err error) {
 	if err := login.CheckAAL(f, identity.AuthenticatorAssuranceLevel2); err != nil {
 		return nil, err
 	}
@@ -91,7 +94,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, err
 	}
 
-	var p submitSelfServiceLoginFlowWithTotpMethodBody
+	var p updateLoginFlowWithTotpMethod
 	if err := s.hd.Decode(r, &p,
 		decoderx.HTTPDecoderSetValidatePayloads(true),
 		decoderx.MustHTTPRawJSONSchemaCompiler(loginSchema),
@@ -99,16 +102,16 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, s.handleLoginError(r, f, err)
 	}
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config(r.Context()).DisableAPIFlowEnforcement(), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return nil, s.handleLoginError(r, f, err)
 	}
 
-	i, c, err := s.d.PrivilegedIdentityPool().FindByCredentialsIdentifier(r.Context(), s.ID(), ss.IdentityID.String())
+	i, c, err := s.d.PrivilegedIdentityPool().FindByCredentialsIdentifier(r.Context(), s.ID(), identityID.String())
 	if err != nil {
 		return nil, s.handleLoginError(r, f, errors.WithStack(schema.NewNoTOTPDeviceRegistered()))
 	}
 
-	var o CredentialsConfig
+	var o identity.CredentialsTOTPConfig
 	if err := json.Unmarshal(c.Config, &o); err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReason("The TOTP credentials could not be decoded properly").WithDebug(err.Error()).WithWrap(err))
 	}

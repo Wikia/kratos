@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package settings
 
 import (
@@ -5,7 +8,12 @@ import (
 	"net/http"
 	"net/url"
 
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ory/kratos/x/events"
+
 	"github.com/ory/kratos/session"
+	"github.com/ory/kratos/x/swagger"
 
 	"github.com/ory/kratos/ui/node"
 
@@ -24,9 +32,7 @@ import (
 	"github.com/ory/kratos/x"
 )
 
-var (
-	ErrHookAbortRequest = errors.New("aborted settings hook execution")
-)
+var ErrHookAbortFlow = errors.New("aborted settings hook execution")
 
 type (
 	errorHandlerDependencies interface {
@@ -50,12 +56,23 @@ type (
 // Is sent when a privileged session is required to perform the settings update.
 //
 // swagger:model needsPrivilegedSessionError
-type FlowNeedsReAuth struct {
-	*herodot.DefaultError `json:"error"`
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type needsPrivilegedSessionError struct {
+	Error swagger.GenericError `json:"error"`
 
 	// Points to where to redirect the user to next.
 	//
 	// required: true
+	RedirectBrowserTo string `json:"redirect_browser_to"`
+}
+
+// FlowNeedsReAuth is sent when a privileged session is required to perform the settings update.
+type FlowNeedsReAuth struct {
+	*herodot.DefaultError `json:"error"`
+
+	// Points to where to redirect the user to next.
 	RedirectBrowserTo string `json:"redirect_browser_to"`
 }
 
@@ -66,7 +83,8 @@ func (e *FlowNeedsReAuth) EnhanceJSONError() interface{} {
 func NewFlowNeedsReAuth() *FlowNeedsReAuth {
 	return &FlowNeedsReAuth{
 		DefaultError: herodot.ErrForbidden.WithID(text.ErrIDNeedsPrivilegedSession).
-			WithReasonf("The login session is too old and thus not allowed to update these fields. Please re-authenticate.")}
+			WithReasonf("The login session is too old and thus not allowed to update these fields. Please re-authenticate."),
+	}
 }
 
 func NewErrorHandler(d errorHandlerDependencies) *ErrorHandler {
@@ -79,10 +97,13 @@ func (s *ErrorHandler) reauthenticate(
 	f *Flow,
 	err *FlowNeedsReAuth,
 ) {
-	returnTo := urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(), r.URL.Path), r.URL.Query())
-	redirectTo := urlx.AppendPaths(urlx.CopyWithQuery(s.d.Config(r.Context()).SelfPublicURL(),
-		url.Values{"refresh": {"true"}, "return_to": {returnTo.String()}}),
-		login.RouteInitBrowserFlow).String()
+	returnTo := urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()), r.URL.Path), r.URL.Query())
+
+	params := url.Values{}
+	params.Set("refresh", "true")
+	params.Set("return_to", returnTo.String())
+
+	redirectTo := urlx.AppendPaths(urlx.CopyWithQuery(s.d.Config().SelfPublicURL(r.Context()), params), login.RouteInitBrowserFlow).String()
 	err.RedirectBrowserTo = redirectTo
 	if f.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 		s.d.Writer().WriteError(w, r, err)
@@ -104,7 +125,7 @@ func (s *ErrorHandler) PrepareReplacementForExpiredFlow(w http.ResponseWriter, r
 		return nil, err
 	}
 
-	a.UI.Messages.Add(text.NewErrorValidationSettingsFlowExpired(e.Ago))
+	a.UI.Messages.Add(text.NewErrorValidationSettingsFlowExpired(e.ExpiredAt))
 	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), a); err != nil {
 		return nil, err
 	}
@@ -135,7 +156,7 @@ func (s *ErrorHandler) WriteFlowError(
 		if shouldRespondWithJSON {
 			s.d.Writer().WriteError(w, r, err)
 		} else {
-			http.Redirect(w, r, urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(), login.RouteInitBrowserFlow).String(), http.StatusSeeOther)
+			http.Redirect(w, r, urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()), login.RouteInitBrowserFlow).String(), http.StatusSeeOther)
 		}
 		return
 	}
@@ -144,17 +165,17 @@ func (s *ErrorHandler) WriteFlowError(
 		if shouldRespondWithJSON {
 			s.d.Writer().WriteError(w, r, aalErr)
 		} else {
-			http.Redirect(w, r, urlx.CopyWithQuery(
-				urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(), login.RouteInitBrowserFlow),
-				url.Values{"aal": {string(identity.AuthenticatorAssuranceLevel2)}}).String(), http.StatusSeeOther)
+			http.Redirect(w, r, aalErr.RedirectTo, http.StatusSeeOther)
 		}
 		return
 	}
 
 	if f == nil {
-		s.forward(w, r, f, err)
+		trace.SpanFromContext(r.Context()).AddEvent(events.NewSettingsFailed(r.Context(), "", ""))
+		s.forward(w, r, nil, err)
 		return
 	}
+	trace.SpanFromContext(r.Context()).AddEvent(events.NewSettingsFailed(r.Context(), string(f.Type), f.Active.String()))
 
 	if expired, inner := s.PrepareReplacementForExpiredFlow(w, r, f, id, err); inner != nil {
 		s.forward(w, r, f, err)
@@ -168,7 +189,7 @@ func (s *ErrorHandler) WriteFlowError(
 		if f.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 			s.d.Writer().WriteError(w, r, expired)
 		} else {
-			http.Redirect(w, r, expired.GetFlow().AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String(), http.StatusSeeOther)
+			http.Redirect(w, r, expired.GetFlow().AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 		}
 		return
 	}
@@ -177,7 +198,7 @@ func (s *ErrorHandler) WriteFlowError(
 		if shouldRespondWithJSON {
 			s.d.Writer().Write(w, r, f)
 		} else {
-			http.Redirect(w, r, f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String(), http.StatusSeeOther)
+			http.Redirect(w, r, f.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 		}
 		return
 	}
@@ -217,7 +238,7 @@ func (s *ErrorHandler) WriteFlowError(
 	}
 
 	if f.Type == flow.TypeBrowser && !x.IsJSONRequest(r) {
-		http.Redirect(w, r, f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, f.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 		return
 	}
 

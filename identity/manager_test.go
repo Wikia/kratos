@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package identity_test
 
 import (
@@ -5,11 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ory/x/sqlxx"
 
 	"github.com/ory/kratos/internal/testhelpers"
-	"github.com/ory/kratos/selfservice/strategy/lookup"
 	"github.com/ory/kratos/selfservice/strategy/totp"
 
 	"github.com/pkg/errors"
@@ -25,8 +28,8 @@ import (
 func TestManager(t *testing.T) {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/manager.schema.json")
-	conf.MustSet(config.ViperKeyPublicBaseURL, "https://www.ory.sh/")
-	conf.MustSet(config.ViperKeyCourierSMTPURL, "smtp://foo@bar@dev.null/")
+	conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "https://www.ory.sh/")
+	conf.MustSet(ctx, config.ViperKeyCourierSMTPURL, "smtp://foo@bar@dev.null/")
 
 	t.Run("case=should fail to create because validation fails", func(t *testing.T) {
 		i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
@@ -56,8 +59,9 @@ func TestManager(t *testing.T) {
 	checkExtensionFieldsForIdentities := func(t *testing.T, expected string, original *identity.Identity) {
 		fromStore, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), original.ID)
 		require.NoError(t, err)
-		for k, i := range []identity.Identity{*original, *fromStore} {
-			t.Run(fmt.Sprintf("identity=%d", k), checkExtensionFields(&i, expected))
+		identities := []identity.Identity{*original, *fromStore}
+		for k := range identities {
+			t.Run(fmt.Sprintf("identity=%d", k), checkExtensionFields(&identities[k], expected))
 		}
 	}
 
@@ -217,12 +221,12 @@ func TestManager(t *testing.T) {
 		oidc, err := identity.NewCredentialsOIDC("id", "token", "refreshToken", "google", newIdentity.ID.String())
 		require.NoError(t, err)
 
-		codes := make([]lookup.RecoveryCode, 12)
+		codes := make([]identity.RecoveryCode, 12)
 		for k := range codes {
 			var usedAt sqlxx.NullTime
-			codes[k] = lookup.RecoveryCode{Code: fmt.Sprintf("key-%d", k), UsedAt: usedAt}
+			codes[k] = identity.RecoveryCode{Code: fmt.Sprintf("key-%d", k), UsedAt: usedAt}
 		}
-		rc, err := json.Marshal(&lookup.CredentialsConfig{RecoveryCodes: codes})
+		rc, err := json.Marshal(&identity.CredentialsLookupConfig{RecoveryCodes: codes})
 		require.NoError(t, err)
 		lookupSecret := identity.Credentials{
 			Type:        identity.CredentialsTypeLookup,
@@ -351,7 +355,7 @@ func TestManager(t *testing.T) {
 			require.NoError(t, reg.IdentityManager().UpdateTraits(context.Background(), original.ID, identity.Traits(`{"email":"baz@ory.sh","email_verify":"baz@ory.sh","email_recovery":"baz@ory.sh","email_creds":"baz@ory.sh","unprotected": "bar"}`)))
 			checkExtensionFieldsForIdentities(t, "baz@ory.sh", original)
 
-			actual, err := reg.IdentityPool().GetIdentity(context.Background(), original.ID)
+			actual, err := reg.IdentityPool().GetIdentity(context.Background(), original.ID, identity.ExpandNothing)
 			require.NoError(t, err)
 			assert.JSONEq(t, `{"email":"baz@ory.sh","email_verify":"baz@ory.sh","email_recovery":"baz@ory.sh","email_creds":"baz@ory.sh","unprotected": "bar"}`, string(actual.Traits))
 		})
@@ -372,5 +376,25 @@ func TestManager(t *testing.T) {
 			// That is why we only check the identity in the store.
 			checkExtensionFields(fromStore, "email-updatetraits-1@ory.sh")(t)
 		})
+	})
+}
+
+func TestManagerNoDefaultNamedSchema(t *testing.T) {
+	conf, reg := internal.NewFastRegistryWithMocks(t)
+	conf.MustSet(ctx, config.ViperKeyDefaultIdentitySchemaID, "user_v0")
+	conf.MustSet(ctx, config.ViperKeyIdentitySchemas, config.Schemas{
+		{ID: "user_v0", URL: "file://./stub/manager.schema.json"},
+	})
+	conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "https://www.ory.sh/")
+
+	t.Run("case=should create identity with default schema", func(t *testing.T) {
+		stateChangedAt := sqlxx.NullTime(time.Now().UTC())
+		original := &identity.Identity{
+			SchemaID:       "",
+			Traits:         []byte(identity.Traits(`{"email":"foo@ory.sh"}`)),
+			State:          identity.StateActive,
+			StateChangedAt: &stateChangedAt,
+		}
+		require.NoError(t, reg.IdentityManager().Create(context.Background(), original))
 	})
 }

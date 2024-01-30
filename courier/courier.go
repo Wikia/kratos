@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package courier
 
 import (
@@ -5,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ory/kratos/courier/template"
+	"github.com/ory/x/jsonnetsecure"
 
 	"github.com/cenkalti/backoff"
 	"github.com/gofrs/uuid"
@@ -18,9 +22,11 @@ import (
 type (
 	Dependencies interface {
 		PersistenceProvider
+		x.TracingProvider
 		x.LoggingProvider
 		ConfigProvider
 		x.HTTPClientProvider
+		jsonnetsecure.VMProvider
 	}
 
 	Courier interface {
@@ -36,29 +42,35 @@ type (
 	}
 
 	Provider interface {
-		Courier(ctx context.Context) Courier
+		Courier(ctx context.Context) (Courier, error)
 	}
 
 	ConfigProvider interface {
-		CourierConfig(ctx context.Context) config.CourierConfigs
+		CourierConfig() config.CourierConfigs
 	}
 
 	courier struct {
 		smsClient   *smsClient
 		smtpClient  *smtpClient
+		httpClient  *httpClient
 		deps        Dependencies
 		failOnError bool
 		backoff     backoff.BackOff
 	}
 )
 
-func NewCourier(ctx context.Context, deps Dependencies) Courier {
+func NewCourier(ctx context.Context, deps Dependencies) (Courier, error) {
+	smtp, err := newSMTP(ctx, deps)
+	if err != nil {
+		return nil, err
+	}
 	return &courier{
 		smsClient:  newSMS(ctx, deps),
-		smtpClient: newSMTP(ctx, deps),
+		smtpClient: smtp,
+		httpClient: newHTTP(ctx, deps),
 		deps:       deps,
 		backoff:    backoff.NewExponentialBackOff(),
-	}
+	}, nil
 }
 
 func (c *courier) FailOnDispatchError() {

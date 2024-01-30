@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package driver
 
 import (
@@ -33,6 +36,13 @@ func (m *RegistryDefault) HookAddressVerifier() *hook.AddressVerifier {
 	return m.hookAddressVerifier
 }
 
+func (m *RegistryDefault) HookShowVerificationUI() *hook.ShowVerificationUIHook {
+	if m.hookShowVerificationUI == nil {
+		m.hookShowVerificationUI = hook.NewShowVerificationUIHook(m)
+	}
+	return m.hookShowVerificationUI
+}
+
 // fandom-start
 
 func (m *RegistryDefault) HookTotpSecretsDestroyer() *hook.TotpSecretsDestroyer {
@@ -59,6 +69,8 @@ func (m *RegistryDefault) getHooks(credentialsType string, configs []config.Self
 			i = append(i, hook.NewWebHook(m, h.Config))
 		case hook.KeyAddressVerifier:
 			i = append(i, m.HookAddressVerifier())
+		case hook.KeyVerificationUI:
+			i = append(i, m.HookShowVerificationUI())
 			// fandom-start
 		case hook.KeyTotpLookupSecretsDestroyer:
 			i = append(i, m.HookTotpSecretsDestroyer())

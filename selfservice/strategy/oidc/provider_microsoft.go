@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package oidc
 
 import (
@@ -98,6 +101,10 @@ func (m *ProviderMicrosoft) updateSubject(ctx context.Context, claims *Claims, e
 			return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to fetch from `https://graph.microsoft.com/v1.0/me`: %s", err))
 		}
 		defer resp.Body.Close()
+
+		if err := logUpstreamError(m.reg.Logger(), resp); err != nil {
+			return nil, err
+		}
 
 		var user struct {
 			ID string `json:"id"`

@@ -1,3 +1,6 @@
+// Copyright © 2024 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package hash_test
 
 import (
@@ -36,7 +39,7 @@ func TestComparatorLegacyFandomSuccess(t *testing.T) {
 			assert.Nil(t, err)
 
 			identityId, _ := uuid.NewV4()
-			err = hash.CompareLegacyFandom(context.Background(), reg.Config(context.Background()), identityId, pw, hs)
+			err = hash.CompareLegacyFandom(context.Background(), reg.Config(), identityId, pw, hs)
 			assert.Nil(t, err, "hash validation fails")
 		})
 	}

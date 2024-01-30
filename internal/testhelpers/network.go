@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package testhelpers
 
 import (
@@ -21,7 +24,7 @@ func NewNetworkUnlessExisting(t *testing.T, ctx context.Context, p persistence.P
 	return n.ID, p.WithNetworkID(n.ID)
 }
 
-func NewNetwork(t *testing.T, ctx context.Context, p persistence.Persister) (uuid.UUID, persistence.Persister) {
+func NewNetwork(t testing.TB, ctx context.Context, p persistence.Persister) (uuid.UUID, persistence.Persister) {
 	SkipIfNetworkContext(t, ctx)
 
 	n := networkx.NewNetwork()
@@ -34,7 +37,7 @@ func ExistingNetwork(t *testing.T, p persistence.Persister, id uuid.UUID) persis
 	return p.WithNetworkID(id)
 }
 
-func SkipIfNetworkContext(t *testing.T, ctx context.Context) {
+func SkipIfNetworkContext(t testing.TB, ctx context.Context) {
 	a, b := ctx.Value("network").(*networkx.Network)
 	if a != nil && b {
 		t.Skip("Network was set in context")

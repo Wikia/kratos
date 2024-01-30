@@ -1,10 +1,10 @@
-name: CI Tasks for Ory Kratos
+name: CI
 on:
   push:
     branches:
       - master
     tags:
-      - '*'
+      - "*"
   pull_request:
 
 # Cancel in-progress runs in current workflow.
@@ -44,8 +44,8 @@ jobs:
     env:
       TEST_MAILHOG_SMTP: "smtp://test:test@127.0.0.1:1025/?disable_starttls=true"
       TEST_MAILHOG_API: http://127.0.0.1:8025
-      TEST_SELFSERVICE_OIDC_HYDRA_ADMIN: http://127.0.0.1:4445
-      TEST_SELFSERVICE_OIDC_HYDRA_PUBLIC: http://127.0.0.1:4444
+      TEST_SELFSERVICE_OIDC_HYDRA_ADMIN: http://localhost:4445
+      TEST_SELFSERVICE_OIDC_HYDRA_PUBLIC: http://localhost:4444
       TEST_SELFSERVICE_OIDC_HYDRA_INTEGRATION_ADDR: http://127.0.0.1:4499
       TEST_DATABASE_POSTGRESQL: "postgres://test:test@localhost:5432/postgres?sslmode=disable"
       TEST_DATABASE_MYSQL: "mysql://root:test@(localhost:3306)/mysql?parseTime=true&multiStatements=true"
@@ -53,7 +53,7 @@ jobs:
     steps:
       - run: |
           docker create --name cockroach -p 26257:26257 \
-            cockroachdb/cockroach:v20.2.5 start-single-node --insecure
+            cockroachdb/cockroach:v22.2.6 start-single-node --insecure
           docker start cockroach
         name: Start CockroachDB
       - run: |
@@ -65,32 +65,33 @@ jobs:
       - run: |
           docker create --name hydra -p 4445:4445 -p 4444:4444 \
             -e DSN=memory \
-            -e URLS_SELF_ISSUER=http://127.0.0.1:4444/ \
-            -e URLS_LOGIN=http://127.0.0.1:4499/login \
-            -e URLS_CONSENT=http://127.0.0.1:4499/consent \
-            oryd/hydra:v1.4.10 serve all --dangerous-force-http
+            -e URLS_SELF_ISSUER=http://localhost:4444/ \
+            -e URLS_LOGIN=http://localhost:4499/login \
+            -e URLS_CONSENT=http://localhost:4499/consent \
+            oryd/hydra:v2.0.2 serve all --dev
           docker start hydra
           docker logs -f hydra &> /tmp/hydra.log &
         name: Start Hydra
       - uses: ory/ci/checkout@master
         with:
           fetch-depth: 2
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v4
         with:
-          go-version: ^1.18
+          go-version: "1.19"
       - run: go list -json > go.list
       - name: Run nancy
         uses: sonatype-nexus-community/nancy-github-action@v1.0.2
+        with:
+          nancyVersion: v1.0.42
       - run: npm install
         name: Install node deps
-      - name: Run prettier
-        run: npm run format:check
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v2
         env:
           GOGC: 100
         with:
           args: --timeout 10m0s
+          version: v1.50.1
           skip-go-installation: true
           skip-pkg-cache: true
       - name: Build Kratos
@@ -137,11 +138,14 @@ jobs:
       TEST_DATABASE_COCKROACHDB: "cockroach://root@localhost:26257/defaultdb?sslmode=disable"
     strategy:
       matrix:
-        database: ['postgres', 'cockroach', 'sqlite', 'mysql']
+        database: ["postgres", "cockroach", "sqlite", "mysql"]
     steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
       - run: |
           docker create --name cockroach -p 26257:26257 \
-            cockroachdb/cockroach:v20.2.5 start-single-node --insecure
+            cockroachdb/cockroach:v22.2.6 start-single-node --insecure
           docker start cockroach
         name: Start CockroachDB
       - uses: browser-actions/setup-chrome@latest
@@ -150,6 +154,8 @@ jobs:
         name: Install Firefox
       - uses: browser-actions/setup-geckodriver@latest
         name: Install Geckodriver
+        with:
+          geckodriver-version: 0.32.0
       - uses: ory/ci/checkout@master
         with:
           fetch-depth: 2
@@ -158,40 +164,166 @@ jobs:
           cd test/e2e; npm ci
           npm i -g expo-cli
         name: Install node deps
+      - run: |
+          sudo apt-get install -y moreutils gettext
+        name: Install tools
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: '^1.18'
+          go-version: "1.19"
+
       - name: Install selfservice-ui-react-native
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ory/kratos-selfservice-ui-react-native
           path: react-native-ui
       - run: |
           cd react-native-ui
           npm install
+
       - name: Install selfservice-ui-node
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: ory/kratos-selfservice-ui-node
           path: node-ui
       - run: |
           cd node-ui
-          npm install
+          npm install --legacy-peer-deps
+
+      - name: Install selfservice-ui-react-nextjs
+        uses: actions/checkout@v3
+        with:
+          repository: ory/kratos-selfservice-ui-react-nextjs
+          path: react-ui
+      - run: |
+          cd react-ui
+          npm ci
+
       - run: |
           echo 'RN_UI_PATH='"$(realpath react-native-ui)" >> $GITHUB_ENV
           echo 'NODE_UI_PATH='"$(realpath node-ui)" >> $GITHUB_ENV
-      - run: |
-          ./test/e2e/run.sh ${{ matrix.database }}
+          echo 'REACT_UI_PATH='"$(realpath react-ui)" >> $GITHUB_ENV
+      - name: "Run Cypress tests"
+        run: ./test/e2e/run.sh ${{ matrix.database }}
         env:
           RN_UI_PATH: react-native-ui
           NODE_UI_PATH: node-ui
+          REACT_UI_PATH: react-ui
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
       - if: failure()
         uses: actions/upload-artifact@v2
         with:
           name: logs
           path: test/e2e/*.e2e.log
 
+  test-e2e-playwright:
+    name: Run Playwright end-to-end tests
+    runs-on: ubuntu-latest
+    needs:
+      - sdk-generate
+    services:
+      postgres:
+        image: postgres:9.6
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_USER: test
+        ports:
+          - 5432:5432
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: test
+        ports:
+          - 3306:3306
+      mailslurper:
+        image: oryd/mailslurper:latest-smtps
+        ports:
+          - 4436:4436
+          - 4437:4437
+          - 1025:1025
+    env:
+      TEST_DATABASE_POSTGRESQL: "postgres://test:test@localhost:5432/postgres?sslmode=disable"
+      TEST_DATABASE_MYSQL: "mysql://root:test@(localhost:3306)/mysql?parseTime=true&multiStatements=true"
+      TEST_DATABASE_COCKROACHDB: "cockroach://root@localhost:26257/defaultdb?sslmode=disable"
+    strategy:
+      matrix:
+        database: ["postgres", "cockroach", "sqlite", "mysql"]
+    steps:
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - run: |
+          docker create --name cockroach -p 26257:26257 \
+            cockroachdb/cockroach:v22.2.6 start-single-node --insecure
+          docker start cockroach
+        name: Start CockroachDB
+      - uses: ory/ci/checkout@master
+        with:
+          fetch-depth: 2
+      - run: |
+          npm ci
+          cd test/e2e; npm ci
+          npx playwright install --with-deps
+          npm i -g expo-cli
+        name: Install node deps
+      - run: |
+          sudo apt-get install -y moreutils gettext
+        name: Install tools
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.19"
+      - run: go build -tags sqlite,json1 .
+
+      - name: Install selfservice-ui-react-native
+        uses: actions/checkout@v3
+        with:
+          repository: ory/kratos-selfservice-ui-react-native
+          path: react-native-ui
+      - run: |
+          cd react-native-ui
+          npm install
+
+      - name: Install selfservice-ui-node
+        uses: actions/checkout@v3
+        with:
+          repository: ory/kratos-selfservice-ui-node
+          path: node-ui
+      - run: |
+          cd node-ui
+          npm install --legacy-peer-deps
+
+      - name: Install selfservice-ui-react-nextjs
+        uses: actions/checkout@v3
+        with:
+          repository: ory/kratos-selfservice-ui-react-nextjs
+          path: react-ui
+      - run: |
+          cd react-ui
+          npm ci
+
+      - run: |
+          echo 'RN_UI_PATH='"$(realpath react-native-ui)" >> $GITHUB_ENV
+          echo 'NODE_UI_PATH='"$(realpath node-ui)" >> $GITHUB_ENV
+          echo 'REACT_UI_PATH='"$(realpath react-ui)" >> $GITHUB_ENV
+
+      - name: "Set up environment"
+        run: test/e2e/run.sh --only-setup
+      - name: "Run Playwright tests"
+        run: |
+          cd test/e2e
+          npm run playwright
+        env:
+          DB: ${{ matrix.database }}
+          RN_UI_PATH: react-native-ui
+          NODE_UI_PATH: node-ui
+          REACT_UI_PATH: react-ui
+      - if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: logs
+          path: test/e2e/*.e2e.log
 
   docs-cli:
     runs-on: ubuntu-latest
@@ -202,7 +334,7 @@ jobs:
       - uses: ory/ci/docs/cli-next@master
         with:
           token: ${{ secrets.ORY_BOT_PAT }}
-          arg: '.'
+          arg: "."
           output-dir: docs/kratos
 
   changelog:
@@ -230,7 +362,7 @@ jobs:
       - uses: ory/ci/sdk/release@master
         with:
           token: ${{ secrets.ORY_BOT_PAT }}
-          swag-spec-location: 'spec/api.json'
+          swag-spec-location: "spec/api.json"
 
   release:
     name: Generate release
@@ -273,7 +405,7 @@ jobs:
           mailchimp_list_id: f605a41b53
           mailchmip_segment_id: 6479477
           mailchimp_api_key: ${{ secrets.MAILCHIMP_API_KEY }}
-          draft: 'true'
+          draft: "true"
           ssh_key: ${{ secrets.ORY_BOT_SSH_KEY }}
 
   slack-approval-notification:
@@ -300,5 +432,5 @@ jobs:
           mailchimp_list_id: f605a41b53
           mailchmip_segment_id: 6479477
           mailchimp_api_key: ${{ secrets.MAILCHIMP_API_KEY }}
-          draft: 'false'
+          draft: "false"
           ssh_key: ${{ secrets.ORY_BOT_SSH_KEY }}

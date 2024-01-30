@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package link
 
 import (
@@ -33,7 +36,7 @@ const (
 )
 
 func (s *Strategy) RecoveryStrategyID() string {
-	return recovery.StrategyRecoveryLinkName
+	return string(recovery.RecoveryStrategyLink)
 }
 
 func (s *Strategy) RegisterPublicRecoveryRoutes(public *x.RouterPublic) {
@@ -43,7 +46,7 @@ func (s *Strategy) RegisterPublicRecoveryRoutes(public *x.RouterPublic) {
 }
 
 func (s *Strategy) RegisterAdminRecoveryRoutes(admin *x.RouterAdmin) {
-	wrappedCreateRecoveryLink := strategy.IsDisabled(s.d, s.RecoveryStrategyID(), s.createRecoveryLink)
+	wrappedCreateRecoveryLink := strategy.IsDisabled(s.d, s.RecoveryStrategyID(), s.createRecoveryLinkForIdentity)
 	admin.POST(RouteAdminCreateRecoveryLink, wrappedCreateRecoveryLink)
 }
 
@@ -58,16 +61,21 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 	return nil
 }
 
-// swagger:parameters adminCreateSelfServiceRecoveryLink
+// Create Recovery Link for Identity Parameters
 //
-// nolint
-type adminCreateSelfServiceRecoveryLink struct {
+// swagger:parameters createRecoveryLinkForIdentity
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type createRecoveryLinkForIdentity struct {
 	// in: body
-	Body adminCreateSelfServiceRecoveryLinkBody
+	Body createRecoveryLinkForIdentityBody
 }
 
-// swagger:model adminCreateSelfServiceRecoveryLinkBody
-type adminCreateSelfServiceRecoveryLinkBody struct {
+// Create Recovery Link for Identity Request Body
+//
+// swagger:model createRecoveryLinkForIdentityBody
+type createRecoveryLinkForIdentityBody struct {
 	// Identity to Recover
 	//
 	// The identity's ID you wish to recover.
@@ -77,8 +85,8 @@ type adminCreateSelfServiceRecoveryLinkBody struct {
 
 	// Link Expires In
 	//
-	// The recovery link will expire at that point in time. Defaults to the configuration value of
-	// `selfservice.flows.recovery.request_lifespan`.
+	// The recovery link will expire after that amount of time has passed. Defaults to the configuration value of
+	// `selfservice.methods.code.config.lifespan`.
 	//
 	//
 	// pattern: ^[0-9]+(ns|us|ms|s|m|h)$
@@ -89,9 +97,12 @@ type adminCreateSelfServiceRecoveryLinkBody struct {
 	ExpiresIn string `json:"expires_in"`
 }
 
-// swagger:model selfServiceRecoveryLink
-// nolint
-type selfServiceRecoveryLink struct {
+// Identity Recovery Link
+//
+// Used when an administrator creates a recovery link for an identity.
+//
+// swagger:model recoveryLinkForIdentity
+type recoveryLinkForIdentity struct {
 	// Recovery Link
 	//
 	// This link can be used to recover the account.
@@ -106,7 +117,7 @@ type selfServiceRecoveryLink struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// swagger:route POST /admin/recovery/link v0alpha2 adminCreateSelfServiceRecoveryLink
+// swagger:route POST /admin/recovery/link identity createRecoveryLinkForIdentity
 //
 // # Create a Recovery Link
 //
@@ -121,19 +132,22 @@ type selfServiceRecoveryLink struct {
 //
 //	Schemes: http, https
 //
+//	Security:
+//	  oryAccessToken:
+//
 //	Responses:
-//	  200: selfServiceRecoveryLink
-//	  400: jsonError
-//	  404: jsonError
-//	  500: jsonError
-func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	var p adminCreateSelfServiceRecoveryLinkBody
+//	  200: recoveryLinkForIdentity
+//	  400: errorGeneric
+//	  404: errorGeneric
+//	  default: errorGeneric
+func (s *Strategy) createRecoveryLinkForIdentity(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var p createRecoveryLinkForIdentityBody
 	if err := s.dx.Decode(r, &p, decoderx.HTTPJSONDecoder()); err != nil {
 		s.d.Writer().WriteError(w, r, err)
 		return
 	}
 
-	expiresIn := s.d.Config(r.Context()).SelfServiceLinkMethodLifespan()
+	expiresIn := s.d.Config().SelfServiceLinkMethodLifespan(r.Context())
 	if len(p.ExpiresIn) > 0 {
 		var err error
 		expiresIn, err = time.ParseDuration(p.ExpiresIn)
@@ -148,8 +162,7 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 
-	req, err := recovery.NewFlow(s.d.Config(r.Context()), expiresIn, s.d.GenerateCSRFToken(r),
-		r, s.d.RecoveryStrategies(r.Context()), flow.TypeBrowser)
+	req, err := recovery.NewFlow(s.d.Config(), expiresIn, s.d.GenerateCSRFToken(r), r, s, flow.TypeBrowser)
 	if err != nil {
 		s.d.Writer().WriteError(w, r, err)
 		return
@@ -160,7 +173,7 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 
-	id, err := s.d.IdentityPool().GetIdentity(r.Context(), p.IdentityID)
+	id, err := s.d.IdentityPool().GetIdentity(r.Context(), p.IdentityID, identity.ExpandDefault)
 	if errors.Is(err, sqlcon.ErrNoRows) {
 		s.d.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("The requested identity id does not exist.").WithWrap(err)))
 		return
@@ -169,7 +182,7 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		return
 	}
 
-	token := NewRecoveryToken(id.ID, expiresIn)
+	token := NewAdminRecoveryToken(id.ID, req.ID, expiresIn)
 	if err := s.d.RecoveryTokenPersister().CreateRecoveryToken(r.Context(), token); err != nil {
 		s.d.Writer().WriteError(w, r, err)
 		return
@@ -180,10 +193,10 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		WithSensitiveField("recovery_link_token", token).
 		Info("A recovery link has been created.")
 
-	s.d.Writer().Write(w, r, &selfServiceRecoveryLink{
+	s.d.Writer().Write(w, r, &recoveryLinkForIdentity{
 		ExpiresAt: req.ExpiresAt.UTC(),
 		RecoveryLink: urlx.CopyWithQuery(
-			urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(), recovery.RouteSubmitFlow),
+			urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()), recovery.RouteSubmitFlow),
 			url.Values{
 				"token": {token.Token},
 				"flow":  {req.ID.String()},
@@ -191,9 +204,13 @@ func (s *Strategy) createRecoveryLink(w http.ResponseWriter, r *http.Request, _ 
 		herodot.UnescapedHTML)
 }
 
-// swagger:model submitSelfServiceRecoveryFlowWithLinkMethodBody
-// nolint:deadcode,unused
-type submitSelfServiceRecoveryFlowWithLinkMethodBody struct {
+// Update Recovery Flow with Link Method
+//
+// swagger:model updateRecoveryFlowWithLinkMethod
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type updateRecoveryFlowWithLinkMethod struct {
 	// Email to Recover
 	//
 	// Needs to be set when initiating the flow. If the email is a registered
@@ -207,10 +224,12 @@ type submitSelfServiceRecoveryFlowWithLinkMethodBody struct {
 	// Sending the anti-csrf token is only required for browser login flows.
 	CSRFToken string `form:"csrf_token" json:"csrf_token"`
 
-	// Method supports `link` only right now.
+	// Method is the method that should be used for this recovery flow
+	//
+	// Allowed values are `link` and `code`
 	//
 	// required: true
-	Method string `json:"method"`
+	Method recovery.RecoveryMethod `json:"method"`
 }
 
 func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.Flow) (err error) {
@@ -224,7 +243,7 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 			return s.HandleRecoveryError(w, r, nil, body, err)
 		}
 
-		return s.recoveryUseToken(w, r, body)
+		return s.recoveryUseToken(w, r, f.ID, body)
 	}
 
 	if _, err := s.d.SessionManager().FetchFromRequest(r.Context(), r); err == nil {
@@ -274,7 +293,7 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	sess, err := session.NewActiveSession(id, s.d.Config(r.Context()), time.Now().UTC(), identity.CredentialsTypeRecoveryLink, identity.AuthenticatorAssuranceLevel1)
+	sess, err := session.NewActiveSession(r, id, s.d.Config(), time.Now().UTC(), identity.CredentialsTypeRecoveryLink, identity.AuthenticatorAssuranceLevel1)
 	if err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
@@ -288,18 +307,22 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	// fandom-start - preserve return_to param between flows
-	sf.RequestURL, err = x.TakeOverReturnToParameter(f.RequestURL, sf.RequestURL)
+	returnToURL := s.d.Config().SelfServiceFlowRecoveryReturnTo(r.Context(), nil)
+	returnTo := ""
+	if returnToURL != nil {
+		returnTo = returnToURL.String()
+	}
+
+	sf.RequestURL, err = x.TakeOverReturnToParameter(f.RequestURL, sf.RequestURL, returnTo)
 	if err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
-	// fandom-end
 
 	if err := s.d.RecoveryExecutor().PostRecoveryHook(w, r, f, sess); err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	sf.UI.Messages.Set(text.NewRecoverySuccessful(time.Now().Add(s.d.Config(r.Context()).SelfServiceFlowSettingsPrivilegedSessionMaxAge())))
+	sf.UI.Messages.Set(text.NewRecoverySuccessful(time.Now().Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(r.Context()))))
 	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), sf); err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
@@ -309,10 +332,10 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Strategy) handleAALLevels(w http.ResponseWriter, r *http.Request, sf *settings.Flow, sess *session.Session, id *identity.Identity) error {
-	requiredAAL := s.d.Config(r.Context()).SelfServiceSettingsRequiredAAL()
+	requiredAAL := s.d.Config().SelfServiceSettingsRequiredAAL(r.Context())
 	if requiredAAL == string(identity.AuthenticatorAssuranceLevel1) {
 		if sess.AuthenticatorAssuranceLevel >= identity.AuthenticatorAssuranceLevel1 {
-			http.Redirect(w, r, sf.AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String(), http.StatusSeeOther)
+			http.Redirect(w, r, sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 			return errors.WithStack(flow.ErrCompletedByStrategy)
 		}
 	}
@@ -321,22 +344,22 @@ func (s *Strategy) handleAALLevels(w http.ResponseWriter, r *http.Request, sf *s
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 	if identity.AuthenticatorAssuranceLevel1 >= available {
-		http.Redirect(w, r, sf.AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 		return errors.WithStack(flow.ErrCompletedByStrategy)
 	}
 
 	// Redirect user to login page for 2FA authorization with settings flow as return url
 	// User will provide 2FA authorization and will be redirected to settings flow to update their credentials
-	settingFlowUrl := sf.AppendTo(s.d.Config(r.Context()).SelfServiceFlowSettingsUI()).String()
-	loginPath := urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(), login.RouteInitBrowserFlow)
+	settingFlowUrl := sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String()
+	loginPath := urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()), login.RouteInitBrowserFlow)
 	http.Redirect(w, r, urlx.CopyWithQuery(loginPath, url.Values{"aal": {"aal2"}, "return_to": {settingFlowUrl}}).String(), http.StatusSeeOther)
 	return errors.WithStack(flow.ErrCompletedByStrategy)
 }
 
 // Fandom-end
 
-func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, body *recoverySubmitPayload) error {
-	token, err := s.d.RecoveryTokenPersister().UseRecoveryToken(r.Context(), body.Token)
+func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, fID uuid.UUID, body *recoverySubmitPayload) error {
+	token, err := s.d.RecoveryTokenPersister().UseRecoveryToken(r.Context(), fID, body.Token)
 	if err != nil {
 		if errors.Is(err, sqlcon.ErrNoRows) {
 			return s.retryRecoveryFlowWithMessage(w, r, flow.TypeBrowser, text.NewErrorValidationRecoveryTokenInvalidOrAlreadyUsed())
@@ -347,8 +370,7 @@ func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, body
 
 	var f *recovery.Flow
 	if !token.FlowID.Valid {
-		f, err = recovery.NewFlow(s.d.Config(r.Context()), time.Until(token.ExpiresAt), s.d.GenerateCSRFToken(r),
-			r, s.d.RecoveryStrategies(r.Context()), flow.TypeBrowser)
+		f, err = recovery.NewFlow(s.d.Config(), time.Until(token.ExpiresAt), s.d.GenerateCSRFToken(r), r, s, flow.TypeBrowser)
 		if err != nil {
 			return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 		}
@@ -367,13 +389,13 @@ func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, body
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	recovered, err := s.d.IdentityPool().GetIdentity(r.Context(), token.IdentityID)
+	recovered, err := s.d.IdentityPool().GetIdentity(r.Context(), token.IdentityID, identity.ExpandDefault)
 	if err != nil {
 		return s.HandleRecoveryError(w, r, f, nil, err)
 	}
 
 	// mark address as verified only for a self-service flow
-	if token.FlowID.Valid {
+	if token.TokenType == RecoveryTokenTypeSelfService {
 		if err := s.markRecoveryAddressVerified(w, r, f, recovered, token.RecoveryAddress); err != nil {
 			return s.HandleRecoveryError(w, r, f, body, err)
 		}
@@ -385,7 +407,7 @@ func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, body
 func (s *Strategy) retryRecoveryFlowWithMessage(w http.ResponseWriter, r *http.Request, ft flow.Type, message *text.Message) error {
 	s.d.Logger().WithRequest(r).WithField("message", message).Debug("A recovery flow is being retried because a validation error occurred.")
 
-	req, err := recovery.NewFlow(s.d.Config(r.Context()), s.d.Config(r.Context()).SelfServiceFlowRecoveryRequestLifespan(), s.d.CSRFHandler().RegenerateToken(w, r), r, s.d.RecoveryStrategies(r.Context()), ft)
+	req, err := recovery.NewFlow(s.d.Config(), s.d.Config().SelfServiceFlowRecoveryRequestLifespan(r.Context()), s.d.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
 		return err
 	}
@@ -396,9 +418,9 @@ func (s *Strategy) retryRecoveryFlowWithMessage(w http.ResponseWriter, r *http.R
 	}
 
 	if ft == flow.TypeBrowser {
-		http.Redirect(w, r, req.AppendTo(s.d.Config(r.Context()).SelfServiceFlowRecoveryUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, req.AppendTo(s.d.Config().SelfServiceFlowRecoveryUI(r.Context())).String(), http.StatusSeeOther)
 	} else {
-		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(),
+		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()),
 			recovery.RouteGetFlow), url.Values{"id": {req.ID.String()}}).String(), http.StatusSeeOther)
 	}
 
@@ -408,13 +430,13 @@ func (s *Strategy) retryRecoveryFlowWithMessage(w http.ResponseWriter, r *http.R
 func (s *Strategy) retryRecoveryFlowWithError(w http.ResponseWriter, r *http.Request, ft flow.Type, recErr error) error {
 	s.d.Logger().WithRequest(r).WithError(recErr).Debug("A recovery flow is being retried because a validation error occurred.")
 
-	req, err := recovery.NewFlow(s.d.Config(r.Context()), s.d.Config(r.Context()).SelfServiceFlowRecoveryRequestLifespan(), s.d.CSRFHandler().RegenerateToken(w, r), r, s.d.RecoveryStrategies(r.Context()), ft)
+	req, err := recovery.NewFlow(s.d.Config(), s.d.Config().SelfServiceFlowRecoveryRequestLifespan(r.Context()), s.d.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
 		return err
 	}
 
 	if expired := new(flow.ExpiredError); errors.As(recErr, &expired) {
-		return s.retryRecoveryFlowWithMessage(w, r, ft, text.NewErrorValidationRecoveryFlowExpired(expired.Ago))
+		return s.retryRecoveryFlowWithMessage(w, r, ft, text.NewErrorValidationRecoveryFlowExpired(expired.ExpiredAt))
 	} else {
 		if err := req.UI.ParseError(node.LinkGroup, recErr); err != nil {
 			return err
@@ -426,9 +448,9 @@ func (s *Strategy) retryRecoveryFlowWithError(w http.ResponseWriter, r *http.Req
 	}
 
 	if ft == flow.TypeBrowser {
-		http.Redirect(w, r, req.AppendTo(s.d.Config(r.Context()).SelfServiceFlowRecoveryUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, req.AppendTo(s.d.Config().SelfServiceFlowRecoveryUI(r.Context())).String(), http.StatusSeeOther)
 	} else {
-		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(),
+		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()),
 			recovery.RouteGetFlow), url.Values{"id": {req.ID.String()}}).String(), http.StatusSeeOther)
 	}
 
@@ -445,11 +467,11 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 		return s.HandleRecoveryError(w, r, f, body, schema.NewRequiredError("#/email", "email"))
 	}
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config(r.Context()).DisableAPIFlowEnforcement(), s.d.GenerateCSRFToken, body.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, body.CSRFToken); err != nil {
 		return s.HandleRecoveryError(w, r, f, body, err)
 	}
 
-	if err := s.d.LinkSender().SendRecoveryLink(r.Context(), r, f, identity.VerifiableAddressTypeEmail, body.Email); err != nil {
+	if err := s.d.LinkSender().SendRecoveryLink(r.Context(), f, identity.VerifiableAddressTypeEmail, body.Email); err != nil {
 		if !errors.Is(err, ErrUnknownAddress) {
 			return s.HandleRecoveryError(w, r, f, body, err)
 		}
@@ -459,7 +481,7 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	f.UI.GetNodes().Upsert(
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute),
+		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 	)
 
 	f.Active = sqlxx.NullString(s.RecoveryNodeGroup())
@@ -505,7 +527,7 @@ func (s *Strategy) HandleRecoveryError(w http.ResponseWriter, r *http.Request, r
 		req.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 		req.UI.GetNodes().Upsert(
 			// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-			node.NewInputField("email", email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute),
+			node.NewInputField("email", email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 		)
 	}
 

@@ -1,6 +1,10 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package verification_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,6 +15,7 @@ import (
 
 	"github.com/ory/x/jsonx"
 
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/selfservice/flow/verification"
 
@@ -24,6 +29,7 @@ import (
 )
 
 func TestFlow(t *testing.T) {
+	ctx := context.Background()
 	conf, _ := internal.NewFastRegistryWithMocks(t)
 
 	must := func(r *verification.Flow, err error) *verification.Flow {
@@ -54,7 +60,7 @@ func TestFlow(t *testing.T) {
 		_, err := verification.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=https://not-allowed/foobar"}, Host: "ory.sh"}, nil, flow.TypeBrowser)
 		require.Error(t, err)
 
-		_, err = verification.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(), "/self-service/login/browser").String()}, Host: "ory.sh"}, nil, flow.TypeBrowser)
+		_, err = verification.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(ctx), "/self-service/login/browser").String()}, Host: "ory.sh"}, nil, flow.TypeBrowser)
 		require.NoError(t, err)
 	})
 
@@ -121,8 +127,9 @@ func TestFlowEncodeJSON(t *testing.T) {
 }
 
 func TestFromOldFlow(t *testing.T) {
+	ctx := context.Background()
 	conf := internal.NewConfigurationWithDefaults(t)
-	r := http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(), "/self-service/login/browser").String()}, Host: "ory.sh"}
+	r := http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(ctx), "/self-service/login/browser").String()}, Host: "ory.sh"}
 	for _, ft := range []flow.Type{
 		flow.TypeAPI,
 		flow.TypeBrowser,
@@ -130,9 +137,75 @@ func TestFromOldFlow(t *testing.T) {
 		t.Run(fmt.Sprintf("case=original flow is %s", ft), func(t *testing.T) {
 			f, err := verification.NewFlow(conf, 0, "csrf", &r, nil, ft)
 			require.NoError(t, err)
-			nf, err := verification.FromOldFlow(conf, time.Duration(time.Hour), f.CSRFToken, &r, []verification.Strategy{}, f)
+			nf, err := verification.FromOldFlow(conf, time.Duration(time.Hour), f.CSRFToken, &r, nil, f)
 			require.NoError(t, err)
 			require.Equal(t, flow.TypeBrowser, nf.Type)
 		})
 	}
+}
+
+func TestContinueURL(t *testing.T) {
+	const globalReturnTo = "https://ory.sh/global-return-to"
+	const localReturnTo = "https://ory.sh/local-return-to"
+	const flowReturnTo = "https://ory.sh/flow-return-to"
+
+	for _, tc := range []struct {
+		desc       string
+		prep       func(conf *config.Config)
+		requestURL string
+		expect     string
+	}{
+		{
+			desc: "return_to has precedence over global return to",
+			prep: func(conf *config.Config) {
+				conf.MustSet(context.Background(), config.ViperKeyURLsAllowedReturnToDomains, []string{localReturnTo})
+			},
+			requestURL: fmt.Sprintf("http://kratos:4433/verification?return_to=%s", localReturnTo),
+			expect:     localReturnTo,
+		},
+		{
+			desc:       "with return_to not allowed",
+			requestURL: fmt.Sprintf("http://kratos:4433/verification?return_to=%s", localReturnTo),
+			expect:     globalReturnTo,
+		},
+		{
+			desc:       "with invalid request url",
+			requestURL: string([]byte{0x7f}), // 0x7f is an ASCII control char, and fails URL validation
+			expect:     globalReturnTo,
+		},
+		{
+			desc: "flow return to has precedence over global return to",
+			prep: func(conf *config.Config) {
+				conf.MustSet(context.Background(), config.ViperKeySelfServiceVerificationBrowserDefaultReturnTo, flowReturnTo)
+			},
+			requestURL: "http://kratos:4433/verification",
+			expect:     flowReturnTo,
+		},
+		{
+			desc: "return_to has precedence over flow return to",
+			prep: func(conf *config.Config) {
+				conf.MustSet(context.Background(), config.ViperKeySelfServiceVerificationBrowserDefaultReturnTo, flowReturnTo)
+				conf.MustSet(context.Background(), config.ViperKeyURLsAllowedReturnToDomains, []string{localReturnTo})
+			},
+			requestURL: fmt.Sprintf("http://kratos:4433/verification?return_to=%s", localReturnTo),
+			expect:     localReturnTo,
+		},
+	} {
+		t.Run(fmt.Sprintf("case=%s", tc.desc), func(t *testing.T) {
+			conf := internal.NewConfigurationWithDefaults(t)
+			conf.MustSet(context.Background(), config.ViperKeySelfServiceBrowserDefaultReturnTo, globalReturnTo)
+			if tc.prep != nil {
+				tc.prep(conf)
+			}
+			flow := verification.Flow{
+				RequestURL: tc.requestURL,
+			}
+
+			url := flow.ContinueURL(context.Background(), conf)
+			require.NotNil(t, url)
+
+			require.Equal(t, tc.expect, url.String())
+		})
+	}
+
 }

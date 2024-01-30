@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package identity
 
 import (
@@ -5,16 +8,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ory/go-convenience/stringslice"
 	"github.com/ory/jsonschema/v3"
 	"github.com/ory/x/sqlxx"
+	"github.com/ory/x/stringslice"
 
 	"github.com/ory/kratos/schema"
 )
 
 type SchemaExtensionCredentials struct {
 	i *Identity
-	v []string
+	v map[CredentialsType][]string
 	l sync.Mutex
 	// fandom-start
 	caseSensitiveIds bool
@@ -34,20 +37,20 @@ func (r *SchemaExtensionCredentials) setIdentifier(ct CredentialsType, value int
 			Config:      sqlxx.JSONRawMessage{},
 		}
 	}
+	if r.v == nil {
+		r.v = make(map[CredentialsType][]string)
+	}
 
 	// fandom-start
-	var id string
 	if !r.caseSensitiveIds {
-		id = strings.ToLower(fmt.Sprintf("%s", value))
+		r.v[ct] = stringslice.Unique(append(r.v[ct], strings.ToLower(fmt.Sprintf("%s", value))))
 	} else {
-		id = fmt.Sprintf("%s", value)
+		r.v[ct] = stringslice.Unique(append(r.v[ct], fmt.Sprintf("%s", value)))
 	}
 	// fandom-end
 
-	r.v = stringslice.Unique(append(r.v, id))
-	cred.Identifiers = r.v
+	cred.Identifiers = r.v[ct]
 	r.i.SetCredentials(ct, *cred)
-
 }
 
 func (r *SchemaExtensionCredentials) Run(_ jsonschema.ValidationContext, s schema.ExtensionConfig, value interface{}) error {

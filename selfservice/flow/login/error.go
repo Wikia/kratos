@@ -1,9 +1,16 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package login
 
 import (
 	"net/http"
 
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ory/kratos/selfservice/sessiontokenexchange"
 	"github.com/ory/kratos/ui/node"
+	"github.com/ory/kratos/x/events"
 
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/text"
@@ -35,6 +42,7 @@ type (
 		x.WriterProvider
 		x.LoggingProvider
 		config.Provider
+		sessiontokenexchange.PersistenceProvider
 
 		FlowPersistenceProvider
 		HandlerProvider
@@ -62,7 +70,7 @@ func (s *ErrorHandler) PrepareReplacementForExpiredFlow(w http.ResponseWriter, r
 		return nil, err
 	}
 
-	a.UI.Messages.Add(text.NewErrorValidationLoginFlowExpired(e.Ago))
+	a.UI.Messages.Add(text.NewErrorValidationLoginFlowExpired(e.ExpiredAt))
 	if err := s.d.LoginFlowPersister().UpdateLoginFlow(r.Context(), a); err != nil {
 		return nil, err
 	}
@@ -78,9 +86,12 @@ func (s *ErrorHandler) WriteFlowError(w http.ResponseWriter, r *http.Request, f 
 		Info("Encountered self-service login error.")
 
 	if f == nil {
+		trace.SpanFromContext(r.Context()).AddEvent(events.NewLoginFailed(r.Context(), "", "", false))
 		s.forward(w, r, nil, err)
 		return
 	}
+
+	trace.SpanFromContext(r.Context()).AddEvent(events.NewLoginFailed(r.Context(), string(f.Type), string(f.RequestedAAL), f.Refresh))
 
 	if expired, inner := s.PrepareReplacementForExpiredFlow(w, r, f, err); inner != nil {
 		s.WriteFlowError(w, r, f, group, inner)
@@ -89,7 +100,7 @@ func (s *ErrorHandler) WriteFlowError(w http.ResponseWriter, r *http.Request, f 
 		if f.Type == flow.TypeAPI || x.IsJSONRequest(r) {
 			s.d.Writer().WriteError(w, r, expired)
 		} else {
-			http.Redirect(w, r, expired.GetFlow().AppendTo(s.d.Config(r.Context()).SelfServiceFlowLoginUI()).String(), http.StatusSeeOther)
+			http.Redirect(w, r, expired.GetFlow().AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context())).String(), http.StatusSeeOther)
 		}
 		return
 	}
@@ -111,7 +122,13 @@ func (s *ErrorHandler) WriteFlowError(w http.ResponseWriter, r *http.Request, f 
 	}
 
 	if f.Type == flow.TypeBrowser && !x.IsJSONRequest(r) {
-		http.Redirect(w, r, f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowLoginUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, f.AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context())).String(), http.StatusSeeOther)
+		return
+	}
+
+	_, hasCode, _ := s.d.SessionTokenExchangePersister().CodeForFlow(r.Context(), f.ID)
+	if f.Type == flow.TypeAPI && hasCode && group == node.OpenIDConnectGroup {
+		http.Redirect(w, r, f.ReturnTo, http.StatusSeeOther)
 		return
 	}
 

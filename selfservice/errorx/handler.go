@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package errorx
 
 import (
@@ -52,9 +55,11 @@ func (h *Handler) RegisterAdminRoutes(public *x.RouterAdmin) {
 	public.GET(RouteGet, x.RedirectToPublicRoute(h.r))
 }
 
-// nolint:deadcode,unused
-// swagger:parameters getSelfServiceError
-type getSelfServiceError struct {
+// swagger:parameters getFlowError
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type getFlowError struct {
 	// Error is the error's ID
 	//
 	// in: query
@@ -62,9 +67,9 @@ type getSelfServiceError struct {
 	ID string `json:"id"`
 }
 
-// swagger:route GET /self-service/errors v0alpha2 getSelfServiceError
+// swagger:route GET /self-service/errors frontend getFlowError
 //
-// # Get Self-Service Errors
+// # Get User-Flow Errors
 //
 // This endpoint returns the error associated with a user-facing self service errors.
 //
@@ -80,10 +85,10 @@ type getSelfServiceError struct {
 //	Schemes: http, https
 //
 //	Responses:
-//	  200: selfServiceError
-//	  403: jsonError
-//	  404: jsonError
-//	  500: jsonError
+//	  200: flowError
+//	  403: errorGeneric
+//	  404: errorGeneric
+//	  500: errorGeneric
 func (h *Handler) publicFetchError(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	if err := h.fetchError(w, r); err != nil {
 		h.r.Writer().WriteError(w, r, err)
@@ -102,7 +107,7 @@ func (h *Handler) fetchError(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	es, err := h.r.SelfServiceErrorPersister().Read(r.Context(), x.ParseUUID(id))
+	es, err := h.r.SelfServiceErrorPersister().ReadErrorContainer(r.Context(), x.ParseUUID(id))
 	if err != nil {
 		return err
 	}

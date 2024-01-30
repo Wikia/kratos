@@ -1,6 +1,10 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package login_test
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -9,10 +13,12 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+
 	"github.com/tidwall/gjson"
 
 	"github.com/ory/x/jsonx"
 
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 
 	"github.com/ory/kratos/internal"
@@ -41,6 +47,7 @@ func TestFakeFlow(t *testing.T) {
 }
 
 func TestNewFlow(t *testing.T) {
+	ctx := context.Background()
 	conf, _ := internal.NewFastRegistryWithMocks(t)
 
 	t.Run("type=aal", func(t *testing.T) {
@@ -59,7 +66,7 @@ func TestNewFlow(t *testing.T) {
 		_, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=https://not-allowed/foobar"}, Host: "ory.sh"}, flow.TypeBrowser)
 		require.Error(t, err)
 
-		_, err = login.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(), "/self-service/login/browser").String()}, Host: "ory.sh"}, flow.TypeBrowser)
+		_, err = login.NewFlow(conf, 0, "csrf", &http.Request{URL: &url.URL{Path: "/", RawQuery: "return_to=" + urlx.AppendPaths(conf.SelfPublicURL(ctx), "/self-service/login/browser").String()}, Host: "ory.sh"}, flow.TypeBrowser)
 		require.NoError(t, err)
 	})
 
@@ -108,6 +115,18 @@ func TestNewFlow(t *testing.T) {
 			assert.Equal(t, "http://ory.sh/", r.RequestURL)
 		})
 	})
+
+	t.Run("should parse login_challenge when Hydra is configured", func(t *testing.T) {
+		_, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.sh/?login_challenge=badee1"), Host: "ory.sh"}, flow.TypeBrowser)
+		require.Error(t, err)
+
+		conf.MustSet(ctx, config.ViperKeyOAuth2ProviderURL, "https://hydra")
+
+		r, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.sh/?login_challenge=8aadcb8fc1334186a84c4da9813356d9"), Host: "ory.sh"}, flow.TypeBrowser)
+		require.NoError(t, err)
+		assert.Equal(t, "8aadcb8fc1334186a84c4da9813356d9", string(r.OAuth2LoginChallenge))
+	})
+
 }
 
 func TestFlow(t *testing.T) {
@@ -156,4 +175,14 @@ func TestFlowEncodeJSON(t *testing.T) {
 	assert.EqualValues(t, "", gjson.Get(jsonx.TestMarshalJSONString(t, &login.Flow{RequestURL: "https://foo.bar?foo=bar"}), "return_to").String())
 	assert.EqualValues(t, "/bar", gjson.Get(jsonx.TestMarshalJSONString(t, &login.Flow{RequestURL: "https://foo.bar?return_to=/bar"}), "return_to").String())
 	assert.EqualValues(t, "/bar", gjson.Get(jsonx.TestMarshalJSONString(t, login.Flow{RequestURL: "https://foo.bar?return_to=/bar"}), "return_to").String())
+}
+
+func TestFlowDontOverrideReturnTo(t *testing.T) {
+	f := &login.Flow{ReturnTo: "/foo"}
+	f.SetReturnTo()
+	assert.Equal(t, "/foo", f.ReturnTo)
+
+	f = &login.Flow{RequestURL: "https://foo.bar?return_to=/bar"}
+	f.SetReturnTo()
+	assert.Equal(t, "/bar", f.ReturnTo)
 }

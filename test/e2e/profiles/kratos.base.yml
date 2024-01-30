@@ -10,17 +10,21 @@ selfservice:
   default_browser_return_url: http://localhost:4455/
   allowed_return_urls:
     - http://localhost:4455
+    - http://localhost:4457/Callback
+    - exp://example.com/Callback
     - https://www.ory.sh/
     - https://example.org/
+    - https://www.example.org/
   methods:
     link:
+      config:
+        lifespan: 1h
+    code:
       config:
         lifespan: 1h
 
 serve:
   public:
-    # We are using a proxy to make cypress not fail with different origins which is why we use this URL here.
-    # See ../proxy
     base_url: http://localhost:4455/
     cors:
       enabled: true
@@ -35,9 +39,11 @@ serve:
     base_url: http://kratos:4434/
 
 hashers:
-  algorithm: bcrypt
-  bcrypt:
-    cost: 4
+  algorithm: argon2
+  argon2:
+    memory: 1KB
+    iterations: 1
+    parallelism: 1
 
 courier:
   smtp:

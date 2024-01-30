@@ -1,6 +1,10 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package link
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"time"
@@ -12,6 +16,7 @@ import (
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/verification"
 	"github.com/ory/kratos/text"
+	"github.com/ory/kratos/ui/container"
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/decoderx"
@@ -21,7 +26,7 @@ import (
 )
 
 func (s *Strategy) VerificationStrategyID() string {
-	return verification.StrategyVerificationLinkName
+	return string(verification.VerificationStrategyLink)
 }
 
 func (s *Strategy) RegisterPublicVerificationRoutes(public *x.RouterPublic) {
@@ -75,16 +80,20 @@ func (s *Strategy) handleVerificationError(w http.ResponseWriter, r *http.Reques
 		f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 		f.UI.GetNodes().Upsert(
 			// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-			node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute),
+			node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 		)
 	}
 
 	return err
 }
 
-// swagger:model submitSelfServiceVerificationFlowWithLinkMethodBody
-// nolint:deadcode,unused
-type submitSelfServiceVerificationFlowWithLinkMethodBody struct {
+// Update Verification Flow with Link Method
+//
+// swagger:model updateVerificationFlowWithLinkMethod
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type updateVerificationFlowWithLinkMethod struct {
 	// Email to Verify
 	//
 	// Needs to be set when initiating the flow. If the email is a registered
@@ -98,12 +107,12 @@ type submitSelfServiceVerificationFlowWithLinkMethodBody struct {
 	// Sending the anti-csrf token is only required for browser login flows.
 	CSRFToken string `form:"csrf_token" json:"csrf_token"`
 
-	// Method supports `link` only right now.
+	// Method is the method that should be used for this verification flow
 	//
-	// enum:
-	// - link
+	// Allowed values are `link` and `code`
+	//
 	// required: true
-	Method string `json:"method"`
+	Method verification.VerificationStrategy `json:"method"`
 }
 
 func (s *Strategy) Verify(w http.ResponseWriter, r *http.Request, f *verification.Flow) (err error) {
@@ -117,7 +126,7 @@ func (s *Strategy) Verify(w http.ResponseWriter, r *http.Request, f *verificatio
 			return s.handleVerificationError(w, r, nil, body, err)
 		}
 
-		return s.verificationUseToken(w, r, body)
+		return s.verificationUseToken(w, r, body, f)
 	}
 
 	if err := flow.MethodEnabledAndAllowed(r.Context(), s.VerificationStrategyID(), body.Method, s.d); err != nil {
@@ -152,7 +161,7 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 		return s.handleVerificationError(w, r, f, body, schema.NewRequiredError("#/email", "email"))
 	}
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config(r.Context()).DisableAPIFlowEnforcement(), s.d.GenerateCSRFToken, body.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, body.CSRFToken); err != nil {
 		return s.handleVerificationError(w, r, f, body, err)
 	}
 
@@ -166,7 +175,7 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
 	f.UI.GetNodes().Upsert(
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true, Value: body.Body.Email}
-		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute),
+		node.NewInputField("email", body.Email, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 	)
 
 	f.Active = sqlxx.NullString(s.VerificationNodeGroup())
@@ -179,16 +188,8 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 	return nil
 }
 
-// nolint:deadcode,unused
-// swagger:parameters selfServiceBrowserVerify
-type selfServiceBrowserVerifyParameters struct {
-	// required: true
-	// in: query
-	Token string `json:"token"`
-}
-
-func (s *Strategy) verificationUseToken(w http.ResponseWriter, r *http.Request, body *verificationSubmitPayload) error {
-	token, err := s.d.VerificationTokenPersister().UseVerificationToken(r.Context(), body.Token)
+func (s *Strategy) verificationUseToken(w http.ResponseWriter, r *http.Request, body *verificationSubmitPayload, f *verification.Flow) error {
+	token, err := s.d.VerificationTokenPersister().UseVerificationToken(r.Context(), f.ID, body.Token)
 	if err != nil {
 		if errors.Is(err, sqlcon.ErrNoRows) {
 			return s.retryVerificationFlowWithMessage(w, r, flow.TypeBrowser, text.NewErrorValidationVerificationTokenInvalidOrAlreadyUsed())
@@ -197,37 +198,11 @@ func (s *Strategy) verificationUseToken(w http.ResponseWriter, r *http.Request, 
 		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	var f *verification.Flow
-	if !token.FlowID.Valid {
-		f, err = verification.NewFlow(s.d.Config(r.Context()), s.d.Config(r.Context()).SelfServiceFlowVerificationRequestLifespan(), s.d.GenerateCSRFToken(r), r, s.d.VerificationStrategies(r.Context()), flow.TypeBrowser)
-		if err != nil {
-			return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
-		}
-
-		if err := s.d.VerificationFlowPersister().CreateVerificationFlow(r.Context(), f); err != nil {
-			return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
-		}
-	} else {
-		f, err = s.d.VerificationFlowPersister().GetVerificationFlow(r.Context(), token.FlowID.UUID)
-		if err != nil {
-			return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
-		}
-	}
-
 	if err := token.Valid(); err != nil {
 		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	f.UI.Messages.Clear()
-	f.State = verification.StatePassedChallenge
-	// See https://github.com/ory/kratos/issues/1547
-	f.SetCSRFToken(flow.GetCSRFToken(s.d, w, r, f.Type))
-	f.UI.Messages.Set(text.NewInfoSelfServiceVerificationSuccessful())
-	if err := s.d.VerificationFlowPersister().UpdateVerificationFlow(r.Context(), f); err != nil {
-		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
-	}
-
-	i, err := s.d.IdentityPool().GetIdentity(r.Context(), token.VerifiableAddress.IdentityID)
+	i, err := s.d.IdentityPool().GetIdentity(r.Context(), token.VerifiableAddress.IdentityID, identity.ExpandDefault)
 	if err != nil {
 		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
@@ -245,35 +220,39 @@ func (s *Strategy) verificationUseToken(w http.ResponseWriter, r *http.Request, 
 		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	defaultRedirectURL := s.d.Config(r.Context()).SelfServiceFlowVerificationReturnTo(f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowVerificationUI()))
+	returnTo := f.ContinueURL(r.Context(), s.d.Config())
 
-	verificationRequestURL, err := urlx.Parse(f.GetRequestURL())
-	if err != nil {
-		s.d.Logger().Debugf("error parsing verification requestURL: %s\n", err)
-		http.Redirect(w, r, defaultRedirectURL.String(), http.StatusSeeOther)
-		return errors.WithStack(flow.ErrCompletedByStrategy)
+	f.UI.
+		Nodes.
+		Append(node.NewAnchorField("continue", returnTo.String(), node.CodeGroup, text.NewInfoNodeLabelContinue()).
+			WithMetaLabel(text.NewInfoNodeLabelContinue()))
+
+	f.UI = &container.Container{
+		Method: "GET",
+		Action: returnTo.String(),
 	}
-	verificationRequest := http.Request{URL: verificationRequestURL}
+	f.UI.Messages.Clear()
+	f.State = verification.StatePassedChallenge
+	// See https://github.com/ory/kratos/issues/1547
+	f.SetCSRFToken(flow.GetCSRFToken(s.d, w, r, f.Type))
+	f.UI.Messages.Set(text.NewInfoSelfServiceVerificationSuccessful())
+	f.UI.
+		Nodes.
+		Append(node.NewAnchorField("continue", returnTo.String(), node.LinkGroup, text.NewInfoNodeLabelContinue()).
+			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
-	returnTo, err := x.SecureRedirectTo(&verificationRequest, defaultRedirectURL,
-		x.SecureRedirectAllowSelfServiceURLs(s.d.Config(r.Context()).SelfPublicURL()),
-		x.SecureRedirectAllowURLs(s.d.Config(r.Context()).SelfServiceBrowserAllowedReturnToDomains()),
-	)
-	if err != nil {
-		s.d.Logger().Debugf("error parsing redirectTo from verification: %s\n", err)
-		http.Redirect(w, r, defaultRedirectURL.String(), http.StatusSeeOther)
-		return errors.WithStack(flow.ErrCompletedByStrategy)
+	if err := s.d.VerificationFlowPersister().UpdateVerificationFlow(r.Context(), f); err != nil {
+		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	http.Redirect(w, r, f.AppendTo(returnTo).String(), http.StatusSeeOther)
-	return errors.WithStack(flow.ErrCompletedByStrategy)
+	return nil
 }
 
 func (s *Strategy) retryVerificationFlowWithMessage(w http.ResponseWriter, r *http.Request, ft flow.Type, message *text.Message) error {
 	s.d.Logger().WithRequest(r).WithField("message", message).Debug("A verification flow is being retried because a validation error occurred.")
 
-	f, err := verification.NewFlow(s.d.Config(r.Context()),
-		s.d.Config(r.Context()).SelfServiceFlowVerificationRequestLifespan(), s.d.CSRFHandler().RegenerateToken(w, r), r, s.d.VerificationStrategies(r.Context()), ft)
+	f, err := verification.NewFlow(s.d.Config(),
+		s.d.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), s.d.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
 		return s.handleVerificationError(w, r, f, nil, err)
 	}
@@ -284,9 +263,9 @@ func (s *Strategy) retryVerificationFlowWithMessage(w http.ResponseWriter, r *ht
 	}
 
 	if ft == flow.TypeBrowser {
-		http.Redirect(w, r, f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowVerificationUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, f.AppendTo(s.d.Config().SelfServiceFlowVerificationUI(r.Context())).String(), http.StatusSeeOther)
 	} else {
-		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(),
+		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()),
 			verification.RouteGetFlow), url.Values{"id": {f.ID.String()}}).String(), http.StatusSeeOther)
 	}
 
@@ -296,14 +275,14 @@ func (s *Strategy) retryVerificationFlowWithMessage(w http.ResponseWriter, r *ht
 func (s *Strategy) retryVerificationFlowWithError(w http.ResponseWriter, r *http.Request, ft flow.Type, verErr error) error {
 	s.d.Logger().WithRequest(r).WithError(verErr).Debug("A verification flow is being retried because an error occurred.")
 
-	f, err := verification.NewFlow(s.d.Config(r.Context()),
-		s.d.Config(r.Context()).SelfServiceFlowVerificationRequestLifespan(), s.d.CSRFHandler().RegenerateToken(w, r), r, s.d.VerificationStrategies(r.Context()), ft)
+	f, err := verification.NewFlow(s.d.Config(),
+		s.d.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), s.d.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
 		return s.handleVerificationError(w, r, f, nil, err)
 	}
 
 	if expired := new(flow.ExpiredError); errors.As(verErr, &expired) {
-		return s.retryVerificationFlowWithMessage(w, r, ft, text.NewErrorValidationVerificationFlowExpired(expired.Ago))
+		return s.retryVerificationFlowWithMessage(w, r, ft, text.NewErrorValidationVerificationFlowExpired(expired.ExpiredAt))
 	} else {
 		if err := f.UI.ParseError(node.LinkGroup, verErr); err != nil {
 			return err
@@ -315,11 +294,21 @@ func (s *Strategy) retryVerificationFlowWithError(w http.ResponseWriter, r *http
 	}
 
 	if ft == flow.TypeBrowser {
-		http.Redirect(w, r, f.AppendTo(s.d.Config(r.Context()).SelfServiceFlowVerificationUI()).String(), http.StatusSeeOther)
+		http.Redirect(w, r, f.AppendTo(s.d.Config().SelfServiceFlowVerificationUI(r.Context())).String(), http.StatusSeeOther)
 	} else {
-		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config(r.Context()).SelfPublicURL(),
+		http.Redirect(w, r, urlx.CopyWithQuery(urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()),
 			verification.RouteGetFlow), url.Values{"id": {f.ID.String()}}).String(), http.StatusSeeOther)
 	}
 
 	return errors.WithStack(flow.ErrCompletedByStrategy)
+}
+
+func (s *Strategy) SendVerificationEmail(ctx context.Context, f *verification.Flow, i *identity.Identity, a *identity.VerifiableAddress) error {
+
+	token := NewSelfServiceVerificationToken(a, f, s.d.Config().SelfServiceLinkMethodLifespan(ctx))
+	if err := s.d.VerificationTokenPersister().CreateVerificationToken(ctx, token); err != nil {
+		return err
+	}
+
+	return s.d.LinkSender().SendVerificationTokenTo(ctx, f, i, a, token)
 }

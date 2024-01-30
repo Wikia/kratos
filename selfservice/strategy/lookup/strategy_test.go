@@ -1,6 +1,10 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package lookup_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -15,6 +19,7 @@ import (
 )
 
 func TestCountActiveFirstFactorCredentials(t *testing.T) {
+	ctx, _ := context.WithCancel(context.Background())
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	strategy := lookup.NewStrategy(reg)
 
@@ -26,12 +31,12 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 
 	t.Run("multi factor", func(t *testing.T) {
 		for k, tc := range []struct {
-			in       identity.CredentialsCollection
+			in       map[identity.CredentialsType]identity.Credentials
 			config   []byte
 			expected int
 		}{
 			{
-				in: identity.CredentialsCollection{{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
 					Type:   strategy.ID(),
 					Config: []byte{},
 				}},
@@ -39,7 +44,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 				expected: 0,
 			},
 			{
-				in: identity.CredentialsCollection{{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
 					Type:   strategy.ID(),
 					Config: []byte(`{"recovery_codes": []}`),
 				}},
@@ -47,7 +52,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 				expected: 0,
 			},
 			{
-				in: identity.CredentialsCollection{{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
 					Type:        strategy.ID(),
 					Identifiers: []string{"foo"},
 					Config:      []byte(`{"recovery_codes": [{}]}`),
@@ -56,7 +61,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 				expected: 1,
 			},
 			{
-				in: identity.CredentialsCollection{{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
 					Type:   strategy.ID(),
 					Config: []byte(`{}`),
 				}},
@@ -64,13 +69,13 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 				expected: 0,
 			},
 			{
-				in:       identity.CredentialsCollection{{}, {}},
+				in:       nil,
 				config:   []byte(`{}`),
 				expected: 0,
 			},
 			// fandom-start
 			{
-				in: identity.CredentialsCollection{{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
 					Type:        strategy.ID(),
 					Identifiers: []string{"foo"},
 					Config:      []byte(`{"recovery_codes": [{}]}`),
@@ -81,13 +86,8 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 			// fandom-end
 		} {
 			t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
-				cc := map[identity.CredentialsType]identity.Credentials{}
-				for _, c := range tc.in {
-					cc[c.Type] = c
-				}
-
-				conf.MustSet(fmt.Sprintf("%s.%s.config", config.ViperKeySelfServiceStrategyConfig, strategy.ID()), tc.config)
-				actual, err := strategy.CountActiveMultiFactorCredentials(cc)
+				conf.MustSet(ctx, fmt.Sprintf("%s.%s.config", config.ViperKeySelfServiceStrategyConfig, strategy.ID()), tc.config)
+				actual, err := strategy.CountActiveMultiFactorCredentials(tc.in)
 				require.NoError(t, err)
 				assert.Equal(t, tc.expected, actual)
 			})

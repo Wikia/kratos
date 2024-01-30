@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package identity
 
 import (
@@ -24,8 +27,7 @@ import (
 
 func TestNewIdentity(t *testing.T) {
 	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
-	assert.NotEmpty(t, i.ID)
-	// assert.NotEmpty(t, i.Metadata)
+	assert.Equal(t, uuid.Nil, i.ID)
 	assert.NotEmpty(t, i.Traits)
 	assert.NotNil(t, i.Credentials)
 	assert.True(t, i.IsActive())
@@ -169,6 +171,15 @@ func TestMarshalIdentityWithCredentialsWhenCredentialsNil(t *testing.T) {
 	assert.False(t, gjson.Get(b.String(), "credentials").Exists())
 }
 
+func TestMarshalIdentityWithAdminMetadata(t *testing.T) {
+	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
+	i.MetadataAdmin = []byte(`{"some":"metadata"}`)
+
+	var b bytes.Buffer
+	require.Nil(t, json.NewEncoder(&b).Encode(WithAdminMetadataInJSON(*i)))
+	assert.Equal(t, "metadata", gjson.GetBytes(i.MetadataAdmin, "some").String(), "Original metadata_admin should not be touched by marshalling")
+}
+
 func TestMarshalIdentityWithCredentialsMetadata(t *testing.T) {
 	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
 	credentials := map[CredentialsType]Credentials{
@@ -188,7 +199,7 @@ func TestMarshalIdentityWithCredentialsMetadata(t *testing.T) {
 
 	assert.JSONEq(t, "{\"password\":{\"type\":\"password\",\"identifiers\":null,\"updated_at\":\"0001-01-01T00:00:00Z\",\"created_at\":\"0001-01-01T00:00:00Z\",\"version\":0}}", credentialsInJson.Raw)
 	assert.Equal(t, credentials, i.Credentials, "Original credentials should not be touched by marshalling")
-	assert.Equal(t, "metadata", gjson.GetBytes(i.MetadataAdmin, "some").String(), "Original credentials should not be touched by marshalling")
+	assert.Equal(t, "metadata", gjson.GetBytes(i.MetadataAdmin, "some").String(), "Original metadata_admin should not be touched by marshalling")
 }
 
 func TestMarshalIdentityWithAll(t *testing.T) {
@@ -217,25 +228,143 @@ func TestValidateNID(t *testing.T) {
 	nid := x.NewUUID()
 	for k, tc := range []struct {
 		i           *Identity
+		expect      *Identity
 		expectedErr bool
 	}{
+		{i: &Identity{}, expectedErr: true},
 		{i: &Identity{NID: nid}},
-		{i: &Identity{NID: nid, RecoveryAddresses: []RecoveryAddress{{NID: x.NewUUID()}}}, expectedErr: true},
-		{i: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: x.NewUUID()}}}, expectedErr: true},
-		{i: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: x.NewUUID()}}}, expectedErr: true},
-		{i: &Identity{NID: nid, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: x.NewUUID()}}}, expectedErr: true},
-		{i: &Identity{NID: nid, RecoveryAddresses: []RecoveryAddress{{NID: x.NewUUID()}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}}, expectedErr: true},
-		{i: &Identity{NID: nid, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}}, expectedErr: false},
-		{i: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: x.NewUUID()}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}}, expectedErr: true},
-		{i: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}}},
+		{
+			i:      &Identity{NID: nid, RecoveryAddresses: []RecoveryAddress{{NID: x.NewUUID()}}},
+			expect: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{}, RecoveryAddresses: []RecoveryAddress{}},
+		},
+		{
+			i:      &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: x.NewUUID()}}},
+			expect: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{}, RecoveryAddresses: []RecoveryAddress{}},
+		},
+		{
+			i:      &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: x.NewUUID()}}},
+			expect: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{}, VerifiableAddresses: []VerifiableAddress{}, RecoveryAddresses: []RecoveryAddress{}},
+		},
+		{
+			i:      &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: x.NewUUID()}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}},
+			expect: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}},
+		},
+		{
+			i:      &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: x.NewUUID()}}},
+			expect: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: nid}}, RecoveryAddresses: []RecoveryAddress{}},
+		},
+		{
+			i:      &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}},
+			expect: &Identity{NID: nid, VerifiableAddresses: []VerifiableAddress{{NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}},
+		},
+		{
+			i:      &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: x.NewUUID()}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}},
+			expect: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}},
+		},
+		{
+			i:      &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}},
+			expect: &Identity{NID: nid, Credentials: map[CredentialsType]Credentials{CredentialsTypePassword: {NID: nid}}, RecoveryAddresses: []RecoveryAddress{{NID: nid}}, VerifiableAddresses: []VerifiableAddress{{NID: nid}}},
+		},
 	} {
 		t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
-			err := tc.i.ValidateNID()
+			err := tc.i.Validate()
 			if tc.expectedErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
+				if tc.expect != nil {
+					assert.EqualValues(t, tc.expect, tc.i)
+				}
 			}
 		})
 	}
+}
+
+// TestRecoveryAddresses tests the CollectRecoveryAddresses are collected from all identities.
+func TestRecoveryAddresses(t *testing.T) {
+	var addresses []RecoveryAddress
+
+	for i := 0; i < 10; i++ {
+		addresses = append(addresses, RecoveryAddress{
+			Value: fmt.Sprintf("address-%d", i),
+		})
+	}
+
+	id1 := &Identity{RecoveryAddresses: addresses[:5]}
+	id2 := &Identity{}
+	id3 := &Identity{RecoveryAddresses: addresses[5:]}
+
+	assert.Equal(t, addresses, CollectRecoveryAddresses([]*Identity{id1, id2, id3}))
+}
+
+// TestVerifiableAddresses tests the VerfifableAddresses are collected from all identities.
+func TestVerifiableAddresses(t *testing.T) {
+	var addresses []VerifiableAddress
+
+	for i := 0; i < 10; i++ {
+		addresses = append(addresses, VerifiableAddress{
+			Value: fmt.Sprintf("address-%d", i),
+		})
+	}
+
+	id1 := &Identity{VerifiableAddresses: addresses[:5]}
+	id2 := &Identity{}
+	id3 := &Identity{VerifiableAddresses: addresses[5:]}
+
+	assert.Equal(t, addresses, CollectVerifiableAddresses([]*Identity{id1, id2, id3}))
+}
+
+func TestWithDeclassifiedCredentials(t *testing.T) {
+	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
+	credentials := map[CredentialsType]Credentials{
+		CredentialsTypePassword: {
+			Identifiers: []string{"zab", "bar"},
+			Type:        CredentialsTypePassword,
+			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+		},
+		CredentialsTypeOIDC: {
+			Type:        CredentialsTypeOIDC,
+			Identifiers: []string{"bar", "baz"},
+			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+		},
+		CredentialsTypeWebAuthn: {
+			Type:        CredentialsTypeWebAuthn,
+			Identifiers: []string{"foo", "bar"},
+			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+		},
+	}
+	i.Credentials = credentials
+
+	t.Run("case=no-include", func(t *testing.T) {
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, nil)
+		require.NoError(t, err)
+
+		for ct, actual := range actualIdentity.Credentials {
+			t.Run("credential="+string(ct), func(t *testing.T) {
+				snapshotx.SnapshotT(t, actual)
+			})
+		}
+	})
+
+	t.Run("case=include-webauthn", func(t *testing.T) {
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, []CredentialsType{CredentialsTypeWebAuthn})
+		require.NoError(t, err)
+
+		for ct, actual := range actualIdentity.Credentials {
+			t.Run("credential="+string(ct), func(t *testing.T) {
+				snapshotx.SnapshotT(t, actual)
+			})
+		}
+	})
+
+	t.Run("case=include-multi", func(t *testing.T) {
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, []CredentialsType{CredentialsTypeWebAuthn, CredentialsTypePassword})
+		require.NoError(t, err)
+
+		for ct, actual := range actualIdentity.Credentials {
+			t.Run("credential="+string(ct), func(t *testing.T) {
+				snapshotx.SnapshotT(t, actual)
+			})
+		}
+	})
 }

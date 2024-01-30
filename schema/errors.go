@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package schema
 
 import (
@@ -15,16 +18,6 @@ type ValidationError struct {
 	Messages text.Messages
 }
 
-func NewMinLengthError(instancePtr string, expected, actual int) error {
-	return errors.WithStack(&ValidationError{
-		ValidationError: &jsonschema.ValidationError{
-			Message:     fmt.Sprintf("length must be >= %d, but got %d", expected, actual),
-			InstancePtr: instancePtr,
-		},
-		Messages: new(text.Messages).Add(text.NewErrorValidationMinLength(expected, actual)),
-	})
-}
-
 func NewRequiredError(missingPtr, missingFieldName string) error {
 	return errors.WithStack(&ValidationError{
 		ValidationError: &jsonschema.ValidationError{
@@ -35,16 +28,6 @@ func NewRequiredError(missingPtr, missingFieldName string) error {
 			},
 		},
 		Messages: new(text.Messages).Add(text.NewValidationErrorRequired(missingFieldName)),
-	})
-}
-
-func NewInvalidFormatError(instancePtr, format, value string) error {
-	return errors.WithStack(&ValidationError{
-		ValidationError: &jsonschema.ValidationError{
-			Message:     fmt.Sprintf("%q is not valid %q", value, format),
-			InstancePtr: instancePtr,
-		},
-		Messages: new(text.Messages).Add(text.NewErrorValidationInvalidFormat(value, format)),
 	})
 }
 
@@ -247,16 +230,6 @@ func NewNoWebAuthnRegistered() error {
 	})
 }
 
-func NewNoWebAuthnCredentials() error {
-	return errors.WithStack(&ValidationError{
-		ValidationError: &jsonschema.ValidationError{
-			Message:     `account does not exist or has no security key set up`,
-			InstancePtr: "#/",
-		},
-		Messages: new(text.Messages).Add(text.NewErrorValidationSuchNoWebAuthnUser()),
-	})
-}
-
 func NewHookValidationError(instancePtr, message string, messages text.Messages) *ValidationError {
 	return &ValidationError{
 		ValidationError: &jsonschema.ValidationError{
@@ -284,7 +257,7 @@ func (e *ValidationListError) Add(v *ValidationError) {
 }
 
 func (e ValidationListError) HasErrors() bool {
-	return len(e.Validations) != 0
+	return len(e.Validations) > 0
 }
 
 func (e *ValidationListError) WithError(instancePtr, message string, details text.Messages) {
@@ -297,6 +270,16 @@ func (e *ValidationListError) WithError(instancePtr, message string, details tex
 	})
 }
 
-func NewValidationListError() *ValidationListError {
-	return &ValidationListError{Validations: []*ValidationError{}}
+func NewValidationListError(errs []*ValidationError) error {
+	return errors.WithStack(&ValidationListError{Validations: errs})
+}
+
+func NewNoWebAuthnCredentials() error {
+	return errors.WithStack(&ValidationError{
+		ValidationError: &jsonschema.ValidationError{
+			Message:     `account does not exist or has no security key set up`,
+			InstancePtr: "#/",
+		},
+		Messages: new(text.Messages).Add(text.NewErrorValidationSuchNoWebAuthnUser()),
+	})
 }

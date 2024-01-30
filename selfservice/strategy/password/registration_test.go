@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package password_test
 
 import (
@@ -39,15 +42,17 @@ var flows = []string{"spa", "api", "browser"}
 var registrationSchema []byte
 
 func newRegistrationRegistry(t *testing.T) *driver.RegistryDefault {
+	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
-	conf.MustSet(config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword), map[string]interface{}{"enabled": true})
+	conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword), map[string]interface{}{"enabled": true})
 	return reg
 }
 
 func TestRegistration(t *testing.T) {
+	ctx := context.Background()
 	t.Run("case=registration", func(t *testing.T) {
 		reg := newRegistrationRegistry(t)
-		conf := reg.Config(context.Background())
+		conf := reg.Config()
 
 		router := x.NewRouterPublic()
 		admin := x.NewRouterAdmin()
@@ -61,8 +66,8 @@ func TestRegistration(t *testing.T) {
 		// set the "return to" server, which will assert the session state
 		// (redirTS: enforce that a session exists, redirNoSessionTS: enforce that no session exists)
 		var useReturnToFromTS = func(ts *httptest.Server) {
-			conf.MustSet(config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/default-return-to")
-			conf.MustSet(config.ViperKeySelfServiceRegistrationAfter+"."+config.DefaultBrowserReturnURL, ts.URL+"/registration-return-ts")
+			conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, ts.URL+"/default-return-to")
+			conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationAfter+"."+config.DefaultBrowserReturnURL, ts.URL+"/registration-return-ts")
 		}
 
 		useReturnToFromTS(redirTS)
@@ -71,8 +76,7 @@ func TestRegistration(t *testing.T) {
 		apiClient := testhelpers.NewDebugClient(t)
 
 		t.Run("AssertCommonErrorCases", func(t *testing.T) {
-			reg := newRegistrationRegistry(t)
-			registrationhelpers.AssertCommonErrorCases(t, reg, flows)
+			registrationhelpers.AssertCommonErrorCases(t, flows)
 		})
 
 		t.Run("AssertRegistrationRespectsValidation", func(t *testing.T) {
@@ -131,11 +135,77 @@ func TestRegistration(t *testing.T) {
 			return expectLoginBody(t, redirNoSessionTS, isAPI, isSPA, hc, values)
 		}
 
+		t.Run("case=should reject invalid transient payload", func(t *testing.T) {
+			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			t.Cleanup(func() {
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+			})
+
+			for _, f := range flows {
+				t.Run("type="+f, func(t *testing.T) {
+					username := x.NewUUID().String()
+					body := registrationhelpers.ExpectValidationError(t, publicTS, conf, f, func(v url.Values) {
+						v.Set("traits.username", username)
+						v.Set("password", x.NewUUID().String())
+						v.Set("traits.foobar", "bar")
+						v.Set("transient_payload", "42")
+					})
+					assert.Equal(t, "bar", gjson.Get(body, "ui.nodes.#(attributes.name==traits.foobar).attributes.value").String(), "%s", body)
+					assert.Equal(t, username, gjson.Get(body, "ui.nodes.#(attributes.name==traits.username).attributes.value").String(), "%s", body)
+					assert.Equal(t, int64(4000026), gjson.Get(body, "ui.nodes.#(attributes.name==transient_payload).messages.0.id").Int(), "%s", body)
+				})
+			}
+		})
+
+		t.Run("case=should accept valid transient payload", func(t *testing.T) {
+			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			t.Cleanup(func() {
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+			})
+
+			setValues := func(username string, v url.Values) {
+				v.Set("traits.username", username)
+				v.Set("password", x.NewUUID().String())
+				v.Set("traits.foobar", "bar")
+				v.Set("transient_payload.stuff", "42")
+			}
+
+			t.Run("type=api", func(t *testing.T) {
+				username := x.NewUUID().String()
+				body := expectSuccessfulLogin(t, true, false, nil, func(v url.Values) {
+					setValues(username, v)
+				})
+				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
+				assert.NotEmpty(t, gjson.Get(body, "session_token").String(), "%s", body)
+				assert.NotEmpty(t, gjson.Get(body, "session.id").String(), "%s", body)
+			})
+
+			t.Run("type=spa", func(t *testing.T) {
+				username := x.NewUUID().String()
+				body := expectSuccessfulLogin(t, false, true, nil, func(v url.Values) {
+					setValues(username, v)
+				})
+				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
+				assert.Empty(t, gjson.Get(body, "session_token").String(), "%s", body)
+				assert.NotEmpty(t, gjson.Get(body, "session.id").String(), "%s", body)
+			})
+
+			t.Run("type=browser", func(t *testing.T) {
+				username := x.NewUUID().String()
+				body := expectSuccessfulLogin(t, false, false, nil, func(v url.Values) {
+					setValues(username, v)
+				})
+				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
+			})
+		})
+
 		t.Run("case=should pass and set up a session", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
 			t.Cleanup(func() {
-				conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 			})
 
 			t.Run("type=api", func(t *testing.T) {
@@ -172,7 +242,7 @@ func TestRegistration(t *testing.T) {
 
 		t.Run("case=should not set up a session if hook is not configured", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 
 			t.Run("type=api", func(t *testing.T) {
 				body := expectNoLogin(t, true, false, nil, func(v url.Values) {
@@ -204,9 +274,9 @@ func TestRegistration(t *testing.T) {
 
 		t.Run("case=should fail to register the same user again", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
 			t.Cleanup(func() {
-				conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 			})
 
 			var applyTransform = func(values, transform func(v url.Values)) func(v url.Values) {
@@ -283,6 +353,113 @@ func TestRegistration(t *testing.T) {
 			})
 		})
 
+		t.Run("case=should return correct error ids from validation failures", func(t *testing.T) {
+			test := func(t *testing.T, constraint string, setValues func(url.Values), expectedId text.ID, expectedMesage string) {
+				template := `{
+					"$id": "https://example.com/person.schema.json",
+					"$schema": "http://json-schema.org/draft-07/schema#",
+					"title": "Person",
+					"type": "object",
+					"properties": {
+						"traits": {
+							"type": "object",
+							"properties": {
+								"foobar": {
+									%s
+								},
+								"username": {
+									"type": "string",
+									"ory.sh/kratos": {
+										"credentials": {
+											"password": {
+												"identifier": true
+											}
+										}
+									}
+								}
+							},
+							"required": [
+								"foobar",
+								"username"
+							]
+						}
+					},
+					"additionalProperties": false
+				}`
+
+				testhelpers.SetDefaultIdentitySchemaFromRaw(conf, []byte(fmt.Sprintf(template, constraint)))
+
+				browserClient := testhelpers.NewClientWithCookies(t)
+				f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, false, false, false)
+				c := f.Ui
+
+				values := testhelpers.SDKFormFieldsToURLValues(c.Nodes)
+				setValues(values)
+				values.Set("traits.username", "registration-identifier-9")
+				values.Set("password", x.NewUUID().String())
+				actual, _ := testhelpers.RegistrationMakeRequest(t, false, false, f, browserClient, values.Encode())
+
+				assert.NotEmpty(t, gjson.Get(actual, "id").String(), "%s", actual)
+				assert.Contains(t, gjson.Get(actual, "ui.action").String(), publicTS.URL+registration.RouteSubmitFlow, "%s", actual)
+				registrationhelpers.CheckFormContent(t, []byte(actual), "password", "csrf_token", "traits.username")
+				assert.EqualValues(t, "registration-identifier-9", gjson.Get(actual, "ui.nodes.#(attributes.name==traits.username).attributes.value").String(), "%s", actual)
+				assert.Empty(t, gjson.Get(actual, "ui.nodes.messages").Array())
+				assert.Len(t, gjson.Get(actual, "ui.nodes.#(attributes.name==traits.username).messages").Array(), 0)
+				assert.Equal(t, int64(expectedId), gjson.Get(actual, "ui.nodes.#(attributes.name==traits.foobar).messages.0.id").Int())
+				assert.Equal(t, expectedMesage, gjson.Get(actual, "ui.nodes.#(attributes.name==traits.foobar).messages.0.text").String())
+				assert.Equal(t, "error", gjson.Get(actual, "ui.nodes.#(attributes.name==traits.foobar).messages.0.type").String())
+			}
+
+			const key = "traits.foobar"
+			t.Run("case=string violating minLength", func(t *testing.T) {
+				test(t, `"type": "string", "minLength": 5`, func(v url.Values) { v.Set(key, "bar") }, text.ErrorValidationMinLength, "length must be >= 5, but got 3")
+			})
+
+			t.Run("case=string violating maxLength", func(t *testing.T) {
+				test(t, `"type": "string", "maxLength": 5`, func(v url.Values) { v.Set(key, "qwerty") }, text.ErrorValidationMaxLength, "length must be <= 5, but got 6")
+			})
+
+			t.Run("case=string violating pattern", func(t *testing.T) {
+				test(t, `"type": "string", "pattern": "^[a-z]*$"`, func(v url.Values) { v.Set(key, "FUBAR") }, text.ErrorValidationInvalidFormat, "does not match pattern \"^[a-z]*$\"")
+			})
+
+			t.Run("case=number violating minimum", func(t *testing.T) {
+				test(t, `"type": "number", "minimum": 5`, func(v url.Values) { v.Set(key, "3") }, text.ErrorValidationMinimum, "must be >= 5 but found 3")
+			})
+
+			t.Run("case=number violating exclusiveMinimum", func(t *testing.T) {
+				test(t, `"type": "number", "exclusiveMinimum": 5`, func(v url.Values) { v.Set(key, "5") }, text.ErrorValidationExclusiveMinimum, "must be > 5 but found 5")
+			})
+
+			t.Run("case=number violating maximum", func(t *testing.T) {
+				test(t, `"type": "number", "maximum": 5`, func(v url.Values) { v.Set(key, "6") }, text.ErrorValidationMaximum, "must be <= 5 but found 6")
+			})
+
+			t.Run("case=number violating exclusiveMaximum", func(t *testing.T) {
+				test(t, `"type": "number", "exclusiveMaximum": 5`, func(v url.Values) { v.Set(key, "5") }, text.ErrorValidationExclusiveMaximum, "must be < 5 but found 5")
+			})
+
+			t.Run("case=number violating multipleOf", func(t *testing.T) {
+				test(t, `"type": "number", "multipleOf": 3`, func(v url.Values) { v.Set(key, "7") }, text.ErrorValidationMultipleOf, "7 not multipleOf 3")
+			})
+
+			t.Run("case=array violating maxItems", func(t *testing.T) {
+				test(t, `"type": "array", "items": { "type": "string" }, "maxItems": 3`, func(v url.Values) { v.Add(key, "a"); v.Add(key, "b"); v.Add(key, "c"); v.Add(key, "d") }, text.ErrorValidationMaxItems, "maximum 3 items allowed, but found 4 items")
+			})
+
+			t.Run("case=array violating minItems", func(t *testing.T) {
+				test(t, `"type": "array", "items": { "type": "string" }, "minItems": 3`, func(v url.Values) { v.Add(key, "a"); v.Add(key, "b") }, text.ErrorValidationMinItems, "minimum 3 items allowed, but found 2 items")
+			})
+
+			t.Run("case=array violating uniqueItems", func(t *testing.T) {
+				test(t, `"type": "array", "items": { "type": "string" }, "uniqueItems": true`, func(v url.Values) { v.Add(key, "abc"); v.Add(key, "XYZ"); v.Add(key, "abc") }, text.ErrorValidationUniqueItems, "items at index 0 and 2 are equal")
+			})
+
+			t.Run("case=wrong type", func(t *testing.T) {
+				test(t, `"type": "number"`, func(v url.Values) { v.Set(key, "blabla") }, text.ErrorValidationWrongType, "expected number, but got string")
+			})
+		})
+
 		t.Run("case=should return an error because not passing validation and reset previous errors and values", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
 
@@ -331,7 +508,7 @@ func TestRegistration(t *testing.T) {
 
 			t.Run("type=spa", func(t *testing.T) {
 				browserClient := testhelpers.NewClientWithCookies(t)
-				f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, true)
+				f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, true, false, false)
 				c := f.Ui
 
 				actual, _ := testhelpers.RegistrationMakeRequest(t, false, true, f, browserClient, testhelpers.EncodeFormAsJSON(t, false, valuesFirst(testhelpers.SDKFormFieldsToURLValues(c.Nodes))))
@@ -342,7 +519,7 @@ func TestRegistration(t *testing.T) {
 
 			t.Run("type=browser", func(t *testing.T) {
 				browserClient := testhelpers.NewClientWithCookies(t)
-				f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, false)
+				f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, false, false, false)
 				c := f.Ui
 
 				actual, _ := testhelpers.RegistrationMakeRequest(t, false, false, f, browserClient, valuesFirst(testhelpers.SDKFormFieldsToURLValues(c.Nodes)).Encode())
@@ -354,9 +531,9 @@ func TestRegistration(t *testing.T) {
 
 		t.Run("case=should work even if password is just numbers", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://stub/registration.schema.json")
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
 			t.Cleanup(func() {
-				conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 			})
 
 			t.Run("type=api", func(t *testing.T) {
@@ -404,14 +581,14 @@ func TestRegistration(t *testing.T) {
 
 		t.Run("case=should work with regular JSON", func(t *testing.T) {
 			testhelpers.SetDefaultIdentitySchema(conf, "file://stub/registration.schema.json")
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), []config.SelfServiceHook{{Name: "session"}})
 			t.Cleanup(func() {
-				conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+				conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 			})
 
 			hc := testhelpers.NewClientWithCookies(t)
 			hc.Transport = testhelpers.NewTransportWithLogger(hc.Transport, t)
-			payload := testhelpers.InitializeRegistrationFlowViaBrowser(t, hc, publicTS, false)
+			payload := testhelpers.InitializeRegistrationFlowViaBrowser(t, hc, publicTS, false, false, false)
 			values := testhelpers.SDKFormFieldsToURLValues(payload.Ui.Nodes)
 			time.Sleep(time.Millisecond) // add a bit of delay to allow `1ns` to time out.
 
@@ -430,12 +607,12 @@ func TestRegistration(t *testing.T) {
 		})
 
 		t.Run("case=should choose the correct identity schema", func(t *testing.T) {
-			conf.MustSet(config.ViperKeyDefaultIdentitySchemaID, "advanced-user")
-			conf.MustSet(config.ViperKeyIdentitySchemas, config.Schemas{
+			conf.MustSet(ctx, config.ViperKeyDefaultIdentitySchemaID, "advanced-user")
+			conf.MustSet(ctx, config.ViperKeyIdentitySchemas, config.Schemas{
 				{ID: "does-not-exist", URL: "file://./stub/not-exists.schema.json"},
 				{ID: "advanced-user", URL: "file://./stub/registration.secondary.schema.json"},
 			})
-			conf.MustSet(config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
+			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 
 			username := "registration-custom-schema"
 			t.Run("type=api", func(t *testing.T) {
@@ -470,24 +647,26 @@ func TestRegistration(t *testing.T) {
 	t.Run("method=PopulateSignUpMethod", func(t *testing.T) {
 		conf, reg := internal.NewFastRegistryWithMocks(t)
 
-		conf.MustSet(config.ViperKeyPublicBaseURL, "https://foo/")
+		conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "https://foo/")
 		testhelpers.SetDefaultIdentitySchema(conf, "file://stub/sort.schema.json")
-		conf.MustSet(config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword)+".enabled", true)
+		conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword)+".enabled", true)
 
 		router := x.NewRouterPublic()
 		publicTS, _ := testhelpers.NewKratosServerWithRouters(t, reg, router, x.NewRouterAdmin())
 		_ = testhelpers.NewRegistrationUIFlowEchoServer(t, reg)
 
 		browserClient := testhelpers.NewClientWithCookies(t)
-		f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, false)
+		f := testhelpers.InitializeRegistrationFlowViaBrowser(t, browserClient, publicTS, false, false, false)
 
 		assertx.EqualAsJSON(t, container.Container{
-			Action: conf.SelfPublicURL().String() + registration.RouteSubmitFlow + "?flow=" + f.Id,
+			Action: conf.SelfPublicURL(ctx).String() + registration.RouteSubmitFlow + "?flow=" + f.Id,
 			Method: "POST",
 			Nodes: node.Nodes{
 				node.NewCSRFNode(x.FakeCSRFToken),
 				node.NewInputField("traits.username", nil, node.PasswordGroup, node.InputAttributeTypeText),
-				node.NewInputField("password", nil, node.PasswordGroup, node.InputAttributeTypePassword, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputPassword()),
+				node.NewInputField("password", nil, node.PasswordGroup, node.InputAttributeTypePassword, node.WithRequiredInputAttribute, node.WithInputAttributes(func(a *node.InputAttributes) {
+					a.Autocomplete = node.InputAttributeAutocompleteNewPassword
+				})).WithMetaLabel(text.NewInfoNodeInputPassword()),
 				node.NewInputField("traits.bar", nil, node.PasswordGroup, node.InputAttributeTypeText),
 				node.NewInputField("method", "password", node.PasswordGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoRegistration()),
 			},

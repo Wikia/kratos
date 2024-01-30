@@ -1,8 +1,11 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package recovery_test
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/ory/x/jsonx"
+	"github.com/ory/x/snapshotx"
 
 	"github.com/ory/kratos/ui/node"
 
@@ -35,8 +39,10 @@ import (
 )
 
 func TestHandleError(t *testing.T) {
+	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
-	conf.MustSet(config.ViperKeySelfServiceRecoveryEnabled, true)
+	conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryEnabled, true)
+	conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryUse, "code")
 
 	public, _ := testhelpers.NewKratosServer(t, reg)
 
@@ -65,7 +71,9 @@ func TestHandleError(t *testing.T) {
 
 	newFlow := func(t *testing.T, ttl time.Duration, ft flow.Type) *recovery.Flow {
 		req := &http.Request{URL: urlx.ParseOrPanic("/")}
-		f, err := recovery.NewFlow(conf, ttl, x.FakeCSRFToken, req, reg.RecoveryStrategies(context.Background()), ft)
+		s, err := reg.GetActiveRecoveryStrategy(context.Background())
+		require.NoError(t, err)
+		f, err := recovery.NewFlow(conf, ttl, x.FakeCSRFToken, req, s, ft)
 		require.NoError(t, err)
 		require.NoError(t, reg.RecoveryFlowPersister().CreateRecoveryFlow(context.Background(), f))
 		f, err = reg.RecoveryFlowPersister().GetRecoveryFlow(context.Background(), f.ID)
@@ -77,9 +85,9 @@ func TestHandleError(t *testing.T) {
 		res, err := ts.Client().Get(ts.URL + "/error")
 		require.NoError(t, err)
 		defer res.Body.Close()
-		require.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL().String()+"?id=")
+		require.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL(ctx).String()+"?id=")
 
-		sse, _, err := sdk.V0alpha2Api.GetSelfServiceError(context.Background()).Id(res.Request.URL.Query().Get("id")).Execute()
+		sse, _, err := sdk.FrontendApi.GetFlowError(context.Background()).Id(res.Request.URL.Query().Get("id")).Execute()
 		require.NoError(t, err)
 
 		return sse.Error, nil
@@ -91,7 +99,7 @@ func TestHandleError(t *testing.T) {
 		t.Cleanup(reset)
 
 		flowError = herodot.ErrInternalServerError.WithReason("system error")
-		methodName = recovery.StrategyRecoveryLinkName
+		methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
 
 		sse, _ := expectErrorUI(t)
 		assertx.EqualAsJSON(t, flowError, sse)
@@ -101,15 +109,15 @@ func TestHandleError(t *testing.T) {
 		t.Cleanup(reset)
 
 		flowError = herodot.ErrInternalServerError.WithReason("system error")
-		methodName = recovery.StrategyRecoveryLinkName
+		methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
 
 		res, err := ts.Client().Do(testhelpers.NewHTTPGetJSONRequest(t, ts.URL+"/error"))
 		require.NoError(t, err)
 		defer res.Body.Close()
 		assert.Contains(t, res.Header.Get("Content-Type"), "application/json")
-		assert.NotContains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL().String()+"?id=")
+		assert.NotContains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL(ctx).String()+"?id=")
 
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		require.NoError(t, err)
 		assert.Contains(t, string(body), "system error")
 	})
@@ -127,7 +135,7 @@ func TestHandleError(t *testing.T) {
 
 				recoveryFlow = newFlow(t, time.Minute, flow.TypeAPI)
 				flowError = flow.NewFlowExpiredError(anHourAgo)
-				methodName = recovery.StrategyRecoveryLinkName
+				methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
 
 				res, err := ts.Client().Do(testhelpers.NewHTTPGetJSONRequest(t, ts.URL+"/error"))
 				require.NoError(t, err)
@@ -135,7 +143,7 @@ func TestHandleError(t *testing.T) {
 				require.Contains(t, res.Request.URL.String(), public.URL+recovery.RouteGetFlow)
 				require.Equal(t, http.StatusOK, res.StatusCode, "%+v", res.Request)
 
-				body, err := ioutil.ReadAll(res.Body)
+				body, err := io.ReadAll(res.Body)
 				require.NoError(t, err)
 				assert.Equal(t, int(text.ErrorValidationRecoveryFlowExpired), int(gjson.GetBytes(body, "ui.messages.0.id").Int()), string(body))
 				assert.NotEqual(t, recoveryFlow.ID.String(), gjson.GetBytes(body, "id").String())
@@ -146,14 +154,14 @@ func TestHandleError(t *testing.T) {
 
 				recoveryFlow = newFlow(t, time.Minute, tc.t)
 				flowError = schema.NewInvalidCredentialsError()
-				methodName = recovery.StrategyRecoveryLinkName
+				methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
 
 				res, err := ts.Client().Do(testhelpers.NewHTTPGetJSONRequest(t, ts.URL+"/error"))
 				require.NoError(t, err)
 				defer res.Body.Close()
 				require.Equal(t, http.StatusBadRequest, res.StatusCode)
 
-				body, err := ioutil.ReadAll(res.Body)
+				body, err := io.ReadAll(res.Body)
 				require.NoError(t, err)
 				assert.Equal(t, int(text.ErrorValidationInvalidCredentials), int(gjson.GetBytes(body, "ui.messages.0.id").Int()), "%s", body)
 				assert.Equal(t, recoveryFlow.ID.String(), gjson.GetBytes(body, "id").String())
@@ -164,16 +172,36 @@ func TestHandleError(t *testing.T) {
 
 				recoveryFlow = newFlow(t, time.Minute, tc.t)
 				flowError = herodot.ErrInternalServerError.WithReason("system error")
-				methodName = recovery.StrategyRecoveryLinkName
+				methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
 
 				res, err := ts.Client().Do(testhelpers.NewHTTPGetJSONRequest(t, ts.URL+"/error"))
 				require.NoError(t, err)
 				defer res.Body.Close()
 				require.Equal(t, http.StatusInternalServerError, res.StatusCode)
 
-				body, err := ioutil.ReadAll(res.Body)
+				body, err := io.ReadAll(res.Body)
 				require.NoError(t, err)
 				assert.JSONEq(t, x.MustEncodeJSON(t, flowError), gjson.GetBytes(body, "error").Raw)
+			})
+
+			t.Run("case=fails if active strategy is disabled", func(t *testing.T) {
+				c, reg := internal.NewVeryFastRegistryWithoutDB(t)
+				c.Set(context.Background(), "selfservice.methods.code.enabled", false)
+				c.Set(context.Background(), config.ViperKeySelfServiceRecoveryUse, "code")
+				_, err := reg.GetActiveRecoveryStrategy(context.Background())
+				recoveryFlow = newFlow(t, time.Minute, tc.t)
+				flowError = err
+				methodName = node.UiNodeGroup(recovery.RecoveryStrategyLink)
+
+				res, err := ts.Client().Do(testhelpers.NewHTTPGetJSONRequest(t, ts.URL+"/error"))
+				require.NoError(t, err)
+				defer res.Body.Close()
+				require.Equal(t, http.StatusBadRequest, res.StatusCode)
+
+				body, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+
+				snapshotx.SnapshotTJSON(t, body, snapshotx.ExceptPaths("id", "expires_at", "issued_at", "ui.action", "ui.nodes.0.attributes.value"))
 			})
 		})
 	}
@@ -183,7 +211,7 @@ func TestHandleError(t *testing.T) {
 			res, err := ts.Client().Get(ts.URL + "/error")
 			require.NoError(t, err)
 			defer res.Body.Close()
-			assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowRecoveryUI().String()+"?flow=")
+			assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowRecoveryUI(ctx).String()+"?flow=")
 
 			rf, err := reg.RecoveryFlowPersister().GetRecoveryFlow(context.Background(), uuid.FromStringOrNil(res.Request.URL.Query().Get("flow")))
 			require.NoError(t, err)
@@ -224,6 +252,48 @@ func TestHandleError(t *testing.T) {
 
 			sse, _ := expectErrorUI(t)
 			assertx.EqualAsJSON(t, flowError, sse)
+		})
+
+		t.Run("case=new flow uses strategy of old flow", func(t *testing.T) {
+
+			t.Cleanup(reset)
+
+			recoveryFlow = &recovery.Flow{Type: flow.TypeBrowser, Active: "code"}
+			flowError = flow.NewFlowExpiredError(anHourAgo)
+
+			lf, _ := expectRecoveryUI(t)
+			require.Len(t, lf.UI.Messages, 1, "%s", jsonx.TestMarshalJSONString(t, lf))
+			assert.Equal(t, int(text.ErrorValidationRecoveryFlowExpired), int(lf.UI.Messages[0].ID))
+			assert.Equal(t, recoveryFlow.Active.String(), lf.Active.String())
+		})
+
+		t.Run("case=new flow uses current strategy if strategy of old flow does not exist", func(t *testing.T) {
+
+			t.Cleanup(reset)
+
+			recoveryFlow = &recovery.Flow{Type: flow.TypeBrowser, Active: "not-valid"}
+			flowError = flow.NewFlowExpiredError(anHourAgo)
+
+			lf, _ := expectRecoveryUI(t)
+			require.Len(t, lf.UI.Messages, 1, "%s", jsonx.TestMarshalJSONString(t, lf))
+			assert.Equal(t, int(text.ErrorValidationRecoveryFlowExpired), int(lf.UI.Messages[0].ID))
+			assert.Equal(t, "code", lf.Active.String())
+		})
+
+		t.Run("case=fails to retry flow if recovery strategy id is not valid", func(t *testing.T) {
+
+			t.Cleanup(func() {
+				reset()
+				conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryUse, "code")
+			})
+
+			recoveryFlow = newFlow(t, 0, flow.TypeBrowser)
+			recoveryFlow.Active = "not-valid"
+			flowError = flow.NewFlowExpiredError(anHourAgo)
+
+			conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryUse, "not-valid")
+			sse, _ := expectErrorUI(t)
+			snapshotx.SnapshotT(t, sse)
 		})
 	})
 }

@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package password
 
 import (
@@ -7,20 +10,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ory/kratos/hash"
+
 	"github.com/ory/kratos/selfservice/flowhelpers"
 
 	"github.com/ory/x/stringsx"
 
 	"github.com/gofrs/uuid"
 
-	"github.com/ory/kratos/session"
-
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
 	"github.com/ory/x/decoderx"
 
-	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
@@ -33,7 +35,7 @@ import (
 func (s *Strategy) RegisterLoginRoutes(r *x.RouterPublic) {
 }
 
-func (s *Strategy) handleLoginError(w http.ResponseWriter, r *http.Request, f *login.Flow, payload *submitSelfServiceLoginFlowWithPasswordMethodBody, err error) error {
+func (s *Strategy) handleLoginError(w http.ResponseWriter, r *http.Request, f *login.Flow, payload *updateLoginFlowWithPasswordMethod, err error) error {
 	if f != nil {
 		f.UI.Nodes.ResetNodes("password")
 		f.UI.Nodes.SetValueAttribute("identifier", stringsx.Coalesce(payload.Identifier, payload.LegacyIdentifier))
@@ -45,7 +47,7 @@ func (s *Strategy) handleLoginError(w http.ResponseWriter, r *http.Request, f *l
 	return err
 }
 
-func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, ss *session.Session) (i *identity.Identity, err error) {
+func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, identityID uuid.UUID) (i *identity.Identity, err error) {
 	if err := login.CheckAAL(f, identity.AuthenticatorAssuranceLevel1); err != nil {
 		return nil, err
 	}
@@ -54,7 +56,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, err
 	}
 
-	var p submitSelfServiceLoginFlowWithPasswordMethodBody
+	var p updateLoginFlowWithPasswordMethod
 	if err := s.hd.Decode(r, &p,
 		decoderx.HTTPDecoderSetValidatePayloads(true),
 		decoderx.MustHTTPRawJSONSchemaCompiler(loginSchema),
@@ -62,13 +64,13 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, s.handleLoginError(w, r, f, &p, err)
 	}
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config(r.Context()).DisableAPIFlowEnforcement(), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return nil, s.handleLoginError(w, r, f, &p, err)
 	}
 
 	i, c, err := s.d.PrivilegedIdentityPool().FindByCredentialsIdentifier(r.Context(), s.ID(), stringsx.Coalesce(p.Identifier, p.LegacyIdentifier))
 	if err != nil {
-		time.Sleep(x.RandomDelay(s.d.Config(r.Context()).HasherArgon2().ExpectedDuration, s.d.Config(r.Context()).HasherArgon2().ExpectedDeviation))
+		time.Sleep(x.RandomDelay(s.d.Config().HasherArgon2(r.Context()).ExpectedDuration, s.d.Config().HasherArgon2(r.Context()).ExpectedDeviation))
 		return nil, s.handleLoginError(w, r, f, &p, errors.WithStack(schema.NewInvalidCredentialsError()))
 	}
 
@@ -78,12 +80,12 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, herodot.ErrInternalServerError.WithReason("The password credentials could not be decoded properly").WithDebug(err.Error()).WithWrap(err)
 	}
 	//fandom-start - pass additional param: (identityId) i.ID
-	if err := hash.Compare(r.Context(), s.d.Config(r.Context()), i.ID, []byte(p.Password), []byte(o.HashedPassword)); err != nil {
+	if err := hash.Compare(r.Context(), s.d.Config(), i.ID, []byte(p.Password), []byte(o.HashedPassword)); err != nil {
 		//fandom-end
 		return nil, s.handleLoginError(w, r, f, &p, errors.WithStack(schema.NewInvalidCredentialsError()))
 	}
 
-	if !s.d.Hasher().Understands([]byte(o.HashedPassword)) {
+	if !s.d.Hasher(r.Context()).Understands([]byte(o.HashedPassword)) {
 		if err := s.migratePasswordHash(r.Context(), i.ID, []byte(p.Password)); err != nil {
 			return nil, s.handleLoginError(w, r, f, &p, err)
 		}
@@ -99,7 +101,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 }
 
 func (s *Strategy) migratePasswordHash(ctx context.Context, identifier uuid.UUID, password []byte) error {
-	hpw, err := s.d.Hasher().Generate(ctx, password)
+	hpw, err := s.d.Hasher(ctx).Generate(ctx, password)
 	if err != nil {
 		return err
 	}
@@ -151,7 +153,7 @@ func (s *Strategy) PopulateLoginMethod(r *http.Request, requestedAAL identity.Au
 	}
 
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
-	sr.UI.SetNode(NewPasswordNode("password"))
+	sr.UI.SetNode(NewPasswordNode("password", node.InputAttributeAutocompleteCurrentPassword))
 	sr.UI.GetNodes().Append(node.NewInputField("method", "password", node.PasswordGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLogin()))
 
 	return nil

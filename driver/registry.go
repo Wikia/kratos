@@ -1,8 +1,14 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package driver
 
 import (
 	"context"
 
+	"github.com/ory/kratos/selfservice/sessiontokenexchange"
+	"github.com/ory/x/contextx"
+	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
 	prometheus "github.com/ory/x/prometheusx"
 
@@ -20,6 +26,7 @@ import (
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/flow/settings"
 	"github.com/ory/kratos/selfservice/flow/verification"
+	"github.com/ory/kratos/selfservice/strategy/code"
 	"github.com/ory/kratos/selfservice/strategy/link"
 
 	"github.com/ory/x/healthx"
@@ -43,9 +50,10 @@ import (
 type Registry interface {
 	dbal.Driver
 
-	Init(ctx context.Context, opts ...RegistryOption) error
+	Init(ctx context.Context, ctxer contextx.Contextualizer, opts ...RegistryOption) error
 
 	WithLogger(l *logrusx.Logger) Registry
+	WithJsonnetVMProvider(jsonnetsecure.VMProvider) Registry
 
 	WithCSRFHandler(c nosurf.Handler)
 	WithCSRFTokenGenerator(cg x.CSRFToken)
@@ -63,15 +71,18 @@ type Registry interface {
 	RegisterAdminRoutes(ctx context.Context, admin *x.RouterAdmin)
 	PrometheusManager() *prometheus.MetricsManager
 	Tracer(context.Context) *otelx.Tracer
+	SetTracer(*otelx.Tracer)
 
 	config.Provider
-	CourierConfig(ctx context.Context) config.CourierConfigs
+	CourierConfig() config.CourierConfigs
 	WithConfig(c *config.Config) Registry
+	WithContextualizer(ctxer contextx.Contextualizer) Registry
 
 	x.CSRFProvider
 	x.WriterProvider
 	x.LoggingProvider
 	x.HTTPClientProvider
+	jsonnetsecure.VMProvider
 
 	continuity.ManagementProvider
 	continuity.PersistenceProvider
@@ -93,7 +104,11 @@ type Registry interface {
 	identity.ManagementProvider
 	identity.ActiveCredentialsCounterStrategyProvider
 
+	courier.HandlerProvider
+	courier.PersistenceProvider
+
 	schema.HandlerProvider
+	schema.IdentityTraitsProvider
 
 	password2.ValidationProvider
 
@@ -127,9 +142,14 @@ type Registry interface {
 	verification.HandlerProvider
 	verification.StrategyProvider
 
+	sessiontokenexchange.PersistenceProvider
+
 	link.SenderProvider
 	link.VerificationTokenPersistenceProvider
 	link.RecoveryTokenPersistenceProvider
+
+	code.SenderProvider
+	code.RecoveryCodePersistenceProvider
 
 	recovery.FlowPersistenceProvider
 	recovery.ErrorHandlerProvider
@@ -141,8 +161,8 @@ type Registry interface {
 	x.ResilientClientProvider
 }
 
-func NewRegistryFromDSN(c *config.Config, l *logrusx.Logger) (Registry, error) {
-	driver, err := dbal.GetDriverFor(c.DSN())
+func NewRegistryFromDSN(ctx context.Context, c *config.Config, l *logrusx.Logger) (Registry, error) {
+	driver, err := dbal.GetDriverFor(c.DSN(ctx))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -152,17 +172,45 @@ func NewRegistryFromDSN(c *config.Config, l *logrusx.Logger) (Registry, error) {
 		return nil, errors.Errorf("driver of type %T does not implement interface Registry", driver)
 	}
 
+	tracer, err := otelx.New("Ory Kratos", l, c.Tracing(ctx))
+	if err != nil {
+		l.WithError(err).Fatalf("failed to initialize tracer")
+		tracer = otelx.NewNoop(l, c.Tracing(ctx))
+	}
+	registry.SetTracer(tracer)
+
 	return registry.WithLogger(l).WithConfig(c), nil
 }
 
 type options struct {
 	skipNetworkInit bool
+	config          *config.Config
+	replaceTracer   func(*otelx.Tracer) *otelx.Tracer
+	inspect         func(Registry) error
 }
 
 type RegistryOption func(*options)
 
 func SkipNetworkInit(o *options) {
 	o.skipNetworkInit = true
+}
+
+func WithConfig(config *config.Config) func(o *options) {
+	return func(o *options) {
+		o.config = config
+	}
+}
+
+func ReplaceTracer(f func(*otelx.Tracer) *otelx.Tracer) func(o *options) {
+	return func(o *options) {
+		o.replaceTracer = f
+	}
+}
+
+func Inspect(f func(reg Registry) error) func(o *options) {
+	return func(o *options) {
+		o.inspect = f
+	}
 }
 
 func newOptions(os []RegistryOption) *options {

@@ -1,12 +1,17 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package oidc
 
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/url"
 	"path"
 	"time"
+
+	"github.com/ory/x/stringsx"
 
 	"github.com/tidwall/sjson"
 
@@ -57,7 +62,7 @@ func (g *ProviderAuth0) oauth2(ctx context.Context) (*oauth2.Config, error) {
 			TokenURL: tokenUrl.String(),
 		},
 		Scopes:      g.config.Scope,
-		RedirectURL: g.config.Redir(g.reg.Config(ctx).OIDCRedirectURIBase()),
+		RedirectURL: g.config.Redir(g.reg.Config().OIDCRedirectURIBase(ctx)),
 	}
 
 	return c, nil
@@ -84,7 +89,6 @@ func (g *ProviderAuth0) Claims(ctx context.Context, exchange *oauth2.Token, quer
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 
-	req.Header.Add("Authorization", "Bearer: "+exchange.AccessToken)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -93,8 +97,12 @@ func (g *ProviderAuth0) Claims(ctx context.Context, exchange *oauth2.Token, quer
 	}
 	defer resp.Body.Close()
 
+	if err := logUpstreamError(g.reg.Logger(), resp); err != nil {
+		return nil, err
+	}
+
 	// Once auth0 fixes this bug, all this workaround can be removed.
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
@@ -110,6 +118,7 @@ func (g *ProviderAuth0) Claims(ctx context.Context, exchange *oauth2.Token, quer
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("%s", err))
 	}
 
+	claims.Issuer = stringsx.Coalesce(claims.Issuer, g.config.IssuerURL)
 	return &claims, nil
 }
 

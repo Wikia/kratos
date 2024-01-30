@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package x
 
 import (
@@ -20,6 +23,7 @@ import (
 type secureRedirectOptions struct {
 	allowlist       []url.URL
 	defaultReturnTo *url.URL
+	returnTo        string
 	sourceURL       string
 }
 
@@ -37,6 +41,13 @@ func SecureRedirectAllowURLs(urls []url.URL) SecureRedirectOption {
 func SecureRedirectUseSourceURL(source string) SecureRedirectOption {
 	return func(o *secureRedirectOptions) {
 		o.sourceURL = source
+	}
+}
+
+// SecureRedirectReturnTo uses the provided URL to redirect the user to it.
+func SecureRedirectReturnTo(returnTo string) SecureRedirectOption {
+	return func(o *secureRedirectOptions) {
+		o.returnTo = returnTo
 	}
 }
 
@@ -65,13 +76,14 @@ func SecureRedirectToIsAllowedHost(returnTo *url.URL, allowed url.URL) bool {
 	return strings.EqualFold(allowed.Host, returnTo.Host)
 }
 
-// fandom-start - preserve return_to param between flows
-func TakeOverReturnToParameter(from string, to string) (string, error) {
+// TakeOverReturnToParameter carries over the return_to parameter to a new URL
+// If `from` does not contain the `return_to` query parameter, the first non-empty value from `fallback` is used instead.
+func TakeOverReturnToParameter(from string, to string, fallback ...string) (string, error) {
 	fromURL, err := url.Parse(from)
 	if err != nil {
 		return "", err
 	}
-	returnTo := fromURL.Query().Get("return_to")
+	returnTo := stringsx.Coalesce(append([]string{fromURL.Query().Get("return_to")}, fallback...)...)
 	// Empty return_to parameter, return early
 	if returnTo == "" {
 		return to, nil
@@ -85,8 +97,6 @@ func TakeOverReturnToParameter(from string, to string) (string, error) {
 	toURL.RawQuery = toQuery.Encode()
 	return toURL.String(), nil
 }
-
-// fandom-end
 
 // SecureRedirectTo implements a HTTP redirector who mitigates open redirect vulnerabilities by
 // working with allow lists.
@@ -104,38 +114,37 @@ func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureR
 	if o.sourceURL != "" {
 		source, err = url.ParseRequestURI(o.sourceURL)
 		if err != nil {
-			return nil, herodot.ErrInternalServerError.WithWrap(err).WithReasonf("Unable to parse the original request URL: %s", err)
+			return nil, errors.WithStack(herodot.ErrInternalServerError.WithWrap(err).WithReasonf("Unable to parse the original request URL: %s", err))
 		}
 	}
 
-	if len(source.Query().Get("return_to")) == 0 {
+	rawReturnTo := stringsx.Coalesce(o.returnTo, source.Query().Get("return_to"))
+	if rawReturnTo == "" {
 		return o.defaultReturnTo, nil
-	} else if returnTo, err = url.Parse(source.Query().Get("return_to")); err != nil {
-		return nil, herodot.ErrInternalServerError.WithWrap(err).WithReasonf("Unable to parse the return_to query parameter as an URL: %s", err)
+	}
+
+	returnTo, err = url.Parse(rawReturnTo)
+	if err != nil {
+		return nil, errors.WithStack(herodot.ErrBadRequest.WithWrap(err).WithReasonf("Unable to parse the return_to query parameter as an URL: %s", err))
 	}
 
 	returnTo.Host = stringsx.Coalesce(returnTo.Host, o.defaultReturnTo.Host)
 	returnTo.Scheme = stringsx.Coalesce(returnTo.Scheme, o.defaultReturnTo.Scheme)
 
-	var found bool
 	for _, allowed := range o.allowlist {
 		if strings.EqualFold(allowed.Scheme, returnTo.Scheme) &&
 			SecureRedirectToIsAllowedHost(returnTo, allowed) &&
 			strings.HasPrefix(
 				stringsx.Coalesce(returnTo.Path, "/"),
 				stringsx.Coalesce(allowed.Path, "/")) {
-			found = true
+			return returnTo, nil
 		}
 	}
 
-	if !found {
-		return nil, errors.WithStack(herodot.ErrBadRequest.
-			WithID(text.ErrIDRedirectURLNotAllowed).
-			WithReasonf("Requested return_to URL \"%s\" is not allowed.", returnTo).
-			WithDebugf("Allowed domains are: %v", o.allowlist))
-	}
-
-	return returnTo, nil
+	return nil, errors.WithStack(herodot.ErrBadRequest.
+		WithID(text.ErrIDRedirectURLNotAllowed).
+		WithReasonf("Requested return_to URL \"%s\" is not allowed.", returnTo).
+		WithDebugf("Allowed domains are: %v", o.allowlist))
 }
 
 func SecureContentNegotiationRedirection(
@@ -152,11 +161,11 @@ func SecureContentNegotiationRedirection(
 	case "text/html":
 		fallthrough
 	default:
-		ret, err := SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(),
+		ret, err := SecureRedirectTo(r, c.SelfServiceBrowserDefaultReturnTo(r.Context()),
 			append([]SecureRedirectOption{
 				SecureRedirectUseSourceURL(requestURL),
-				SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains()),
-				SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL()),
+				SecureRedirectAllowURLs(c.SelfServiceBrowserAllowedReturnToDomains(r.Context())),
+				SecureRedirectAllowSelfServiceURLs(c.SelfPublicURL(r.Context())),
 			}, opts...)...,
 		)
 		if err != nil {

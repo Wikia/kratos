@@ -1,11 +1,12 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package identities_test
 
 import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 
 	"github.com/ory/kratos/cmd/identities"
 
@@ -18,7 +19,7 @@ import (
 )
 
 func TestListCmd(t *testing.T) {
-	c := identities.NewListIdentitiesCmd(new(cobra.Command))
+	c := identities.NewListIdentitiesCmd()
 	reg := setup(t, c)
 	require.NoError(t, c.Flags().Set(cmdx.FlagQuiet, "true"))
 
@@ -43,8 +44,8 @@ func TestListCmd(t *testing.T) {
 		is, ids := makeIdentities(t, reg, 6)
 		defer deleteIdentities(t, is)
 
-		stdoutP1 := execNoErr(t, c, "1", "3")
-		stdoutP2 := execNoErr(t, c, "2", "3")
+		stdoutP1 := execNoErr(t, c, "0", "3")
+		stdoutP2 := execNoErr(t, c, "1", "3")
 
 		for _, id := range ids {
 			// exactly one of page 1 and 2 should contain the id

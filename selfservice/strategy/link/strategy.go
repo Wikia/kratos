@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package link
 
 import (
@@ -61,6 +64,7 @@ type (
 		verification.FlowPersistenceProvider
 		verification.StrategyProvider
 		verification.HookExecutorProvider
+		verification.HandlerProvider
 
 		RecoveryTokenPersistenceProvider
 		VerificationTokenPersistenceProvider

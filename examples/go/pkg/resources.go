@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package pkg
 
 import (
@@ -5,14 +8,14 @@ import (
 	"log"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/gofrs/uuid"
 
-	ory "github.com/ory/kratos-client-go"
+	ory "github.com/ory/client-go"
 )
 
 func RandomCredentials() (email, password string) {
-	email = "dev+" + uuid.New().String() + "@ory.sh"
-	password = strings.ReplaceAll(uuid.New().String(), "-", "")
+	email = "dev+" + uuid.Must(uuid.NewV4()).String() + "@ory.sh"
+	password = strings.ReplaceAll(uuid.Must(uuid.NewV4()).String(), "-", "")
 	return
 }
 
@@ -29,12 +32,12 @@ func CreateIdentityWithSession(c *ory.APIClient, email, password string) (*ory.S
 	}
 
 	// Initialize a registration flow
-	flow, _, err := c.V0alpha2Api.InitializeSelfServiceRegistrationFlowWithoutBrowser(ctx).Execute()
+	flow, _, err := c.FrontendApi.CreateNativeRegistrationFlow(ctx).Execute()
 	ExitOnError(err)
 
 	// Submit the registration flow
-	result, res, err := c.V0alpha2Api.SubmitSelfServiceRegistrationFlow(ctx).Flow(flow.Id).SubmitSelfServiceRegistrationFlowBody(
-		ory.SubmitSelfServiceRegistrationFlowWithPasswordMethodBodyAsSubmitSelfServiceRegistrationFlowBody(&ory.SubmitSelfServiceRegistrationFlowWithPasswordMethodBody{
+	result, res, err := c.FrontendApi.UpdateRegistrationFlow(ctx).Flow(flow.Id).UpdateRegistrationFlowBody(
+		ory.UpdateRegistrationFlowWithPasswordMethodAsUpdateRegistrationFlowBody(&ory.UpdateRegistrationFlowWithPasswordMethod{
 			Method:   "password",
 			Password: password,
 			Traits:   map[string]interface{}{"email": email},
@@ -53,7 +56,7 @@ func CreateIdentity(c *ory.APIClient) *ory.Identity {
 	ctx := context.Background()
 
 	email, _ := RandomCredentials()
-	identity, _, err := c.V0alpha2Api.AdminCreateIdentity(ctx).AdminCreateIdentityBody(ory.AdminCreateIdentityBody{
+	identity, _, err := c.IdentityApi.CreateIdentity(ctx).CreateIdentityBody(ory.CreateIdentityBody{
 		SchemaId: "default",
 		Traits: map[string]interface{}{
 			"email": email,

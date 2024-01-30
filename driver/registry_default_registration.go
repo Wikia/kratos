@@ -1,3 +1,6 @@
+// Copyright © 2023 Ory Corp
+// SPDX-License-Identifier: Apache-2.0
+
 package driver
 
 import (
@@ -18,7 +21,7 @@ func filter(hooks []config.SelfServiceHook, persistencePhase config.PersistenceP
 }
 
 func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPrePersistExecutor) {
-	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), config.PrePersist)) {
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config().SelfServiceFlowRegistrationAfterHooks(ctx, string(credentialsType)), config.PrePersist)) {
 		if hook, ok := v.(registration.PostHookPrePersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -29,12 +32,12 @@ func (m *RegistryDefault) PostRegistrationPrePersistHooks(ctx context.Context, c
 
 func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, credentialsType identity.CredentialsType) (b []registration.PostHookPostPersistExecutor) {
 	initialHookCount := 0
-	if m.Config(ctx).SelfServiceFlowVerificationEnabled() {
+	if m.Config().SelfServiceFlowVerificationEnabled(ctx) {
 		b = append(b, m.HookVerifier())
 		initialHookCount = 1
 	}
 
-	for _, v := range m.getHooks(string(credentialsType), filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(string(credentialsType)), config.PostPersist)) {
+	for _, v := range m.getHooks(string(credentialsType), filter(m.Config().SelfServiceFlowRegistrationAfterHooks(ctx, string(credentialsType)), config.PostPersist)) {
 		if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
 			b = append(b, hook)
 		}
@@ -43,7 +46,7 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 	if len(b) == initialHookCount {
 		// since we don't want merging hooks defined in a specific strategy and global hooks
 		// global hooks are added only if no strategy specific hooks are defined
-		for _, v := range m.getHooks(config.HookGlobal, filter(m.Config(ctx).SelfServiceFlowRegistrationAfterHooks(config.HookGlobal), config.PostPersist)) {
+		for _, v := range m.getHooks(config.HookGlobal, filter(m.Config().SelfServiceFlowRegistrationAfterHooks(ctx, config.HookGlobal), config.PostPersist)) {
 			if hook, ok := v.(registration.PostHookPostPersistExecutor); ok {
 				b = append(b, hook)
 			}
@@ -54,7 +57,7 @@ func (m *RegistryDefault) PostRegistrationPostPersistHooks(ctx context.Context, 
 }
 
 func (m *RegistryDefault) PreRegistrationHooks(ctx context.Context) (b []registration.PreHookExecutor) {
-	for _, v := range m.getHooks("", m.Config(ctx).SelfServiceFlowRegistrationBeforeHooks()) {
+	for _, v := range m.getHooks("", m.Config().SelfServiceFlowRegistrationBeforeHooks(ctx)) {
 		if hook, ok := v.(registration.PreHookExecutor); ok {
 			b = append(b, hook)
 		}

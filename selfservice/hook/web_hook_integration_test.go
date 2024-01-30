@@ -40,6 +40,7 @@ import (
 	"github.com/ory/x/logrusx"
 
 	"github.com/ory/kratos/selfservice/flow"
+	"github.com/ory/kratos/selfservice/flow/login"
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/selfservice/flow/registration"
 	"github.com/ory/kratos/selfservice/flow/settings"
@@ -51,8 +52,6 @@ import (
 	"github.com/ory/kratos/x"
 
 	"github.com/ory/kratos/session"
-
-	"github.com/ory/kratos/selfservice/flow/login"
 
 	"github.com/stretchr/testify/assert"
 )

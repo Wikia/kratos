@@ -18,27 +18,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bxcodec/faker/v3"
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp"
-
-	"github.com/ory/kratos/driver"
-	"github.com/ory/kratos/hash"
-	"github.com/ory/kratos/selfservice/strategy/totp"
-	"github.com/ory/x/snapshotx"
-
-	"github.com/bxcodec/faker/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
-
 	"github.com/tomnomnom/linkheader"
 
+	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/internal/testhelpers"
 	"github.com/ory/kratos/schema"
+	"github.com/ory/kratos/selfservice/strategy/totp"
 	"github.com/ory/kratos/x"
+	"github.com/ory/x/snapshotx"
 	"github.com/ory/x/sqlxx"
 	"github.com/ory/x/urlx"
 )

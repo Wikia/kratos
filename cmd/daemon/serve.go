@@ -9,35 +9,25 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ory/analytics-go/v5"
-
-	//"github.com/segmentio/analytics-go"
-
 	"github.com/ory/kratos/cmd/cleanup"
-
-	"github.com/ory/kratos/schema"
 
 	"github.com/ory/x/otelx/semconv"
 
 	"github.com/pkg/errors"
 	"github.com/rs/cors"
-
-	prometheus "github.com/ory/x/prometheusx"
-
-	//"github.com/ory/analytics-go/v4"
-
-	"github.com/ory/x/healthx"
-	"github.com/ory/x/networkx"
-
 	"github.com/spf13/cobra"
 	"github.com/urfave/negroni"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ory/analytics-go/v5"
 	"github.com/ory/graceful"
+	"github.com/ory/x/healthx"
 	"github.com/ory/x/metricsx"
+	"github.com/ory/x/networkx"
 	"github.com/ory/x/otelx"
+	prometheus "github.com/ory/x/prometheusx"
 	"github.com/ory/x/reqlog"
 	"github.com/ory/x/servicelocatorx"
 
@@ -45,6 +35,7 @@ import (
 	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
+	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/errorx"
 	"github.com/ory/kratos/selfservice/flow/login"
 	"github.com/ory/kratos/selfservice/flow/logout"

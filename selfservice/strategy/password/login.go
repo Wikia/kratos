@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ory/kratos/hash"
-
 	"github.com/ory/kratos/selfservice/flowhelpers"
 
 	"github.com/ory/x/stringsx"
@@ -23,6 +21,7 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/x/decoderx"
 
+	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"

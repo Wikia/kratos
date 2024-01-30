@@ -104,9 +104,13 @@ func createCleanDatabases(t testing.TB) map[string]*driver.RegistryDefault {
 	var l sync.Mutex
 	if !testing.Short() {
 		funcs := map[string]func(t testing.TB) string{
+			// fandom-start
 			//"postgres":  dockertest.RunTestPostgreSQL,
+			// fandom-end
 			"mysql": dockertest.RunTestMySQL,
-			//"cockroach": dockertest.NewLocalTestCRDBServer,
+			// fandom-start
+			//"cockroach": dockertest.NewLocalTestCRDBServer
+			// fandom-end
 		}
 
 		var wg sync.WaitGroup

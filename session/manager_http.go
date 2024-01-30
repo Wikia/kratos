@@ -207,11 +207,16 @@ func (s *ManagerHTTP) extractToken(r *http.Request) string {
 		return token
 	}
 
-	cookie, err := s.getCookie(r)
+	_, err := s.getCookie(r)
+	if err != nil {
+		token, _ := bearerTokenFromRequest(r)
+		return token
+	}
+
 	// fandom-start support old cookie format
 	copyR := r.WithContext(r.Context())
 	copyR2 := r.WithContext(r.Context())
-	cookie, err = s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
+	cookie, err := s.r.CookieManager(copyR2.Context()).Get(copyR2, s.cookieName(copyR2.Context()))
 	if err != nil {
 		legacyCookie, err := s.r.LegacyCookieManager(copyR.Context()).Get(copyR, s.cookieName(copyR.Context()))
 		/**

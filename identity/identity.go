@@ -23,6 +23,7 @@ import (
 	"github.com/ory/x/sqlxx"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/x"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -285,7 +286,7 @@ func NewIdentity(traitsSchemaID string) *Identity {
 
 	stateChangedAt := sqlxx.NullTime(time.Now().UTC())
 	return &Identity{
-		ID:                  uuid.Nil,
+		ID:                  x.NewUUID(), // fandom
 		Credentials:         map[CredentialsType]Credentials{},
 		Traits:              Traits("{}"),
 		SchemaID:            traitsSchemaID,

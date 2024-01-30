@@ -24,6 +24,8 @@ import (
 	"github.com/ory/x/otelx"
 	otelsql "github.com/ory/x/otelx/sql"
 
+	"github.com/gobuffalo/pop/v6"
+
 	"github.com/ory/nosurf"
 
 	"github.com/ory/kratos/hydra"
@@ -51,7 +53,6 @@ import (
 	"github.com/ory/kratos/x"
 
 	"github.com/cenkalti/backoff"
-	"github.com/gobuffalo/pop/v6"
 	"github.com/gorilla/sessions"
 	"github.com/pkg/errors"
 
@@ -237,11 +238,12 @@ func NewRegistryDefault() *RegistryDefault {
 	return &RegistryDefault{
 		trc: otelx.NewNoop(nil, new(otelx.Config)),
 	}
+
+	// TODO fandom - fix webhooks
 	/*
-		// TODO FIXME
-			return &RegistryDefault{
-				rc: map[string]*retryablehttp.Client{},
-			}
+		return &RegistryDefault{
+			rc: map[string]*retryablehttp.Client{},
+		}
 	*/
 }
 

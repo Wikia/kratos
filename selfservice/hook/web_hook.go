@@ -97,6 +97,8 @@ type (
 		Messages []errorMessage `json:"messages"`
 	}
 
+	// TODO fandom - fix webhooks
+	//nolint:deadcode,unused
 	httpConfig struct {
 		sum     string
 		retries int
@@ -218,11 +220,12 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 	})
 }
 
-func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, _ identity.CredentialsType) error {
+func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
 	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
 		return nil
 	}
 	// fandom-start
+	credentials, _ := id.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
 			return errors.WithStack(err)
@@ -237,6 +240,11 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			// fandom-start
+			Credentials: credentials,
+			Fields:      req.Form,
+			HookType:    "PostRegistrationPrePersistHook:" + ct.String(),
+			// fandom-end
 		})
 	})
 }
@@ -278,6 +286,9 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 	})
 }
 
+// TODO fandom - fix webhooks
+//
+//nolint:deadcode,unused
 func newHttpConfig(r json.RawMessage) (*httpConfig, error) {
 	type rawHttpConfig struct {
 		Retries int
@@ -378,19 +389,7 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 }
 
 func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
-	// TODO fix
-	//conf, err := newHttpConfig(e.conf)
-	//if err != nil {
-	//	return fmt.Errorf("failed to parse http config: %w", err)
-	//}
-	//httpClient := e.deps.NamedHTTPClient(
-	//	ctx,
-	//	data.HookType+conf.sum,
-	//	httpx.ResilientClientWithMaxRetry(conf.retries),
-	//	httpx.ResilientClientWithConnectionTimeout(conf.timeout),
-	//	httpx.ResilientClientWithMinxRetryWait(conf.minWait),
-	//	httpx.ResilientClientWithMaxRetryWait(conf.maxWait),
-	//)
+	// TODO fandom - fix webhooks
 	var (
 		httpClient     = e.deps.HTTPClient(ctx)
 		ignoreResponse = gjson.GetBytes(e.conf, "response.ignore").Bool()
@@ -608,6 +607,9 @@ func isTimeoutError(err error) bool {
 	return errors.As(err, &te) && te.Timeout() || errors.Is(err, context.DeadlineExceeded)
 }
 
+// TODO fandom - fix webhooks
+//
+//nolint:deadcode,unused
 func (e *WebHook) parseResponse(resp *http.Response) (err error) {
 	if resp == nil {
 		return fmt.Errorf("empty response provided from the webhook")

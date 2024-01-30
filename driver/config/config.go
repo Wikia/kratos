@@ -18,25 +18,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/inhies/go-bytesize"
-
-	"github.com/ory/x/watcherx"
-
 	"github.com/duo-labs/webauthn/protocol"
 	"github.com/duo-labs/webauthn/webauthn"
 	"github.com/gofrs/uuid"
-
-	"github.com/ory/x/jsonschemax"
-
-	"github.com/ory/kratos/embedx"
-
-	"github.com/ory/x/tlsx"
-
-	"github.com/stretchr/testify/require"
+	"github.com/inhies/go-bytesize"
 
 	kjson "github.com/knadh/koanf/parsers/json"
 	"github.com/pkg/errors"
 	"github.com/rs/cors"
+	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/publicsuffix"
@@ -44,13 +34,17 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/jsonschema/v3"
 	"github.com/ory/jsonschema/v3/httploader"
+	"github.com/ory/kratos/embedx"
 	"github.com/ory/x/configx"
 	"github.com/ory/x/contextx"
 	"github.com/ory/x/httpx"
+	"github.com/ory/x/jsonschemax"
 	"github.com/ory/x/jsonx"
 	"github.com/ory/x/logrusx"
 	"github.com/ory/x/otelx"
 	"github.com/ory/x/stringsx"
+	"github.com/ory/x/tlsx"
+	"github.com/ory/x/watcherx"
 )
 
 const (

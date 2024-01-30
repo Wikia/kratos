@@ -27,7 +27,9 @@ import (
 
 func TestNewIdentity(t *testing.T) {
 	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
-	assert.Equal(t, uuid.Nil, i.ID)
+	// fandom-start
+	assert.NotEmpty(t, i.ID)
+	// fandom-end
 	assert.NotEmpty(t, i.Traits)
 	assert.NotNil(t, i.Credentials)
 	assert.True(t, i.IsActive())

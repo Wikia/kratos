@@ -114,6 +114,8 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.POST(RouteCollection, h.create)
 	// fandom-start - add API to validate email before saving user in UCP
 	admin.POST(RouteValidate, h.validate)
+	// allow admins to remove multifactor authentication for an identity
+	admin.DELETE(RouteMultifactor, h.deleteMultifactorCredential)
 	// fandom-end
 	admin.PATCH(RouteCollection, h.batchPatchIdentities)
 	admin.PUT(RouteItem, h.update)
@@ -734,6 +736,72 @@ func (h *Handler) validate(w http.ResponseWriter, r *http.Request, _ httprouter.
 }
 
 // fandom-end
+// fandom start - allow admins to remove multifactor authentication for an identity
+
+// swagger:parameters adminDeleteIdentityCredential
+// nolint:deadcode,unused
+type adminDeleteIdentityCredential struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+	// credentialType is the type of credential
+	//
+	// required: true
+	// in: path
+	CredentialType string `json:"credentialType"`
+}
+
+// swagger:route DELETE /identities/{id}/credential/{credentialType} v0alpha2 adminDeleteIdentityCredential
+//
+// # Update an Identity
+//
+// Allow admins to remove multifactor authentication for an identity
+//
+//	Consumes:
+//	- application/json
+//
+//	Produces:
+//	- application/json
+//
+//	Schemes: http, https
+//
+//	Security:
+//	  oryAccessToken:
+//
+//	Responses:
+//	  204: emptyResponse
+//	  404: jsonError
+//	  500: jsonError
+func (h *Handler) deleteMultifactorCredential(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	identity, err := h.r.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), x.ParseUUID(ps.ByName("id")))
+	if err != nil {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("Invalid identity")))
+		return
+	}
+
+	credentialType := ps.ByName("credentialType")
+	if credentialType != CredentialsTypeTOTP.String() && credentialType != CredentialsTypeLookup.String() &&
+		credentialType != CredentialsTypeWebAuthn.String() {
+		h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf("Invalid credential type: %s", credentialType)))
+		return
+	}
+
+	identity.DeleteCredentialsType(CredentialsType(credentialType))
+	if err := h.r.IdentityManager().Update(
+		r.Context(),
+		identity,
+		ManagerAllowWriteProtectedTraits,
+	); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+	h.r.Writer().Write(w, r, "OK")
+}
+
+// fandom - end
 
 // Delete Identity Parameters
 //

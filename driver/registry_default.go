@@ -237,14 +237,8 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 func NewRegistryDefault() *RegistryDefault {
 	return &RegistryDefault{
 		trc: otelx.NewNoop(nil, new(otelx.Config)),
+		rc:  map[string]*retryablehttp.Client{},
 	}
-
-	// TODO fandom - fix webhooks
-	/*
-		return &RegistryDefault{
-			rc: map[string]*retryablehttp.Client{},
-		}
-	*/
 }
 
 func (m *RegistryDefault) WithLogger(l *logrusx.Logger) Registry {

@@ -368,7 +368,7 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 			RequestCookies: cookies(req),
 			Identity:       id,
 			Credentials:    credentials,
-			HookType:       "SettingsPostPersistHook",
+			HookType:       "SettingsPostPersistHook:" + settingsType,
 		})
 	})
 }

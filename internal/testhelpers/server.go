@@ -47,7 +47,6 @@ func NewKratosServerWithCSRFAndRouters(t *testing.T, reg driver.Registry) (publi
 	}
 	reg.Config().MustSet(ctx, config.ViperKeyPublicBaseURL, public.URL)
 	reg.Config().MustSet(ctx, config.ViperKeyAdminBaseURL, admin.URL)
-	reg.Config().MustSet(ctx, config.ViperKeyAdminBaseURL, admin.URL)
 
 	reg.RegisterRoutes(context.Background(), rp, ra)
 

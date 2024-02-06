@@ -128,7 +128,7 @@ func (p *IdentityPersister) normalizeIdentifier(ct identity.CredentialsType, mat
 		// OIDC credentials are case-sensitive
 		return match
 	case identity.CredentialsTypePassword:
-		// fandom-start - temporary fix during identifier migration
+		// fandom-start
 		if p.r.Config().IdentityCaseSensitiveIdentifier() {
 			return match
 		}

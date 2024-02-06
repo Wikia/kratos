@@ -163,8 +163,6 @@ type IdentityApi interface {
 			 * Calling this endpoint irrecoverably and permanently deletes the [identity](https://www.ory.sh/docs/kratos/concepts/identity-user-model) given its ID. This action can not be undone.
 		This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
 		assumed that is has been deleted already.
-
-		Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @param id ID is the identity's ID.
 			 * @return IdentityApiApiDeleteIdentityRequest
@@ -1531,8 +1529,6 @@ func (r IdentityApiApiDeleteIdentityRequest) Execute() (*http.Response, error) {
 
 This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
 assumed that is has been deleted already.
-
-Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
   - @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
   - @param id ID is the identity's ID.
   - @return IdentityApiApiDeleteIdentityRequest

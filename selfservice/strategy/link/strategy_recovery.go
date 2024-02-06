@@ -4,6 +4,7 @@
 package link
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"time"
@@ -339,7 +340,7 @@ func (s *Strategy) handleAALLevels(w http.ResponseWriter, r *http.Request, sf *s
 			return errors.WithStack(flow.ErrCompletedByStrategy)
 		}
 	}
-	available, err := s.d.IdentityManager().GetIdentityHighestAAL(r.Context(), id.ID)
+	available, err := s.GetIdentityHighestAAL(r.Context(), id.ID)
 	if err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
@@ -562,3 +563,26 @@ func (s *Strategy) decodeRecovery(r *http.Request) (*recoverySubmitPayload, erro
 
 	return &body, nil
 }
+
+// Fandom-start https://github.com/Wikia/kratos/pull/84
+func (s *Strategy) GetIdentityHighestAAL(ctx context.Context, identityId uuid.UUID) (available identity.AuthenticatorAssuranceLevel, err error) {
+	available = identity.NoAuthenticatorAssuranceLevel
+	id, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, identityId)
+	if err != nil {
+		return available, err
+	}
+	if firstCount, err := s.d.IdentityManager().CountActiveFirstFactorCredentials(ctx, id); err != nil {
+		return available, err
+	} else if firstCount > 0 {
+		available = identity.AuthenticatorAssuranceLevel1
+	}
+
+	if secondCount, err := s.d.IdentityManager().CountActiveMultiFactorCredentials(ctx, id); err != nil {
+		return available, err
+	} else if secondCount > 0 {
+		available = identity.AuthenticatorAssuranceLevel2
+	}
+	return available, nil
+}
+
+// Fandom-end

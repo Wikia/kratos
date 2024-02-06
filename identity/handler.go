@@ -35,19 +35,12 @@ const (
 	RouteCollection     = "/identities"
 	RouteItem           = RouteCollection + "/:id"
 	RouteCredentialItem = RouteItem + "/credentials/:type"
+	// RouteValidate fandom-start - add API to validate email before saving user in UCP
+	RouteValidate = RouteCollection + "/validate"
+	// fandom-end
 
 	BatchPatchIdentitiesLimit = 2000
 )
-
-// fandom-start - add API to validate email before saving user in UCP
-const RouteValidate = RouteCollection + "/validate"
-
-// fandom-end
-
-// fandom-start allow admins to remove multifactor authentication for an identity
-const RouteMultifactor = RouteItem + "/credentials/:credentialType"
-
-// fandom-end
 
 type (
 	handlerDependencies interface {
@@ -756,8 +749,6 @@ type deleteIdentity struct {
 // Calling this endpoint irrecoverably and permanently deletes the [identity](https://www.ory.sh/docs/kratos/concepts/identity-user-model) given its ID. This action can not be undone.
 // This endpoint returns 204 when the identity was deleted or when the identity was not found, in which case it is
 // assumed that is has been deleted already.
-//
-// Learn how identities work in [Ory Kratos' User And Identity Model Documentation](https://www.ory.sh/docs/next/kratos/concepts/identity-user-model).
 //
 //	Produces:
 //	- application/json

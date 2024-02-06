@@ -66,6 +66,7 @@ require (
 	github.com/mikefarah/yq/v4 v4.19.1
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe
+	github.com/ory/analytics-go/v5 v5.0.1
 	github.com/ory/client-go v0.2.0-alpha.60
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/ory/go-acc v0.2.9-0.20230103102148-6b1c9a70dbbe
@@ -153,6 +154,7 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fullstorydev/grpcurl v1.8.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.4.0 // indirect
+	github.com/go-bindata/go-bindata v3.1.2+incompatible // indirect
 	github.com/go-crypt/x v0.2.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -268,7 +270,6 @@ require (
 	github.com/opencontainers/image-spec v1.1.0-rc2 // indirect
 	github.com/opencontainers/runc v1.1.5 // indirect
 	github.com/openzipkin/zipkin-go v0.4.1 // indirect
-	github.com/ory/analytics-go/v5 v5.0.1 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.7 // indirect
 	github.com/philhofer/fwd v1.1.2 // indirect

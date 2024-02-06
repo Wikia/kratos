@@ -179,7 +179,7 @@ type AdminIdentitySessionResponse struct {
 //	  404: errorGeneric
 //	  500: errorGeneric
 func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")), identity.ExpandDefault)
+	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")), identity.ExpandNothing)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, err)
 		return

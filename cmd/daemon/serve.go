@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ory/kratos/cmd/cleanup"
-
 	"github.com/ory/x/otelx/semconv"
 
 	"github.com/pkg/errors"
@@ -313,10 +311,6 @@ func bgTasks(d driver.Registry, cmd *cobra.Command, args []string, slOpts *servi
 
 	if d.Config().IsBackgroundCourierEnabled(ctx) {
 		return courier.Watch(ctx, d)
-	}
-
-	if d.Config().IsBackgroundCleanupEnabled(ctx) {
-		go cleanup.BackgroundCleanup(ctx, d)
 	}
 
 	return nil

@@ -8,7 +8,6 @@ import (
 	"crypto/md5" //nolint:gosec
 	"encoding/json"
 	"fmt"
-	"github.com/ory/x/httpx"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,6 +24,7 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 
 	"github.com/ory/kratos/ui/node"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
 

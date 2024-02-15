@@ -84,9 +84,11 @@ func TestWebHooks(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 	type WebHookRequest struct {
 		Body    string

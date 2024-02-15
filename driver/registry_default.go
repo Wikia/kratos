@@ -816,11 +816,16 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 
 func (m *RegistryDefault) NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
 	var rc *retryablehttp.Client
+	m.rwl.RLock()
 	if cl, ok := m.rc[name]; ok {
+		m.rwl.RUnlock()
 		rc = cl
 	} else {
+		m.rwl.RUnlock()
 		rc = m.HTTPClient(ctx, opts...)
+		m.rwl.Lock()
 		m.rc[name] = rc
+		m.rwl.Unlock()
 	}
 	return rc
 }

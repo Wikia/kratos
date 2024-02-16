@@ -936,8 +936,8 @@ func TestWebHooks(t *testing.T) {
 		// error.
 
 		var wg sync.WaitGroup
-		wg.Add(3) // HTTP client does 3 attempts
 		ts := newServer(func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+			wg.Add(1)
 			defer wg.Done()
 			w.WriteHeader(500)
 			_, _ = w.Write([]byte(`{"error":"some error"}`))
@@ -1013,9 +1013,11 @@ func TestDisallowPrivateIPRanges(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 
 	req := &http.Request{
@@ -1083,9 +1085,11 @@ func TestAsyncWebhook(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 
 	req := &http.Request{

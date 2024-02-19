@@ -23,6 +23,7 @@ jobs:
   main:
     name: Validate PR title
     runs-on: ubuntu-latest
+    if: false # fandom - disable
     steps:
       - uses: actions/checkout@v3
       - id: config

@@ -188,7 +188,6 @@ const (
 	ViperKeyClientHTTPNoPrivateIPRanges                      = "clients.http.disallow_private_ip_ranges"
 	ViperKeyClientHTTPPrivateIPExceptionURLs                 = "clients.http.private_ip_exception_urls"
 	ViperKeyVersion                                          = "version"
-	ViperKeyDatabaseCleanupSleepBackground                   = "database.cleanup.sleep.background"
 	ViperKeyHasherLegacyFandomCost                           = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey                         = "hashers.legacyfandom.key"
 	ViperKeyIdentityCaseSensitiveIdentifier                  = "identity.case_sensitive_identifier"
@@ -1265,10 +1264,6 @@ func (p *Config) SelfServiceFlowVerificationReturnTo(ctx context.Context, defaul
 	return p.GetProvider(ctx).RequestURIF(ViperKeySelfServiceVerificationBrowserDefaultReturnTo, defaultReturnTo)
 }
 
-func (p *Config) IsBackgroundCleanupEnabled(ctx context.Context) bool {
-	return p.GetProvider(ctx).Bool("background-cleanup")
-}
-
 func (p *Config) SelfServiceFlowVerificationAfterHooks(ctx context.Context, strategy string) []SelfServiceHook {
 	return p.selfServiceHooks(ctx, HookStrategyKey(ViperKeySelfServiceVerificationAfter, strategy))
 }
@@ -1307,10 +1302,6 @@ func (p *Config) DatabaseCleanupBatchSize(ctx context.Context) int {
 
 func (p *Config) SelfServiceFlowRecoveryAfterHooks(ctx context.Context, strategy string) []SelfServiceHook {
 	return p.selfServiceHooks(ctx, HookStrategyKey(ViperKeySelfServiceRecoveryAfter, strategy))
-}
-
-func (p *Config) DatabaseCleanupSleepBackground() time.Duration {
-	return p.p.DurationF(ViperKeyDatabaseCleanupSleepBackground, 30*time.Minute)
 }
 
 func (p *Config) SelfServiceFlowSettingsPrivilegedSessionMaxAge(ctx context.Context) time.Duration {

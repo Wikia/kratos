@@ -250,13 +250,6 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, r
 			return nil, s.handleError(w, r, rf, provider.Config().ID, nil, err)
 		}
 
-		// fandom-start - preserve return_to param between flows
-		lf.RequestURL, err = x.TakeOverReturnToParameter(rf.RequestURL, lf.RequestURL)
-		if err != nil {
-			return nil, s.handleError(w, r, rf, provider.Config().ID, nil, err)
-		}
-		// fandom-end
-
 		if _, err := s.processLogin(w, r, lf, token, claims, provider, container); err != nil {
 			return lf, s.handleError(w, r, rf, provider.Config().ID, nil, err)
 		}

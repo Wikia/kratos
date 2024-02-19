@@ -9,8 +9,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ory/x/urlx"
-
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/sessiontokenexchange"
 	"github.com/ory/kratos/ui/node"
@@ -19,6 +17,8 @@ import (
 	"github.com/ory/x/randx"
 
 	"github.com/gorilla/sessions"
+
+	"github.com/ory/x/urlx"
 
 	"github.com/gofrs/uuid"
 
@@ -349,13 +349,36 @@ func (s *ManagerHTTP) DoesSessionSatisfy(r *http.Request, sess *Session, request
 			return nil
 		}
 	case config.HighestAvailableAAL:
-		// Fandom-start logic moved to GetIdentityHighestAAL() -> https://github.com/Wikia/kratos/pull/84
-		if available, err := s.r.IdentityManager().GetIdentityHighestAAL(r.Context(), sess.IdentityID); err != nil {
+		i := sess.Identity
+		if i == nil {
+			i, err = s.r.IdentityPool().GetIdentity(ctx, sess.IdentityID, identity.ExpandCredentials)
+			if err != nil {
+				return err
+			}
+			sess.Identity = i
+		} else if len(i.Credentials) == 0 {
+			// If credentials are not expanded, we load them here.
+			if err := s.r.PrivilegedIdentityPool().HydrateIdentityAssociations(ctx, i, identity.ExpandCredentials); err != nil {
+				return err
+			}
+		}
+
+		available := identity.NoAuthenticatorAssuranceLevel
+		if firstCount, err := s.r.IdentityManager().CountActiveFirstFactorCredentials(ctx, i); err != nil {
 			return err
-		} else if sess.AuthenticatorAssuranceLevel >= available {
+		} else if firstCount > 0 {
+			available = identity.AuthenticatorAssuranceLevel1
+		}
+
+		if secondCount, err := s.r.IdentityManager().CountActiveMultiFactorCredentials(ctx, i); err != nil {
+			return err
+		} else if secondCount > 0 {
+			available = identity.AuthenticatorAssuranceLevel2
+		}
+
+		if sess.AuthenticatorAssuranceLevel >= available {
 			return nil
 		}
-		// Fandom-start
 
 		loginURL := urlx.CopyWithQuery(urlx.AppendPaths(s.r.Config().SelfPublicURL(ctx), "/self-service/login/browser"), url.Values{"aal": {"aal2"}})
 

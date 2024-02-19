@@ -99,6 +99,25 @@ type (
 		Messages []errorMessage `json:"messages"`
 	}
 
+	// fandom-start - letter case workaround
+	detailedMessageFallback struct {
+		ID      int
+		Text    string
+		Type    string
+		Context json.RawMessage
+	}
+
+	errorMessageFallback struct {
+		InstancePtr      string
+		Message          string
+		DetailedMessages []detailedMessageFallback
+	}
+
+	rawHookResponseFallback struct {
+		Messages []errorMessageFallback
+	}
+	// fandom-end - letter case workaround
+
 	httpConfig struct {
 		sum     string
 		retries int
@@ -557,8 +576,6 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 			Identity *identity.Identity `json:"identity"`
 		}
 
-		// todo: replace it with json.NewDecoder(resp.Body).Decode(&hookResponse) to be consistent with upstream
-		// used json.Unmarshal for now, because json.NewDecoder(resp.Body).Decode(&hookResponse) panics
 		if err := json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
@@ -604,31 +621,62 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 		return nil
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		var hookResponse rawHookResponse
-		// todo: replace it with json.NewDecoder(resp.Body).Decode(&hookResponse) to be consistent with upstream
-		// used json.Unmarshal for now, because json.NewDecoder(resp.Body).Decode(&hookResponse) panics
+		var hookResponseFallback rawHookResponseFallback
 		if err = json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
 
-		var validationErrs []*schema.ValidationError
-		for _, msg := range hookResponse.Messages {
-			messages := text.Messages{}
-			for _, detail := range msg.DetailedMessages {
-				var msgType text.UITextType
-				if detail.Type == "error" {
-					msgType = text.Error
-				} else {
-					msgType = text.Info
-				}
-				messages.Add(&text.Message{
-					ID:      text.ID(detail.ID),
-					Text:    detail.Text,
-					Type:    msgType,
-					Context: detail.Context,
-				})
+		// try to read another format is we could not read detailed messages
+		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) < 1 {
+			if err = json.Unmarshal(body, &hookResponseFallback); err != nil {
+				return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 			}
-			validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
 		}
+
+		var validationErrs []*schema.ValidationError
+
+		// fandom-start - letter case workaround
+		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) > 0 {
+			for _, msg := range hookResponse.Messages {
+				messages := text.Messages{}
+				for _, detail := range msg.DetailedMessages {
+					var msgType text.UITextType
+					if detail.Type == "error" {
+						msgType = text.Error
+					} else {
+						msgType = text.Info
+					}
+					messages.Add(&text.Message{
+						ID:      text.ID(detail.ID),
+						Text:    detail.Text,
+						Type:    msgType,
+						Context: detail.Context,
+					})
+				}
+				validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
+			}
+		} else {
+			for _, msg := range hookResponseFallback.Messages {
+				messages := text.Messages{}
+				for _, detail := range msg.DetailedMessages {
+					var msgType text.UITextType
+					if detail.Type == "error" {
+						msgType = text.Error
+					} else {
+						msgType = text.Info
+					}
+					messages.Add(&text.Message{
+						ID:      text.ID(detail.ID),
+						Text:    detail.Text,
+						Type:    msgType,
+						Context: detail.Context,
+					})
+				}
+				validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
+			}
+		}
+		// fandom-end
+
 		// fandom-start
 		validationErr := schema.NewValidationListError(validationErrs)
 

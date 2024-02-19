@@ -24,6 +24,7 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 
 	"github.com/ory/kratos/ui/node"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
 
@@ -90,6 +91,7 @@ type (
 
 	errorMessage struct {
 		InstancePtr      string            `json:"instance_ptr"`
+		Message          string            `json:"message,omitempty"`
 		DetailedMessages []detailedMessage `json:"messages"`
 	}
 
@@ -97,8 +99,6 @@ type (
 		Messages []errorMessage `json:"messages"`
 	}
 
-	// TODO fandom - fix webhooks
-	//nolint:deadcode,unused
 	httpConfig struct {
 		sum     string
 		retries int
@@ -130,6 +130,7 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "LoginPreHook",
 		})
 	})
 }
@@ -151,9 +152,8 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       session.Identity,
-			// fandom-start
-			Fields: req.Form,
-			// fandom-end
+			HookType:       "LoginPostHook",
+			Fields:         req.Form,
 		})
 	})
 }
@@ -166,6 +166,7 @@ func (e *WebHook) ExecuteVerificationPreHook(_ http.ResponseWriter, req *http.Re
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "VerificationPreHook",
 		})
 	})
 }
@@ -179,6 +180,7 @@ func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.R
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			HookType:       "VerificationPostHook",
 		})
 	})
 }
@@ -191,6 +193,7 @@ func (e *WebHook) ExecuteRecoveryPreHook(_ http.ResponseWriter, req *http.Reques
 			RequestMethod:  req.Method,
 			RequestCookies: cookies(req),
 			RequestURL:     x.RequestURL(req).String(),
+			HookType:       "RecoveryPreHook",
 		})
 	})
 }
@@ -204,6 +207,7 @@ func (e *WebHook) ExecutePostRecoveryHook(_ http.ResponseWriter, req *http.Reque
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       session.Identity,
+			HookType:       "RecoveryPostHook",
 		})
 	})
 }
@@ -216,6 +220,7 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "RegistrationPreHook",
 		})
 	})
 }
@@ -286,9 +291,8 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 	})
 }
 
-// TODO fandom - fix webhooks
-//
-//nolint:deadcode,unused
+// fandom-start
+
 func newHttpConfig(r json.RawMessage) (*httpConfig, error) {
 	type rawHttpConfig struct {
 		Retries int
@@ -338,6 +342,7 @@ func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Reques
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "SettingsPreHook",
 		})
 	})
 }
@@ -346,6 +351,14 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
 		return nil
 	}
+	// fandom-start
+	var credentials *identity.Credentials
+	if settingsType == "password" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
+	}
+	// fandom-end
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
 			Flow:           flow,
@@ -354,6 +367,8 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			Credentials:    credentials,
+			HookType:       "SettingsPostPersistHook:" + settingsType,
 		})
 	})
 }
@@ -389,9 +404,19 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 }
 
 func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
-	// TODO fandom - fix webhooks
+	conf, err := newHttpConfig(e.conf)
+	if err != nil {
+		return fmt.Errorf("failed to parse http config: %w", err)
+	}
 	var (
-		httpClient     = e.deps.HTTPClient(ctx)
+		httpClient = e.deps.NamedHTTPClient(
+			ctx,
+			data.HookType+conf.sum,
+			httpx.ResilientClientWithMaxRetry(conf.retries),
+			httpx.ResilientClientWithConnectionTimeout(conf.timeout),
+			httpx.ResilientClientWithMinxRetryWait(conf.minWait),
+			httpx.ResilientClientWithMaxRetryWait(conf.maxWait),
+		)
 		ignoreResponse = gjson.GetBytes(e.conf, "response.ignore").Bool()
 		canInterrupt   = gjson.GetBytes(e.conf, "can_interrupt").Bool()
 		parseResponse  = gjson.GetBytes(e.conf, "response.parse").Bool()
@@ -484,7 +509,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		if resp.StatusCode >= http.StatusBadRequest {
 			span.SetStatus(codes.Error, "HTTP status code >= 400")
 			if canInterrupt || parseResponse {
-				if err := parseWebhookResponse(resp, data.Identity); err != nil {
+				if err := e.parseWebhookResponse(resp, data.Identity); err != nil {
 					return err
 				}
 			}
@@ -498,7 +523,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		}
 
 		if parseResponse {
-			return parseWebhookResponse(resp, data.Identity)
+			return e.parseWebhookResponse(resp, data.Identity)
 		}
 		return nil
 	}
@@ -513,17 +538,28 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	return nil
 }
 
-func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error) {
+func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error) {
 	if resp == nil {
 		return errors.Errorf("empty response provided from the webhook")
 	}
+
+	// fandom-start
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "could not read response body")
+	}
+
+	e.deps.Logger().WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
+	// fandom-end
 
 	if resp.StatusCode == http.StatusOK {
 		var hookResponse struct {
 			Identity *identity.Identity `json:"identity"`
 		}
 
-		if err := json.NewDecoder(resp.Body).Decode(&hookResponse); err != nil {
+		// todo: replace it with json.NewDecoder(resp.Body).Decode(&hookResponse) to be consistent with upstream
+		// used json.Unmarshal for now, because json.NewDecoder(resp.Body).Decode(&hookResponse) panics
+		if err := json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
 
@@ -568,7 +604,9 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 		return nil
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		var hookResponse rawHookResponse
-		if err := json.NewDecoder(resp.Body).Decode(&hookResponse); err != nil {
+		// todo: replace it with json.NewDecoder(resp.Body).Decode(&hookResponse) to be consistent with upstream
+		// used json.Unmarshal for now, because json.NewDecoder(resp.Body).Decode(&hookResponse) panics
+		if err = json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
 
@@ -591,12 +629,16 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 			}
 			validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
 		}
+		// fandom-start
+		validationErr := schema.NewValidationListError(validationErrs)
 
 		if len(validationErrs) == 0 {
+			e.deps.Logger().WithField("validations", validationErr).Debug("webhook: parsed validations")
 			return errors.New("error while parsing webhook response: got no validation errors")
 		}
 
-		return schema.NewValidationListError(validationErrs)
+		return errors.WithStack(validationErr)
+		// fandom-end
 	}
 
 	return nil
@@ -605,55 +647,4 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 func isTimeoutError(err error) bool {
 	var te interface{ Timeout() bool }
 	return errors.As(err, &te) && te.Timeout() || errors.Is(err, context.DeadlineExceeded)
-}
-
-// TODO fandom - fix webhooks
-//
-//nolint:deadcode,unused
-func (e *WebHook) parseResponse(resp *http.Response) (err error) {
-	if resp == nil {
-		return fmt.Errorf("empty response provided from the webhook")
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "could not read response body")
-	}
-
-	hookResponse := &rawHookResponse{
-		Messages: []errorMessage{},
-	}
-
-	// fandom-start
-	e.deps.Logger().WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
-	// fandom-end
-
-	if err = json.Unmarshal(body, &hookResponse); err != nil {
-		return errors.Wrap(err, "hook response could not be unmarshalled properly")
-	}
-
-	var validationErrs []*schema.ValidationError
-
-	for _, msg := range hookResponse.Messages {
-		messages := text.Messages{}
-		for _, detail := range msg.DetailedMessages {
-			messages.Add(&text.Message{
-				ID:      text.ID(detail.ID),
-				Text:    detail.Text,
-				Type:    text.UITextType(detail.Type),
-				Context: detail.Context,
-			})
-		}
-		validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, msg.DetailedMessages[0].Text, messages))
-	}
-	validationErr := schema.NewValidationListError(validationErrs)
-
-	if len(validationErrs) == 0 {
-		// fandom-start
-		e.deps.Logger().WithField("validations", validationErr).Debug("webhook: parsed validations")
-		// fandom-end
-		return errors.New("error while parsing hook response: got no validation errors")
-	}
-
-	return errors.WithStack(validationErr)
 }

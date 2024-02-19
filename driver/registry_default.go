@@ -83,7 +83,7 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
-	rc  map[string]*retryablehttp.Client
+	rc  *sync.Map
 
 	ctxer contextx.Contextualizer
 
@@ -237,14 +237,8 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 func NewRegistryDefault() *RegistryDefault {
 	return &RegistryDefault{
 		trc: otelx.NewNoop(nil, new(otelx.Config)),
+		rc:  new(sync.Map),
 	}
-
-	// TODO fandom - fix webhooks
-	/*
-		return &RegistryDefault{
-			rc: map[string]*retryablehttp.Client{},
-		}
-	*/
 }
 
 func (m *RegistryDefault) WithLogger(l *logrusx.Logger) Registry {
@@ -821,14 +815,8 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 }
 
 func (m *RegistryDefault) NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
-	var rc *retryablehttp.Client
-	if cl, ok := m.rc[name]; ok {
-		rc = cl
-	} else {
-		rc = m.HTTPClient(ctx, opts...)
-		m.rc[name] = rc
-	}
-	return rc
+	res, _ := m.rc.LoadOrStore(name, m.HTTPClient(ctx, opts...))
+	return res.(*retryablehttp.Client)
 }
 
 func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {

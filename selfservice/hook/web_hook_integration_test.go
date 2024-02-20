@@ -522,7 +522,9 @@ func TestWebHooks(t *testing.T) {
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
 			},
-			expectedError: nil,
+			// fandom-start
+			expectedError: webhookError,
+			// fandom-end
 		},
 		{
 			uc:         "Post Registration Pre Persist Hook - no block",
@@ -621,7 +623,9 @@ func TestWebHooks(t *testing.T) {
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
 			},
-			expectedError: nil,
+			// fandom-start
+			expectedError: webhookError,
+			// fandom-end
 		},
 	} {
 		tc := tc
@@ -818,7 +822,13 @@ func TestWebHooks(t *testing.T) {
 
 			postPersistErr := wh.ExecuteSettingsPostPersistHook(nil, req, f, in, "PostSettings")
 			assert.NoError(t, postPersistErr)
-			assert.Equal(t, in, &identity.Identity{ID: uuid})
+			// fandom-start
+			if tc.parse == true {
+				assert.Equal(t, in, &identity.Identity{ID: uuid, Traits: identity.Traits(`{"email":"some@other-example.org"}`)})
+			} else {
+				assert.Equal(t, in, &identity.Identity{ID: uuid})
+			}
+			// fandom-end
 
 			prePersistErr := wh.ExecuteSettingsPrePersistHook(nil, req, f, in, "PostSettings")
 			assert.NoError(t, prePersistErr)

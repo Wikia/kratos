@@ -245,10 +245,11 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 }
 
 func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
 	credentials, _ := id.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
@@ -274,10 +275,11 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 }
 
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
 	credentials, _ := session.Identity.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
@@ -367,10 +369,11 @@ func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Reques
 }
 
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
@@ -393,11 +396,11 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 }
 
 func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
-	}
-
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)

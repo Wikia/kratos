@@ -630,7 +630,7 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 		}
 
 		// try to read another format is we could not read detailed messages
-		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) < 1 {
+		if len(hookResponse.Messages) != 0 && len(hookResponse.Messages[0].DetailedMessages) == 0 {
 			if err = json.Unmarshal(body, &hookResponseFallback); err != nil {
 				return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 			}

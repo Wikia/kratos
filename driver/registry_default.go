@@ -496,33 +496,6 @@ func (m *RegistryDefault) SelfServiceErrorHandler() *errorx.Handler {
 	return m.errorHandler
 }
 
-// fandom-start support old cookie format
-func (m *RegistryDefault) LegacyCookieManager(ctx context.Context) sessions.StoreExact {
-	cs := sessions.NewCookieStore(m.Config().SecretsSession(ctx)...)
-	cs.Options.Secure = !m.Config().IsInsecureDevMode(ctx)
-	cs.Options.HttpOnly = true
-
-	if domain := m.Config().SessionDomain(ctx); domain != "" {
-		cs.Options.Domain = domain
-	}
-
-	if path := m.Config().SessionPath(ctx); path != "" {
-		cs.Options.Path = path
-	}
-
-	if sameSite := m.Config().SessionSameSiteMode(ctx); sameSite != 0 {
-		cs.Options.SameSite = sameSite
-	}
-
-	cs.Options.MaxAge = 0
-	if m.Config().SessionPersistentCookie(ctx) {
-		cs.Options.MaxAge = int(m.Config().SessionLifespan(ctx).Seconds())
-	}
-	return cs
-}
-
-// fandom-end
-
 func (m *RegistryDefault) CookieManager(ctx context.Context) sessions.StoreExact {
 	var keys [][]byte
 	for _, k := range m.Config().SecretsSession(ctx) {

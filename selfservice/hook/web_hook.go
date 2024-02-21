@@ -639,7 +639,7 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 		var validationErrs []*schema.ValidationError
 
 		// fandom-start - letter case workaround
-		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) > 0 {
+		if len(hookResponse.Messages) != 0 && len(hookResponse.Messages[0].DetailedMessages) != 0 {
 			for _, msg := range hookResponse.Messages {
 				messages := text.Messages{}
 				for _, detail := range msg.DetailedMessages {

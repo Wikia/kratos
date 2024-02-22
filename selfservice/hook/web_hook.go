@@ -245,10 +245,11 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 }
 
 func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
 	credentials, _ := id.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
@@ -274,10 +275,11 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 }
 
 func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
 	credentials, _ := session.Identity.GetCredentials(ct)
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
@@ -367,10 +369,11 @@ func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Reques
 }
 
 func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
-	}
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
@@ -393,11 +396,11 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 }
 
 func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
-	}
-
 	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
 	var credentials *identity.Credentials
 	if settingsType == "password" {
 		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
@@ -416,7 +419,7 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 			Identity:       id,
 			// fandom-start
 			Credentials: credentials,
-			HookType:    "SettingsPostPersistHook:" + settingsType,
+			HookType:    "SettingsPrePersistHook:" + settingsType,
 			// fandom-end
 		})
 	})
@@ -627,7 +630,7 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 		}
 
 		// try to read another format is we could not read detailed messages
-		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) < 1 {
+		if len(hookResponse.Messages) != 0 && len(hookResponse.Messages[0].DetailedMessages) == 0 {
 			if err = json.Unmarshal(body, &hookResponseFallback); err != nil {
 				return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 			}
@@ -636,7 +639,7 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 		var validationErrs []*schema.ValidationError
 
 		// fandom-start - letter case workaround
-		if len(hookResponse.Messages) > 0 && len(hookResponse.Messages[0].DetailedMessages) > 0 {
+		if len(hookResponse.Messages) != 0 && len(hookResponse.Messages[0].DetailedMessages) != 0 {
 			for _, msg := range hookResponse.Messages {
 				messages := text.Messages{}
 				for _, detail := range msg.DetailedMessages {

@@ -182,6 +182,10 @@ func (s *DefaultPasswordValidator) validate(ctx context.Context, identifier, pas
 		return errors.Errorf("password length must be at least %d characters but only got %d", passwordPolicyConfig.MinPasswordLength, len(password))
 	}
 
+	if len(password) > int(passwordPolicyConfig.MaxPasswordLength) {
+		return errors.Errorf("password length cannot exceed %d characters", passwordPolicyConfig.MaxPasswordLength)
+	}
+
 	if passwordPolicyConfig.IdentifierSimilarityCheckEnabled && len(identifier) > 0 {
 		compIdentifier, compPassword := strings.ToLower(identifier), strings.ToLower(password)
 		dist := levenshtein.Distance(compIdentifier, compPassword)

@@ -173,7 +173,6 @@ const (
 	ViperKeyPasswordHaveIBeenPwnedEnabled                    = "selfservice.methods.password.config.haveibeenpwned_enabled"
 	ViperKeyPasswordMaxBreaches                              = "selfservice.methods.password.config.max_breaches"
 	ViperKeyPasswordMinLength                                = "selfservice.methods.password.config.min_password_length"
-	ViperKeyPasswordMaxLength                                = "selfservice.methods.password.config.max_password_length"
 	ViperKeyPasswordIdentifierSimilarityCheckEnabled         = "selfservice.methods.password.config.identifier_similarity_check_enabled"
 	ViperKeyIgnoreNetworkErrors                              = "selfservice.methods.password.config.ignore_network_errors"
 	ViperKeyTOTPIssuer                                       = "selfservice.methods.totp.config.issuer"
@@ -261,7 +260,6 @@ type (
 		MaxBreaches                      uint   `json:"max_breaches"`
 		IgnoreNetworkErrors              bool   `json:"ignore_network_errors"`
 		MinPasswordLength                uint   `json:"min_password_length"`
-		MaxPasswordLength                uint   `json:"max_password_length"`
 		IdentifierSimilarityCheckEnabled bool   `json:"identifier_similarity_check_enabled"`
 	}
 	Schemas                  []Schema
@@ -1417,7 +1415,6 @@ func (p *Config) PasswordPolicyConfig(ctx context.Context) *PasswordPolicy {
 		MaxBreaches:                      uint(p.GetProvider(ctx).Int(ViperKeyPasswordMaxBreaches)),
 		IgnoreNetworkErrors:              p.GetProvider(ctx).BoolF(ViperKeyIgnoreNetworkErrors, true),
 		MinPasswordLength:                uint(p.GetProvider(ctx).IntF(ViperKeyPasswordMinLength, 8)),
-		MaxPasswordLength:                uint(p.GetProvider(ctx).IntF(ViperKeyPasswordMaxLength, 20)),
 		IdentifierSimilarityCheckEnabled: p.GetProvider(ctx).BoolF(ViperKeyPasswordIdentifierSimilarityCheckEnabled, true),
 	}
 }

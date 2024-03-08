@@ -11,35 +11,26 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/ory/x/sqlxx"
-	"github.com/ory/x/urlx"
-
-	"github.com/ory/kratos/driver/config"
-	"github.com/ory/kratos/schema"
-
-	"github.com/ory/kratos/x/xsql"
-
-	"github.com/go-errors/errors"
+	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/pop/v6/logging"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/ory/x/sqlcon"
-	"github.com/ory/x/sqlcon/dockertest"
+	"golang.org/x/sync/errgroup"
 
 	continuity "github.com/ory/kratos/continuity/test"
 	"github.com/ory/kratos/corpx"
 	courier "github.com/ory/kratos/courier/test"
 	"github.com/ory/kratos/driver"
+	"github.com/ory/kratos/driver/config"
 	ri "github.com/ory/kratos/identity"
 	identity "github.com/ory/kratos/identity/test"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/internal/testhelpers"
 	"github.com/ory/kratos/persistence/sql"
 	sqltesthelpers "github.com/ory/kratos/persistence/sql/testhelpers"
+	"github.com/ory/kratos/schema"
 	errorx "github.com/ory/kratos/selfservice/errorx/test"
 	lf "github.com/ory/kratos/selfservice/flow/login"
 	login "github.com/ory/kratos/selfservice/flow/login/test"
@@ -52,6 +43,11 @@ import (
 	link "github.com/ory/kratos/selfservice/strategy/link/test"
 	session "github.com/ory/kratos/session/test"
 	"github.com/ory/kratos/x"
+	"github.com/ory/kratos/x/xsql"
+	"github.com/ory/x/sqlcon"
+	"github.com/ory/x/sqlcon/dockertest"
+	"github.com/ory/x/sqlxx"
+	"github.com/ory/x/urlx"
 )
 
 func init() {
@@ -59,7 +55,7 @@ func init() {
 	pop.SetNowFunc(func() time.Time {
 		return time.Now().UTC().Round(time.Second)
 	})
-	//pop.Debug = true
+	// pop.Debug = true
 }
 
 func TestMain(m *testing.M) {
@@ -224,14 +220,14 @@ func TestPersister(t *testing.T) {
 
 			t.Run("contract=identity.TestPool", func(t *testing.T) {
 				pop.SetLogger(pl(t))
-				identity.TestPool(ctx, conf, p, reg.IdentityManager())(t)
+				identity.TestPool(ctx, conf, p, reg.IdentityManager(), name)(t)
 			})
 			t.Run("contract=identity.TestPool (case sensitive)", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 
 				caseConf := reg.Config()
 				caseConf.MustSet(ctx, config.ViperKeyIdentityCaseSensitiveIdentifier, true)
-				identity.TestPool(ctx, caseConf, p, reg.IdentityManager())(t)
+				identity.TestPool(ctx, caseConf, p, reg.IdentityManager(), name)(t)
 			})
 			t.Run("contract=registration.TestFlowPersister", func(t *testing.T) {
 				pop.SetLogger(pl(t))
@@ -396,4 +392,15 @@ func Benchmark_BatchCreateIdentities(b *testing.B) {
 			}
 		})
 	}
+}
+
+func newLocalTestCRDBServer(t testing.TB) string {
+	ts, err := testserver.NewTestServer(testserver.CustomVersionOpt("23.1.13"))
+	require.NoError(t, err)
+	t.Cleanup(ts.Stop)
+
+	require.NoError(t, ts.WaitForInit())
+
+	ts.PGURL().Scheme = "cockroach"
+	return ts.PGURL().String()
 }

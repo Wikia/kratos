@@ -34,11 +34,13 @@ context("Account Verification Registration Errors", () => {
 
       let identity
       beforeEach(() => {
-        cy.enableVerification()
-        cy.disableRecovery()
-        cy.shortCodeLifespan()
-        cy.longVerificationLifespan()
-
+        cy.useConfig((builder) =>
+          builder
+            .enableVerification()
+            .disableRecovery()
+            .shortCodeLifespan()
+            .longVerificationLifespan(),
+        )
         cy.deleteMail()
 
         identity = gen.identityWithWebsite()
@@ -47,7 +49,6 @@ context("Account Verification Registration Errors", () => {
       })
 
       it("is unable to verify the email address if the code is no longer valid and resend the code", () => {
-        cy.shortCodeLifespan()
         cy.verifyEmailButExpired({
           expect: { email: identity.email },
         })
@@ -64,7 +65,10 @@ context("Account Verification Registration Errors", () => {
       })
 
       it("is unable to verify the email address if the code is incorrect", () => {
-        cy.getMail().then((mail) => {
+        cy.getMail({
+          subject: "Please verify your email address",
+          email: identity.email,
+        }).then((mail) => {
           const link = parseHtml(mail.body).querySelector("a")
 
           expect(verifyHrefPattern.test(link.href)).to.be.true

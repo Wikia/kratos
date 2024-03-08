@@ -5,11 +5,9 @@ package hook
 
 import (
 	"context"
-	"net/http"
-	"time"
-
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/ui/node"
+	"net/http"
 
 	"github.com/pkg/errors"
 
@@ -53,13 +51,10 @@ func (e *SessionIssuer) ExecutePostRegistrationPostPersistHook(w http.ResponseWr
 }
 
 func (e *SessionIssuer) executePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session, _ identity.CredentialsType) error {
-	s.AuthenticatedAt = time.Now().UTC()
-	if err := e.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
-		return err
-	}
-
 	if a.Type == flow.TypeAPI {
-		if s.AuthenticatedVia(identity.CredentialsTypeOIDC) {
+		// We don't want to redirect with the code, if the flow was submitted with an ID token.
+		// This is the case for Sign in with native Apple SDK or Google SDK.
+		if s.AuthenticatedVia(identity.CredentialsTypeOIDC) && a.IDToken == "" {
 			if handled, err := e.r.SessionManager().MaybeRedirectAPICodeFlow(w, r, a, s.ID, node.OpenIDConnectGroup); err != nil {
 				return errors.WithStack(err)
 			} else if handled {

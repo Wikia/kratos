@@ -13,10 +13,8 @@ import (
 	"path/filepath"
 	"text/template"
 
-	"github.com/hashicorp/go-retryablehttp"
-
+	"github.com/ory/kratos/x"
 	"github.com/ory/x/fetcher"
-	"github.com/ory/x/httpx"
 
 	"github.com/Masterminds/sprig/v3"
 	lru "github.com/hashicorp/golang-lru"
@@ -33,7 +31,7 @@ type Template interface {
 }
 
 type templateDependencies interface {
-	HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client
+	x.HTTPClientProvider
 }
 
 func loadBuiltInTemplate(filesystem fs.FS, name string, html bool) (Template, error) {
@@ -78,11 +76,8 @@ func loadBuiltInTemplate(filesystem fs.FS, name string, html bool) (Template, er
 	return tpl, nil
 }
 
-func loadRemoteTemplate(ctx context.Context, d templateDependencies, url string, html bool) (Template, error) {
+func loadRemoteTemplate(ctx context.Context, d templateDependencies, url string, html bool) (t Template, err error) {
 	var b []byte
-	var err error
-
-	// instead of creating a new request always we always cache the bytes.Buffer using the url as the key
 	if t, found := Cache.Get(url); found {
 		b = t.([]byte)
 	} else {
@@ -95,7 +90,6 @@ func loadRemoteTemplate(ctx context.Context, d templateDependencies, url string,
 		_ = Cache.Add(url, b)
 	}
 
-	var t Template
 	if html {
 		t, err = htemplate.New(url).Funcs(sprig.HermeticHtmlFuncMap()).Parse(string(b))
 		if err != nil {

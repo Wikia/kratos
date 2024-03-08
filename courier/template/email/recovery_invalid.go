@@ -18,7 +18,8 @@ type (
 		m *RecoveryInvalidModel
 	}
 	RecoveryInvalidModel struct {
-		To string
+		To         string `json:"to"`
+		RequestURL string `json:"request_url"`
 	}
 )
 
@@ -46,4 +47,8 @@ func (t *RecoveryInvalid) EmailBodyPlaintext(ctx context.Context) (string, error
 
 func (t *RecoveryInvalid) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.m)
+}
+
+func (t *RecoveryInvalid) TemplateType() template.TemplateType {
+	return template.TypeRecoveryInvalid
 }

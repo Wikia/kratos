@@ -26,9 +26,11 @@ import (
 	"github.com/ory/kratos/x"
 )
 
-var _ login.Strategy = new(Strategy)
-var _ registration.Strategy = new(Strategy)
-var _ identity.ActiveCredentialsCounter = new(Strategy)
+var (
+	_ login.Strategy                    = new(Strategy)
+	_ registration.Strategy             = new(Strategy)
+	_ identity.ActiveCredentialsCounter = new(Strategy)
+)
 
 type registrationStrategyDependencies interface {
 	x.LoggingProvider
@@ -74,9 +76,9 @@ type Strategy struct {
 	hd *decoderx.HTTP
 }
 
-func NewStrategy(d registrationStrategyDependencies) *Strategy {
+func NewStrategy(d any) *Strategy {
 	return &Strategy{
-		d:  d,
+		d:  d.(registrationStrategyDependencies),
 		v:  validator.New(),
 		hd: decoderx.NewHTTP(),
 	}
@@ -110,7 +112,7 @@ func (s *Strategy) ID() identity.CredentialsType {
 	return identity.CredentialsTypePassword
 }
 
-func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod {
+func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context, _ session.AuthenticationMethods) session.AuthenticationMethod {
 	return session.AuthenticationMethod{
 		Method: s.ID(),
 		AAL:    identity.AuthenticatorAssuranceLevel1,

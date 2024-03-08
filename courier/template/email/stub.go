@@ -18,9 +18,9 @@ type (
 		m *TestStubModel
 	}
 	TestStubModel struct {
-		To      string
-		Subject string
-		Body    string
+		To      string `json:"to"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
 	}
 )
 
@@ -48,4 +48,8 @@ func (t *TestStub) EmailBodyPlaintext(ctx context.Context) (string, error) {
 
 func (t *TestStub) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.m)
+}
+
+func (t *TestStub) TemplateType() template.TemplateType {
+	return template.TypeTestStub
 }

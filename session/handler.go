@@ -21,7 +21,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/ory/x/decoderx"
-	"github.com/ory/x/urlx"
 
 	"github.com/ory/herodot"
 
@@ -36,10 +35,12 @@ type (
 		ManagementProvider
 		PersistenceProvider
 		x.WriterProvider
+		x.TracingProvider
 		x.LoggingProvider
 		x.CSRFProvider
 		config.Provider
 		sessiontokenexchange.PersistenceProvider
+		TokenizerProvider
 	}
 	HandlerProvider interface {
 		SessionHandler() *Handler
@@ -239,6 +240,13 @@ type toSession struct {
 	//
 	// in: header
 	Cookie string `json:"Cookie"`
+
+	// Returns the session additionally as a token (such as a JWT)
+	//
+	// The value of this parameter has to be a valid, configured Ory Session token template. For more information head over to [the documentation](http://ory.sh/docs/identities/session-to-jwt-cors).
+	//
+	// in: query
+	TokenizeAs string `json:"tokenize_as"`
 }
 
 // swagger:route GET /sessions/whoami frontend toSession
@@ -269,6 +277,16 @@ type toSession struct {
 //	const session = await client.toSession("the-session-token")
 //
 //	// console.log(session)
+//	```
+//
+// When using a token template, the token is included in the `tokenized` field of the session.
+//
+//	```js
+//	// pseudo-code example
+//	// ...
+//	const session = await client.toSession("the-session-token", { tokenize_as: "example-jwt-template" })
+//
+//	console.log(session.tokenized) // The JWT
 //	```
 //
 // Depending on your configuration this endpoint might return a 403 status code if the session has a lower Authenticator
@@ -306,12 +324,15 @@ type toSession struct {
 //	  401: errorGeneric
 //	  403: errorGeneric
 //	  default: errorGeneric
-func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	ctx, span := h.r.Tracer(r.Context()).Tracer().Start(r.Context(), "sessions.Handler.whoami")
+	defer span.End()
+
+	s, err := h.r.SessionManager().FetchFromRequest(ctx, r)
 	c := h.r.Config()
 	if err != nil {
 		// We cache errors (and set cache header only when configured) where no session was found.
-		if noSess := new(ErrNoActiveSessionFound); c.SessionWhoAmICaching(r.Context()) && errors.As(err, &noSess) && noSess.credentialsMissing {
+		if noSess := new(ErrNoActiveSessionFound); c.SessionWhoAmICaching(ctx) && errors.As(err, &noSess) && noSess.credentialsMissing {
 			w.Header().Set("Ory-Session-Cache-For", fmt.Sprintf("%d", int64(time.Minute.Seconds())))
 		}
 
@@ -321,7 +342,10 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	}
 
 	var aalErr *ErrAALNotSatisfied
-	if err := h.r.SessionManager().DoesSessionSatisfy(r, s, c.SessionWhoAmIAAL(r.Context())); errors.As(err, &aalErr) {
+	if err := h.r.SessionManager().DoesSessionSatisfy(r, s, c.SessionWhoAmIAAL(ctx),
+		// For the time being we want to update the AAL in the database if it is unset.
+		UpsertAAL,
+	); errors.As(err, &aalErr) {
 		h.r.Audit().WithRequest(r).WithError(err).Info("Session was found but AAL is not satisfied for calling this endpoint.")
 		h.r.Writer().WriteError(w, r, err)
 		return
@@ -348,15 +372,23 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, ps httprouter.P
 	// s.Devices = nil
 	s.Identity = s.Identity.CopyWithoutCredentials()
 
+	tokenizeTemplate := r.URL.Query().Get("tokenize_as")
+	if tokenizeTemplate != "" {
+		if err := h.r.SessionTokenizer().TokenizeSession(ctx, tokenizeTemplate, s); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+	}
+
 	// Set userId as the X-Kratos-Authenticated-Identity-Id header.
 	w.Header().Set("X-Kratos-Authenticated-Identity-Id", s.Identity.ID.String())
 
-	// Set Cache header only when configured
-	if c.SessionWhoAmICaching(r.Context()) {
+	// Set Cache header only when configured, and when no tokenization is requested.
+	if c.SessionWhoAmICaching(ctx) && len(tokenizeTemplate) == 0 {
 		w.Header().Set("Ory-Session-Cache-For", fmt.Sprintf("%d", int64(time.Until(s.ExpiresAt).Seconds())))
 	}
 
-	if err := h.r.SessionManager().RefreshCookie(r.Context(), w, r, s); err != nil {
+	if err := h.r.SessionManager().RefreshCookie(ctx, w, r, s); err != nil {
 		h.r.Audit().WithRequest(r).WithError(err).Info("Could not re-issue cookie.")
 		h.r.Writer().WriteError(w, r, err)
 		return
@@ -481,7 +513,7 @@ func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request, ps h
 	}
 
 	// Parse request pagination parameters
-	opts, err := keysetpagination.Parse(r.URL.Query(), keysetpagination.NewStringPageToken)
+	opts, err := keysetpagination.Parse(r.URL.Query(), keysetpagination.NewMapPageToken)
 	if err != nil {
 		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError("could not parse parameter page_size"))
 		return
@@ -506,7 +538,8 @@ func (h *Handler) adminListSessions(w http.ResponseWriter, r *http.Request, ps h
 	}
 
 	w.Header().Set("x-total-count", fmt.Sprint(total))
-	keysetpagination.Header(w, r.URL, nextPage)
+	u := *r.URL
+	keysetpagination.Header(w, &u, nextPage)
 	h.r.Writer().Write(w, r, sess)
 }
 
@@ -713,7 +746,7 @@ func (h *Handler) listIdentitySessions(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	x.PaginationHeader(w, urlx.AppendPaths(h.r.Config().SelfAdminURL(r.Context()), RouteCollection), total, page, perPage)
+	x.PaginationHeader(w, *r.URL, total, page, perPage)
 	h.r.Writer().Write(w, r, sess)
 }
 
@@ -860,7 +893,7 @@ func (h *Handler) deleteMySession(w http.ResponseWriter, r *http.Request, ps htt
 //nolint:deadcode,unused
 //lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
 type listMySessionsParameters struct {
-	x.PaginationParams
+	migrationpagination.RequestParameters
 
 	// Set the Session Token when calling from non-browser clients. A session token has a format of `MP2YWEMeM8MxjkGKpH4dqOQ4Q4DlSPaj`.
 	//
@@ -919,7 +952,7 @@ func (h *Handler) listMySessions(w http.ResponseWriter, r *http.Request, _ httpr
 		return
 	}
 
-	x.PaginationHeader(w, urlx.AppendPaths(h.r.Config().SelfAdminURL(r.Context()), RouteCollection), total, page, perPage)
+	x.PaginationHeader(w, *r.URL, total, page, perPage)
 	h.r.Writer().Write(w, r, sess)
 }
 

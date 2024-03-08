@@ -6,6 +6,10 @@ package identities
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/ory/x/flagx"
+
+	"github.com/ory/x/pagination/keysetpagination"
+
 	"github.com/ory/kratos/cmd/cliclient"
 	"github.com/ory/x/cmdx"
 )
@@ -23,37 +27,46 @@ func NewListCmd() *cobra.Command {
 }
 
 func NewListIdentitiesCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:     "identities [<page> <per-page>]",
-		Short:   "List identities",
-		Long:    "List identities (paginated)",
-		Example: "{{ .CommandPath }} 100 1",
+	c := &cobra.Command{
+		Use:   "identities",
+		Short: "List identities",
+		Long: `Return a list of identities.
+
+The consistency defaults to ` + "`eventual`" + ` and can be set to ` + "`strong`" + ` or ` + "`eventual`" + `.
+Eventual consistency means that the list operation will return faster and might not include recently created or updated identities. Replication lag is about 5 seconds.`,
+		Example: "{{ .CommandPath }} --page-size 100 --consistency eventual",
 		Args:    cmdx.ZeroOrTwoArgs,
-		Aliases: []string{"ls"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := cliclient.NewClient(cmd)
 			if err != nil {
 				return err
 			}
 
-			req := c.IdentityApi.ListIdentities(cmd.Context())
-			if len(args) == 2 {
-				page, perPage, err := cmdx.ParsePaginationArgs(cmd, args[0], args[1])
-				if err != nil {
-					return err
-				}
-
-				req = req.Page(page)
-				req = req.PerPage(perPage)
+			consistency := flagx.MustGetString(cmd, "consistency")
+			req := c.IdentityApi.ListIdentities(cmd.Context()).Consistency(consistency)
+			page, perPage, err := cmdx.ParseTokenPaginationArgs(cmd)
+			if err != nil {
+				return err
 			}
 
-			identities, _, err := req.Execute()
+			req = req.PageToken(page)
+			req = req.PageSize(int64(perPage))
+
+			identities, res, err := req.Execute()
 			if err != nil {
 				return cmdx.PrintOpenAPIError(cmd, err)
 			}
 
-			cmdx.PrintTable(cmd, &outputIdentityCollection{identities: identities})
+			pages := keysetpagination.ParseHeader(res)
+			cmdx.PrintTable(cmd, &outputIdentityCollection{
+				Identities:       identities,
+				NextPageToken:    pages.NextToken,
+				includePageToken: true,
+			})
 			return nil
 		},
 	}
+	c.Flags().String("consistency", "eventual", "The read consistency to use. Can be either \"strong\" or \"eventual\". Defaults to \"eventual\".")
+	cmdx.RegisterTokenPaginationFlags(c)
+	return c
 }

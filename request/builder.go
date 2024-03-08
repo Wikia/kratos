@@ -12,14 +12,18 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"time"
 
+	"github.com/dgraph-io/ristretto"
 	"github.com/google/go-jsonnet"
 	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/fetcher"
 	"github.com/ory/x/jsonnetsecure"
+	"github.com/ory/x/otelx"
 )
 
 var ErrCancel = errors.New("request cancel by JsonNet")
@@ -32,6 +36,7 @@ const (
 type (
 	Dependencies interface {
 		x.LoggingProvider
+		x.TracingProvider
 		x.HTTPClientProvider
 		jsonnetsecure.VMProvider
 	}
@@ -39,14 +44,20 @@ type (
 		r      *retryablehttp.Request
 		Config *Config
 		deps   Dependencies
+		cache  *ristretto.Cache
 	}
 )
 
-func NewBuilder(config json.RawMessage, deps Dependencies) (*Builder, error) {
+func NewBuilder(ctx context.Context, config json.RawMessage, deps Dependencies, jsonnetCache *ristretto.Cache) (_ *Builder, err error) {
+	_, span := deps.Tracer(ctx).Tracer().Start(ctx, "request.NewBuilder")
+	defer otelx.End(span, &err)
+
 	c, err := parseConfig(config)
 	if err != nil {
 		return nil, err
 	}
+
+	span.SetAttributes(attribute.String("url", c.URL), attribute.String("method", c.Method))
 
 	r, err := retryablehttp.NewRequest(c.Method, c.URL, nil)
 	if err != nil {
@@ -57,6 +68,7 @@ func NewBuilder(config json.RawMessage, deps Dependencies) (*Builder, error) {
 		r:      r,
 		Config: c,
 		deps:   deps,
+		cache:  jsonnetCache,
 	}, nil
 }
 
@@ -73,7 +85,10 @@ func (b *Builder) addAuth() error {
 	return nil
 }
 
-func (b *Builder) addBody(ctx context.Context, body interface{}) error {
+func (b *Builder) addBody(ctx context.Context, body interface{}) (err error) {
+	ctx, span := b.deps.Tracer(ctx).Tracer().Start(ctx, "request.Builder.addBody")
+	defer otelx.End(span, &err)
+
 	if isNilInterface(body) {
 		return nil
 	}
@@ -105,7 +120,7 @@ func (b *Builder) addBody(ctx context.Context, body interface{}) error {
 	return nil
 }
 
-func (b *Builder) addJSONBody(ctx context.Context, template *bytes.Buffer, body interface{}) error {
+func (b *Builder) addJSONBody(ctx context.Context, jsonnetSnippet []byte, body interface{}) error {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
@@ -123,7 +138,7 @@ func (b *Builder) addJSONBody(ctx context.Context, template *bytes.Buffer, body 
 
 	res, err := vm.EvaluateAnonymousSnippet(
 		b.Config.TemplateURI,
-		template.String(),
+		string(jsonnetSnippet),
 	)
 	if err != nil {
 		// Unfortunately we can not use errors.As / errors.Is, see:
@@ -143,30 +158,30 @@ func (b *Builder) addJSONBody(ctx context.Context, template *bytes.Buffer, body 
 	return nil
 }
 
-func (b *Builder) addURLEncodedBody(ctx context.Context, template *bytes.Buffer, body interface{}) error {
+func (b *Builder) addURLEncodedBody(ctx context.Context, jsonnetSnippet []byte, body interface{}) error {
 	buf := new(bytes.Buffer)
 	enc := json.NewEncoder(buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "")
 
 	if err := enc.Encode(body); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	vm, err := b.deps.JsonnetVM(ctx)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 	vm.TLACode("ctx", buf.String())
 
-	res, err := vm.EvaluateAnonymousSnippet(b.Config.TemplateURI, template.String())
+	res, err := vm.EvaluateAnonymousSnippet(b.Config.TemplateURI, string(jsonnetSnippet))
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	values := map[string]string{}
 	if err := json.Unmarshal([]byte(res), &values); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	u := url.Values{}
@@ -200,15 +215,14 @@ func (b *Builder) BuildRequest(ctx context.Context, body interface{}) (*retryabl
 	return b.r, nil
 }
 
-func (b *Builder) readTemplate(ctx context.Context) (*bytes.Buffer, error) {
+func (b *Builder) readTemplate(ctx context.Context) ([]byte, error) {
 	templateURI := b.Config.TemplateURI
 
 	if templateURI == "" {
 		return nil, nil
 	}
 
-	f := fetcher.NewFetcher(fetcher.WithClient(b.deps.HTTPClient(ctx)))
-
+	f := fetcher.NewFetcher(fetcher.WithClient(b.deps.HTTPClient(ctx)), fetcher.WithCache(b.cache, 60*time.Minute))
 	tpl, err := f.FetchContext(ctx, templateURI)
 	if errors.Is(err, fetcher.ErrUnknownScheme) {
 		// legacy filepath
@@ -224,7 +238,7 @@ func (b *Builder) readTemplate(ctx context.Context) (*bytes.Buffer, error) {
 		return nil, err
 	}
 
-	return tpl, nil
+	return tpl.Bytes(), nil
 }
 
 func isNilInterface(i interface{}) bool {

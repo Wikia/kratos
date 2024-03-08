@@ -5,9 +5,10 @@ package hook
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/ui/node"
-	"net/http"
 
 	"github.com/pkg/errors"
 

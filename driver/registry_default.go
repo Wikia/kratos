@@ -24,8 +24,8 @@ import (
 	"github.com/ory/herodot"
 	"github.com/ory/kratos/cipher"
 	"github.com/ory/kratos/continuity"
-	"github.com/ory/kratos/credentials"
 	"github.com/ory/kratos/courier"
+	"github.com/ory/kratos/credentials"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/hydra"
@@ -86,12 +86,12 @@ type RegistryDefault struct {
 	persister       persistence.Persister
 	migrationStatus popx.MigrationStatuses
 
-	hookVerifier            *hook.Verifier
-	hookSessionIssuer       *hook.SessionIssuer
-	hookSessionDestroyer    *hook.SessionDestroyer
-	hookAddressVerifier     *hook.AddressVerifier
-	hookShowVerificationUI  *hook.ShowVerificationUIHook
-	hookCodeAddressVerifier *hook.CodeAddressVerifier
+	hookVerifier             *hook.Verifier
+	hookSessionIssuer        *hook.SessionIssuer
+	hookSessionDestroyer     *hook.SessionDestroyer
+	hookAddressVerifier      *hook.AddressVerifier
+	hookShowVerificationUI   *hook.ShowVerificationUIHook
+	hookCodeAddressVerifier  *hook.CodeAddressVerifier
 	hookTotpSecretsDestroyer *hook.TotpSecretsDestroyer
 
 	credentialsHandler *credentials.Handler

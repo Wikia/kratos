@@ -667,6 +667,8 @@ func TestRegistration(t *testing.T) {
 				node.NewInputField("traits.username", nil, node.PasswordGroup, node.InputAttributeTypeText),
 				node.NewInputField("password", nil, node.PasswordGroup, node.InputAttributeTypePassword, node.WithRequiredInputAttribute, node.WithInputAttributes(func(a *node.InputAttributes) {
 					a.Autocomplete = node.InputAttributeAutocompleteNewPassword
+					a.MinLength = conf.PasswordPolicyConfig(ctx).MinPasswordLength
+					a.MaxLength = conf.PasswordPolicyConfig(ctx).MaxPasswordLength
 				})).WithMetaLabel(text.NewInfoNodeInputPassword()),
 				node.NewInputField("traits.bar", nil, node.PasswordGroup, node.InputAttributeTypeText),
 				node.NewInputField("method", "password", node.PasswordGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoRegistration()),

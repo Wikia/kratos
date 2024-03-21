@@ -180,7 +180,7 @@ type IdentityApi interface {
 		You can only delete second factor (aal2) credentials.
 			 * @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
 			 * @param id ID is the identity's ID.
-			 * @param type_ Type is the credential's Type. One of totp, webauthn, lookup
+			 * @param type_ Type is the type of credentials to be deleted. password CredentialsTypePassword oidc CredentialsTypeOIDC totp CredentialsTypeTOTP lookup_secret CredentialsTypeLookup webauthn CredentialsTypeWebAuthn code CredentialsTypeCodeAuth link_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself. code_recovery CredentialsTypeRecoveryCode
 			 * @return IdentityApiApiDeleteIdentityCredentialsRequest
 	*/
 	DeleteIdentityCredentials(ctx context.Context, id string, type_ string) IdentityApiApiDeleteIdentityCredentialsRequest
@@ -1364,9 +1364,14 @@ func (a *IdentityApiService) CreateRecoveryCodeForIdentityExecute(r IdentityApiA
 type IdentityApiApiCreateRecoveryLinkForIdentityRequest struct {
 	ctx                               context.Context
 	ApiService                        IdentityApi
+	returnTo                          *string
 	createRecoveryLinkForIdentityBody *CreateRecoveryLinkForIdentityBody
 }
 
+func (r IdentityApiApiCreateRecoveryLinkForIdentityRequest) ReturnTo(returnTo string) IdentityApiApiCreateRecoveryLinkForIdentityRequest {
+	r.returnTo = &returnTo
+	return r
+}
 func (r IdentityApiApiCreateRecoveryLinkForIdentityRequest) CreateRecoveryLinkForIdentityBody(createRecoveryLinkForIdentityBody CreateRecoveryLinkForIdentityBody) IdentityApiApiCreateRecoveryLinkForIdentityRequest {
 	r.createRecoveryLinkForIdentityBody = &createRecoveryLinkForIdentityBody
 	return r
@@ -1416,6 +1421,9 @@ func (a *IdentityApiService) CreateRecoveryLinkForIdentityExecute(r IdentityApiA
 	localVarQueryParams := url.Values{}
 	localVarFormParams := url.Values{}
 
+	if r.returnTo != nil {
+		localVarQueryParams.Add("return_to", parameterToString(*r.returnTo, ""))
+	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{"application/json"}
 
@@ -1659,7 +1667,7 @@ func (r IdentityApiApiDeleteIdentityCredentialsRequest) Execute() (*http.Respons
 You can only delete second factor (aal2) credentials.
   - @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
   - @param id ID is the identity's ID.
-  - @param type_ Type is the credential's Type. One of totp, webauthn, lookup
+  - @param type_ Type is the type of credentials to be deleted. password CredentialsTypePassword oidc CredentialsTypeOIDC totp CredentialsTypeTOTP lookup_secret CredentialsTypeLookup webauthn CredentialsTypeWebAuthn code CredentialsTypeCodeAuth link_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself. code_recovery CredentialsTypeRecoveryCode
   - @return IdentityApiApiDeleteIdentityCredentialsRequest
 */
 func (a *IdentityApiService) DeleteIdentityCredentials(ctx context.Context, id string, type_ string) IdentityApiApiDeleteIdentityCredentialsRequest {
@@ -2635,11 +2643,16 @@ func (a *IdentityApiService) GetSessionExecute(r IdentityApiApiGetSessionRequest
 }
 
 type IdentityApiApiListIdentitiesRequest struct {
-	ctx                   context.Context
-	ApiService            IdentityApi
-	perPage               *int64
-	page                  *int64
-	credentialsIdentifier *string
+	ctx                                 context.Context
+	ApiService                          IdentityApi
+	perPage                             *int64
+	page                                *int64
+	pageSize                            *int64
+	pageToken                           *string
+	consistency                         *string
+	ids                                 *[]string
+	credentialsIdentifier               *string
+	previewCredentialsIdentifierSimilar *string
 }
 
 func (r IdentityApiApiListIdentitiesRequest) PerPage(perPage int64) IdentityApiApiListIdentitiesRequest {
@@ -2650,8 +2663,28 @@ func (r IdentityApiApiListIdentitiesRequest) Page(page int64) IdentityApiApiList
 	r.page = &page
 	return r
 }
+func (r IdentityApiApiListIdentitiesRequest) PageSize(pageSize int64) IdentityApiApiListIdentitiesRequest {
+	r.pageSize = &pageSize
+	return r
+}
+func (r IdentityApiApiListIdentitiesRequest) PageToken(pageToken string) IdentityApiApiListIdentitiesRequest {
+	r.pageToken = &pageToken
+	return r
+}
+func (r IdentityApiApiListIdentitiesRequest) Consistency(consistency string) IdentityApiApiListIdentitiesRequest {
+	r.consistency = &consistency
+	return r
+}
+func (r IdentityApiApiListIdentitiesRequest) Ids(ids []string) IdentityApiApiListIdentitiesRequest {
+	r.ids = &ids
+	return r
+}
 func (r IdentityApiApiListIdentitiesRequest) CredentialsIdentifier(credentialsIdentifier string) IdentityApiApiListIdentitiesRequest {
 	r.credentialsIdentifier = &credentialsIdentifier
+	return r
+}
+func (r IdentityApiApiListIdentitiesRequest) PreviewCredentialsIdentifierSimilar(previewCredentialsIdentifierSimilar string) IdentityApiApiListIdentitiesRequest {
+	r.previewCredentialsIdentifierSimilar = &previewCredentialsIdentifierSimilar
 	return r
 }
 
@@ -2703,8 +2736,31 @@ func (a *IdentityApiService) ListIdentitiesExecute(r IdentityApiApiListIdentitie
 	if r.page != nil {
 		localVarQueryParams.Add("page", parameterToString(*r.page, ""))
 	}
+	if r.pageSize != nil {
+		localVarQueryParams.Add("page_size", parameterToString(*r.pageSize, ""))
+	}
+	if r.pageToken != nil {
+		localVarQueryParams.Add("page_token", parameterToString(*r.pageToken, ""))
+	}
+	if r.consistency != nil {
+		localVarQueryParams.Add("consistency", parameterToString(*r.consistency, ""))
+	}
+	if r.ids != nil {
+		t := *r.ids
+		if reflect.TypeOf(t).Kind() == reflect.Slice {
+			s := reflect.ValueOf(t)
+			for i := 0; i < s.Len(); i++ {
+				localVarQueryParams.Add("ids", parameterToString(s.Index(i), "multi"))
+			}
+		} else {
+			localVarQueryParams.Add("ids", parameterToString(t, "multi"))
+		}
+	}
 	if r.credentialsIdentifier != nil {
 		localVarQueryParams.Add("credentials_identifier", parameterToString(*r.credentialsIdentifier, ""))
+	}
+	if r.previewCredentialsIdentifierSimilar != nil {
+		localVarQueryParams.Add("preview_credentials_identifier_similar", parameterToString(*r.previewCredentialsIdentifierSimilar, ""))
 	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
@@ -2786,6 +2842,8 @@ type IdentityApiApiListIdentitySchemasRequest struct {
 	ApiService IdentityApi
 	perPage    *int64
 	page       *int64
+	pageSize   *int64
+	pageToken  *string
 }
 
 func (r IdentityApiApiListIdentitySchemasRequest) PerPage(perPage int64) IdentityApiApiListIdentitySchemasRequest {
@@ -2794,6 +2852,14 @@ func (r IdentityApiApiListIdentitySchemasRequest) PerPage(perPage int64) Identit
 }
 func (r IdentityApiApiListIdentitySchemasRequest) Page(page int64) IdentityApiApiListIdentitySchemasRequest {
 	r.page = &page
+	return r
+}
+func (r IdentityApiApiListIdentitySchemasRequest) PageSize(pageSize int64) IdentityApiApiListIdentitySchemasRequest {
+	r.pageSize = &pageSize
+	return r
+}
+func (r IdentityApiApiListIdentitySchemasRequest) PageToken(pageToken string) IdentityApiApiListIdentitySchemasRequest {
+	r.pageToken = &pageToken
 	return r
 }
 
@@ -2844,6 +2910,12 @@ func (a *IdentityApiService) ListIdentitySchemasExecute(r IdentityApiApiListIden
 	}
 	if r.page != nil {
 		localVarQueryParams.Add("page", parameterToString(*r.page, ""))
+	}
+	if r.pageSize != nil {
+		localVarQueryParams.Add("page_size", parameterToString(*r.pageSize, ""))
+	}
+	if r.pageToken != nil {
+		localVarQueryParams.Add("page_token", parameterToString(*r.pageToken, ""))
 	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
@@ -2912,6 +2984,8 @@ type IdentityApiApiListIdentitySessionsRequest struct {
 	id         string
 	perPage    *int64
 	page       *int64
+	pageSize   *int64
+	pageToken  *string
 	active     *bool
 }
 
@@ -2921,6 +2995,14 @@ func (r IdentityApiApiListIdentitySessionsRequest) PerPage(perPage int64) Identi
 }
 func (r IdentityApiApiListIdentitySessionsRequest) Page(page int64) IdentityApiApiListIdentitySessionsRequest {
 	r.page = &page
+	return r
+}
+func (r IdentityApiApiListIdentitySessionsRequest) PageSize(pageSize int64) IdentityApiApiListIdentitySessionsRequest {
+	r.pageSize = &pageSize
+	return r
+}
+func (r IdentityApiApiListIdentitySessionsRequest) PageToken(pageToken string) IdentityApiApiListIdentitySessionsRequest {
+	r.pageToken = &pageToken
 	return r
 }
 func (r IdentityApiApiListIdentitySessionsRequest) Active(active bool) IdentityApiApiListIdentitySessionsRequest {
@@ -2978,6 +3060,12 @@ func (a *IdentityApiService) ListIdentitySessionsExecute(r IdentityApiApiListIde
 	}
 	if r.page != nil {
 		localVarQueryParams.Add("page", parameterToString(*r.page, ""))
+	}
+	if r.pageSize != nil {
+		localVarQueryParams.Add("page_size", parameterToString(*r.pageSize, ""))
+	}
+	if r.pageToken != nil {
+		localVarQueryParams.Add("page_token", parameterToString(*r.pageToken, ""))
 	}
 	if r.active != nil {
 		localVarQueryParams.Add("active", parameterToString(*r.active, ""))

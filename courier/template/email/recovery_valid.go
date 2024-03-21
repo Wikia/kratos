@@ -18,9 +18,10 @@ type (
 		m *RecoveryValidModel
 	}
 	RecoveryValidModel struct {
-		To          string
-		RecoveryURL string
-		Identity    map[string]interface{}
+		To          string                 `json:"to"`
+		RecoveryURL string                 `json:"recovery_url"`
+		Identity    map[string]interface{} `json:"identity"`
+		RequestURL  string                 `json:"request_url"`
 	}
 )
 
@@ -48,4 +49,8 @@ func (t *RecoveryValid) EmailBodyPlaintext(ctx context.Context) (string, error) 
 
 func (t *RecoveryValid) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.m)
+}
+
+func (t *RecoveryValid) TemplateType() template.TemplateType {
+	return template.TypeRecoveryValid
 }

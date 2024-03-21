@@ -13,8 +13,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ory/herodot"
-
+	"github.com/dgraph-io/ristretto"
+	"github.com/gofrs/uuid"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/pkg/errors"
 	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/attribute"
@@ -23,11 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	grpccodes "google.golang.org/grpc/codes"
 
-	"github.com/ory/kratos/ui/node"
-	"github.com/ory/x/httpx"
-	"github.com/ory/x/jsonnetsecure"
-	"github.com/ory/x/otelx"
-
+	"github.com/ory/herodot"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/request"
 	"github.com/ory/kratos/schema"
@@ -39,20 +36,38 @@ import (
 	"github.com/ory/kratos/selfservice/flow/verification"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
+	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
+	"github.com/ory/kratos/x/events"
+	"github.com/ory/x/httpx"
+	"github.com/ory/x/jsonnetsecure"
+	"github.com/ory/x/otelx"
 )
 
-var (
-	_ registration.PostHookPostPersistExecutor = new(WebHook)
-	_ registration.PostHookPrePersistExecutor  = new(WebHook)
+var _ interface {
+	login.PreHookExecutor
+	login.PostHookExecutor
 
-	_ verification.PostHookExecutor = new(WebHook)
+	registration.PostHookPostPersistExecutor
+	registration.PostHookPrePersistExecutor
+	registration.PreHookExecutor
 
-	_ recovery.PostHookExecutor = new(WebHook)
+	verification.PreHookExecutor
+	verification.PostHookExecutor
 
-	_ settings.PostHookPostPersistExecutor = new(WebHook)
-	_ settings.PostHookPrePersistExecutor  = new(WebHook)
-)
+	recovery.PreHookExecutor
+	recovery.PostHookExecutor
+
+	settings.PreHookExecutor
+	settings.PostHookPrePersistExecutor
+	settings.PostHookPostPersistExecutor
+} = (*WebHook)(nil)
+
+var jsonnetCache, _ = ristretto.NewCache(&ristretto.Config{
+	MaxCost:     100 << 20, // 100MB,
+	NumCounters: 1_000_000, // 1kB per snippet -> 100k snippets -> 1M counters
+	BufferItems: 64,
+})
 
 type (
 	webHookDependencies interface {
@@ -290,10 +305,7 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 
 	// We want to decouple the request from the hook execution, so that the hooks still execute even
 	// if the request is canceled.
-	var cancel context.CancelFunc
-	ctx := trace.ContextWithSpan(context.Background(), trace.SpanFromContext(req.Context()))
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
+	ctx := context.WithoutCancel(req.Context())
 
 	return otelx.WithSpan(ctx, "selfservice.hook.WebHook.ExecutePostRegistrationPostPersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
@@ -368,7 +380,7 @@ func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Reques
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, _ *session.Session, settingsType string) error {
 	// fandom-start
 	// we use a different approach to decide which hook to trigger
 	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
@@ -442,6 +454,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		ignoreResponse = gjson.GetBytes(e.conf, "response.ignore").Bool()
 		canInterrupt   = gjson.GetBytes(e.conf, "can_interrupt").Bool()
 		parseResponse  = gjson.GetBytes(e.conf, "response.parse").Bool()
+		emitEvent      = gjson.GetBytes(e.conf, "emit_analytics_event").Bool() || !gjson.GetBytes(e.conf, "emit_analytics_event").Exists() // default true
 		tracer         = trace.SpanFromContext(ctx).TracerProvider().Tracer("kratos-webhooks")
 	)
 	if ignoreResponse && (parseResponse || canInterrupt) {
@@ -450,27 +463,30 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 
 	makeRequest := func() (finalErr error) {
 		if ignoreResponse {
-			// This is one of the few places where spawning a context.Background() is ok. We need to do this
-			// because the function runs asynchronously and we don't want to cancel the request if the
-			// incoming request context is cancelled.
+			// This means we want to run this closure asynchronously and not be
+			// canceled when the parent context is canceled.
 			//
-			// The webhook will still cancel after 30 seconds as that is the configured timeout for the HTTP client.
-			var cancel context.CancelFunc
-			ctx = trace.ContextWithSpan(context.Background(), trace.SpanFromContext(ctx))
-			ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
-			defer cancel()
+			// The webhook will still cancel after 30 seconds as that is the
+			// configured timeout for the HTTP client.
+			ctx = context.WithoutCancel(ctx)
 		}
 		ctx, span := tracer.Start(ctx, "selfservice.webhook")
 		defer otelx.End(span, &finalErr)
-		startTime := time.Now()
 
-		defer func() {
+		if emitEvent {
+			instrumentHTTPClientForEvents(ctx, httpClient)
+		}
+
+		defer func(startTime time.Time) {
 			traceID, spanID := span.SpanContext().TraceID(), span.SpanContext().SpanID()
 			logger := e.deps.Logger().WithField("otel", map[string]string{
 				"trace_id": traceID.String(),
 				"span_id":  spanID.String(),
 			}).WithField("duration", time.Since(startTime))
 			if finalErr != nil {
+				if emitEvent && !errors.Is(finalErr, context.Canceled) {
+					span.AddEvent(events.NewWebhookFailed(ctx, finalErr))
+				}
 				if ignoreResponse {
 					logger.WithError(finalErr).Warning("Webhook request failed but the error was ignored because the configuration indicated that the upstream response should be ignored")
 				} else {
@@ -478,10 +494,13 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 				}
 			} else {
 				logger.Info("Webhook request succeeded")
+				if emitEvent {
+					span.AddEvent(events.NewWebhookSucceeded(ctx))
+				}
 			}
-		}()
+		}(time.Now())
 
-		builder, err := request.NewBuilder(e.conf, e.deps)
+		builder, err := request.NewBuilder(ctx, e.conf, e.deps, jsonnetCache)
 		if err != nil {
 			return err
 		}
@@ -526,6 +545,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			return errors.WithStack(err)
 		}
 		defer resp.Body.Close()
+		resp.Body = io.NopCloser(io.LimitReader(resp.Body, 5<<20)) // read at most 5 MB from the response
 		span.SetAttributes(semconv.HTTPAttributesFromHTTPStatusCode(resp.StatusCode)...)
 
 		if resp.StatusCode >= http.StatusBadRequest {
@@ -575,8 +595,9 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 	// fandom-end
 
 	if resp.StatusCode == http.StatusOK {
+		type localIdentity identity.Identity
 		var hookResponse struct {
-			Identity *identity.Identity `json:"identity"`
+			Identity *localIdentity `json:"identity"`
 		}
 
 		if err := json.Unmarshal(body, &hookResponse); err != nil {
@@ -698,4 +719,29 @@ func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identit
 func isTimeoutError(err error) bool {
 	var te interface{ Timeout() bool }
 	return errors.As(err, &te) && te.Timeout() || errors.Is(err, context.DeadlineExceeded)
+}
+
+func instrumentHTTPClientForEvents(ctx context.Context, httpClient *retryablehttp.Client) {
+	// TODO(@alnr): improve this implementation to redact sensitive data
+	var (
+		attempt   = 0
+		requestID uuid.UUID
+		reqBody   []byte
+	)
+	httpClient.RequestLogHook = func(_ retryablehttp.Logger, req *http.Request, retryNumber int) {
+		attempt = retryNumber + 1
+		requestID = uuid.Must(uuid.NewV4())
+		req.Header.Set("Ory-Webhook-Request-ID", requestID.String())
+		// TODO(@alnr): redact sensitive data
+		// reqBody, _ = httputil.DumpRequestOut(req, true)
+		reqBody = []byte("<redacted>")
+	}
+	httpClient.ResponseLogHook = func(_ retryablehttp.Logger, res *http.Response) {
+		// res.Body = io.NopCloser(io.LimitReader(res.Body, 5<<20)) // read at most 5 MB from the response
+		// resBody, _ := httputil.DumpResponse(res, true)
+		// resBody = resBody[:min(len(resBody), 2<<10)] // truncate response body to 2 kB for event
+		// TODO(@alnr): redact sensitive data
+		resBody := []byte("<redacted>")
+		trace.SpanFromContext(ctx).AddEvent(events.NewWebhookDelivered(ctx, res.Request.URL, reqBody, res.StatusCode, resBody, attempt, requestID))
+	}
 }

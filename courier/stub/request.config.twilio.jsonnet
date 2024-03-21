@@ -1,5 +1,5 @@
 function(ctx) {
-  from: ctx.from,
-  to: ctx.to,
+  from: "Kratos Test",
+  to: ctx.recipient,
   body: ctx.body
 }

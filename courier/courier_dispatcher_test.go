@@ -16,6 +16,7 @@ import (
 	templates "github.com/ory/kratos/courier/template/email"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/internal"
+	"github.com/ory/kratos/internal/testhelpers"
 )
 
 func queueNewMessage(t *testing.T, ctx context.Context, c courier.Courier, d template.Dependencies) uuid.UUID {
@@ -58,6 +59,33 @@ func TestDispatchMessageWithInvalidSMTP(t *testing.T) {
 	})
 }
 
+func TestDispatchMessage(t *testing.T) {
+	ctx := context.Background()
+
+	conf, reg := internal.NewRegistryDefaultWithDSN(t, "")
+	conf.MustSet(ctx, config.ViperKeyCourierMessageRetries, 5)
+	conf.MustSet(ctx, config.ViperKeyCourierSMTPURL, "http://foo.url")
+
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+
+	c, err := reg.Courier(ctx)
+	require.NoError(t, err)
+	t.Run("case=invalid channel", func(t *testing.T) {
+		message := courier.Message{
+			Channel:      "invalid-channel",
+			Status:       courier.MessageStatusQueued,
+			Type:         courier.MessageTypeEmail,
+			Recipient:    testhelpers.RandomEmail(),
+			Subject:      "test-subject-1",
+			Body:         "test-body-1",
+			TemplateType: "stub",
+		}
+		require.NoError(t, reg.CourierPersister().AddMessage(ctx, &message))
+		require.Error(t, c.DispatchMessage(ctx, message))
+	})
+}
+
 func TestDispatchQueue(t *testing.T) {
 	ctx := context.Background()
 
@@ -66,6 +94,7 @@ func TestDispatchQueue(t *testing.T) {
 
 	c, err := reg.Courier(ctx)
 	require.NoError(t, err)
+	c.FailOnDispatchError()
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

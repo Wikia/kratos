@@ -38,11 +38,14 @@ context("Account Verification Error", () => {
           let identity
           beforeEach(() => {
             cy.clearAllCookies()
-            cy.longVerificationLifespan()
-            cy.longLifespan(s)
-            cy.useVerificationStrategy(s)
-            cy.resetCourierTemplates("verification")
-            cy.notifyUnknownRecipients("verification", false)
+
+            cy.useConfig((builder) =>
+              builder
+                .longVerificationLifespan()
+                .longLifespan(s)
+                .useVerificationStrategy(s)
+                .notifyUnknownRecipients("verification", false),
+            )
 
             identity = gen.identity()
             cy.registerApi(identity)
@@ -65,7 +68,11 @@ context("Account Verification Error", () => {
             cy.wait(1000)
             cy.shortVerificationLifespan()
 
-            cy.getMail().then((message) => {
+            cy.getMail({
+              removeMail: true,
+              subject: "Please verify your email address",
+              email: identity.email,
+            }).then((message) => {
               expect(message.subject).to.equal(
                 "Please verify your email address",
               )
@@ -98,6 +105,8 @@ context("Account Verification Error", () => {
               strategy: s,
             })
 
+            cy.wait(1000)
+
             cy.verifyEmailButExpired({
               expect: { email: identity.email },
               strategy: s,
@@ -125,7 +134,10 @@ context("Account Verification Error", () => {
 
             cy.contains("An email containing a verification")
 
-            cy.getMail().then((mail) => {
+            cy.getMail({
+              email: identity.email,
+              subject: "Please verify your email address",
+            }).then((mail) => {
               const link = parseHtml(mail.body).querySelector("a")
 
               expect(verifyHrefPattern.test(link.href)).to.be.true
@@ -145,7 +157,11 @@ context("Account Verification Error", () => {
             const email = gen.identity().email
             cy.get('input[name="email"]').type(email)
             cy.get(`button[value="${s}"]`).click()
-            cy.getMail().then((mail) => {
+            cy.getMail({
+              subject: "Someone tried to verify this email address",
+              email,
+              removeMail: true,
+            }).then((mail) => {
               expect(mail.toAddresses).includes(email)
               expect(mail.subject).eq(
                 "Someone tried to verify this email address",

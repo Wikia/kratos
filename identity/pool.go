@@ -6,6 +6,10 @@ package identity
 import (
 	"context"
 
+	"github.com/ory/x/crdbx"
+
+	"github.com/ory/kratos/x"
+	"github.com/ory/x/pagination/keysetpagination"
 	"github.com/ory/x/sqlxx"
 
 	"github.com/gofrs/uuid"
@@ -13,15 +17,19 @@ import (
 
 type (
 	ListIdentityParameters struct {
-		Expand                Expandables
-		CredentialsIdentifier string
-		Page                  int
-		PerPage               int
+		Expand                       Expandables
+		IdsFilter                    []string
+		CredentialsIdentifier        string
+		CredentialsIdentifierSimilar string
+		KeySetPagination             []keysetpagination.Option
+		// DEPRECATED
+		PagePagination   *x.Page
+		ConsistencyLevel crdbx.ConsistencyLevel
 	}
 
 	Pool interface {
 		// ListIdentities lists all identities in the store given the page and itemsPerPage.
-		ListIdentities(ctx context.Context, params ListIdentityParameters) ([]Identity, error)
+		ListIdentities(ctx context.Context, params ListIdentityParameters) ([]Identity, *keysetpagination.Paginator, error)
 
 		// CountIdentities counts the number of identities in the store.
 		CountIdentities(ctx context.Context) (int64, error)
@@ -31,7 +39,7 @@ type (
 		GetIdentity(context.Context, uuid.UUID, sqlxx.Expandables) (*Identity, error)
 
 		// FindVerifiableAddressByValue returns a matching address or sql.ErrNoRows if no address could be found.
-		FindVerifiableAddressByValue(ctx context.Context, via VerifiableAddressType, address string) (*VerifiableAddress, error)
+		FindVerifiableAddressByValue(ctx context.Context, via string, address string) (*VerifiableAddress, error)
 
 		// FindRecoveryAddressByValue returns a matching address or sql.ErrNoRows if no address could be found.
 		FindRecoveryAddressByValue(ctx context.Context, via RecoveryAddressType, address string) (*RecoveryAddress, error)
@@ -84,5 +92,8 @@ type (
 
 		// InjectTraitsSchemaURL sets the identity's traits JSON schema URL from the schema's ID.
 		InjectTraitsSchemaURL(ctx context.Context, i *Identity) error
+
+		// FindIdentityByAnyCaseSensitiveCredentialIdentifier returns an identity by matching the identifier to any of the identity's credentials.
+		FindIdentityByCredentialIdentifier(ctx context.Context, identifier string, caseSensitive bool) (*Identity, error)
 	}
 )

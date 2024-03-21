@@ -708,33 +708,51 @@ func TestDriverDefault_Strategies(t *testing.T) {
 	t.Run("case=registration", func(t *testing.T) {
 		t.Parallel()
 		for k, tc := range []struct {
+			name   string
 			prep   func(conf *config.Config)
 			expect []string
 		}{
 			{
+				name: "no strategies",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", false)
-				}},
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
+				},
+			},
 			{
+				name: "only password",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password"},
 			},
 			{
+				name: "oidc and password",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".oidc.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password", "oidc"},
 			},
 			{
+				name: "oidc, password and totp",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".oidc.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".totp.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password", "oidc"},
+			},
+			{
+				name: "password and code",
+				prep: func(conf *config.Config) {
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", true)
+				},
+				expect: []string{"password", "code"},
 			},
 		} {
 			t.Run(fmt.Sprintf("run=%d", k), func(t *testing.T) {
@@ -752,37 +770,64 @@ func TestDriverDefault_Strategies(t *testing.T) {
 
 	t.Run("case=login", func(t *testing.T) {
 		t.Parallel()
-		for k, tc := range []struct {
+		for _, tc := range []struct {
+			name   string
 			prep   func(conf *config.Config)
 			expect []string
 		}{
 			{
+				name: "no strategies",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", false)
-				}},
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
+				},
+			},
 			{
+				name: "only password",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password"},
 			},
 			{
+				name: "oidc and password",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".oidc.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password", "oidc"},
 			},
 			{
+				name: "oidc, password and totp",
 				prep: func(conf *config.Config) {
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".oidc.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
 					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".totp.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
 				},
 				expect: []string{"password", "oidc", "totp"},
 			},
+			{
+				name: "password and code",
+				prep: func(conf *config.Config) {
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", true)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", true)
+				},
+				expect: []string{"password", "code"},
+			},
+			{
+				name: "code is enabled if passwordless_enabled is true",
+				prep: func(conf *config.Config) {
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".password.enabled", false)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.enabled", false)
+					conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+".code.passwordless_enabled", true)
+				},
+				expect: []string{"code"},
+			},
 		} {
-			t.Run(fmt.Sprintf("run=%d", k), func(t *testing.T) {
+			t.Run(fmt.Sprintf("run=%s", tc.name), func(t *testing.T) {
 				conf, reg := internal.NewVeryFastRegistryWithoutDB(t)
 				tc.prep(conf)
 
@@ -847,7 +892,8 @@ func TestDriverDefault_Strategies(t *testing.T) {
 						}),
 						configx.SkipValidation())
 					return c
-				}},
+				},
+			},
 			{
 				prep: func(t *testing.T) *config.Config {
 					c := config.MustNew(t, l,
@@ -921,7 +967,7 @@ func TestDefaultRegistry_AllStrategies(t *testing.T) {
 	_, reg := internal.NewVeryFastRegistryWithoutDB(t)
 
 	t.Run("case=all login strategies", func(t *testing.T) {
-		expects := []string{"password", "oidc", "totp", "webauthn", "lookup_secret"}
+		expects := []string{"password", "oidc", "code", "totp", "webauthn", "lookup_secret"}
 		s := reg.AllLoginStrategies()
 		require.Len(t, s, len(expects))
 		for k, e := range expects {
@@ -930,7 +976,7 @@ func TestDefaultRegistry_AllStrategies(t *testing.T) {
 	})
 
 	t.Run("case=all registration strategies", func(t *testing.T) {
-		expects := []string{"password", "oidc", "webauthn"}
+		expects := []string{"password", "oidc", "code", "webauthn"}
 		s := reg.AllRegistrationStrategies()
 		require.Len(t, s, len(expects))
 		for k, e := range expects {

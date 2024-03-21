@@ -5,6 +5,7 @@ package identity
 
 import (
 	"context"
+	"database/sql"
 	"reflect"
 	"time"
 
@@ -33,11 +34,59 @@ const (
 	AuthenticatorAssuranceLevel2  AuthenticatorAssuranceLevel = "aal2"
 )
 
+type NullableAuthenticatorAssuranceLevel struct {
+	sql.NullString
+}
+
+// NewNullableAuthenticatorAssuranceLevel returns a new NullableAuthenticatorAssuranceLevel
+func NewNullableAuthenticatorAssuranceLevel(aal AuthenticatorAssuranceLevel) NullableAuthenticatorAssuranceLevel {
+	switch aal {
+	case NoAuthenticatorAssuranceLevel:
+		fallthrough
+	case AuthenticatorAssuranceLevel1:
+		fallthrough
+	case AuthenticatorAssuranceLevel2:
+		return NullableAuthenticatorAssuranceLevel{sql.NullString{
+			String: string(aal),
+			Valid:  true,
+		}}
+	default:
+		return NullableAuthenticatorAssuranceLevel{sql.NullString{}}
+	}
+}
+
+// ToAAL returns the AuthenticatorAssuranceLevel value of the given NullableAuthenticatorAssuranceLevel.
+func (n NullableAuthenticatorAssuranceLevel) ToAAL() (AuthenticatorAssuranceLevel, bool) {
+	if !n.Valid {
+		return "", false
+	}
+	switch n.String {
+	case string(NoAuthenticatorAssuranceLevel):
+		return NoAuthenticatorAssuranceLevel, true
+	case string(AuthenticatorAssuranceLevel1):
+		return AuthenticatorAssuranceLevel1, true
+	case string(AuthenticatorAssuranceLevel2):
+		return AuthenticatorAssuranceLevel2, true
+	default:
+		return "", false
+	}
+}
+
 // CredentialsType  represents several different credential types, like password credentials, passwordless credentials,
 // and so on.
 //
-// swagger:model identityCredentialsType
+// swagger:enum CredentialsType
 type CredentialsType string
+
+// Please make sure to add all of these values to the test that ensures they are created during migration
+const (
+	CredentialsTypePassword CredentialsType = "password"
+	CredentialsTypeOIDC     CredentialsType = "oidc"
+	CredentialsTypeTOTP     CredentialsType = "totp"
+	CredentialsTypeLookup   CredentialsType = "lookup_secret"
+	CredentialsTypeWebAuthn CredentialsType = "webauthn"
+	CredentialsTypeCodeAuth CredentialsType = "code"
+)
 
 func (c CredentialsType) String() string {
 	return string(c)
@@ -55,19 +104,21 @@ func (c CredentialsType) ToUiNodeGroup() node.UiNodeGroup {
 		return node.WebAuthnGroup
 	case CredentialsTypeLookup:
 		return node.LookupGroup
+	case CredentialsTypeCodeAuth:
+		return node.CodeGroup
 	default:
 		return node.DefaultGroup
 	}
 }
 
-// Please make sure to add all of these values to the test that ensures they are created during migration
-const (
-	CredentialsTypePassword CredentialsType = "password"
-	CredentialsTypeOIDC     CredentialsType = "oidc"
-	CredentialsTypeTOTP     CredentialsType = "totp"
-	CredentialsTypeLookup   CredentialsType = "lookup_secret"
-	CredentialsTypeWebAuthn CredentialsType = "webauthn"
-)
+var AllCredentialTypes = []CredentialsType{
+	CredentialsTypePassword,
+	CredentialsTypeOIDC,
+	CredentialsTypeTOTP,
+	CredentialsTypeLookup,
+	CredentialsTypeWebAuthn,
+	CredentialsTypeCodeAuth,
+}
 
 const (
 	// CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).
@@ -84,6 +135,7 @@ func ParseCredentialsType(in string) (CredentialsType, bool) {
 		CredentialsTypeTOTP,
 		CredentialsTypeLookup,
 		CredentialsTypeWebAuthn,
+		CredentialsTypeCodeAuth,
 		CredentialsTypeRecoveryLink,
 		CredentialsTypeRecoveryCode,
 	} {
@@ -124,8 +176,12 @@ type Credentials struct {
 	NID       uuid.UUID `json:"-"  faker:"-" db:"nid"`
 }
 
-func (c Credentials) TableName(ctx context.Context) string {
+func (c Credentials) TableName(context.Context) string {
 	return "identity_credentials"
+}
+
+func (c Credentials) GetID() uuid.UUID {
+	return c.ID
 }
 
 type (
@@ -163,11 +219,11 @@ type (
 	}
 )
 
-func (c CredentialsTypeTable) TableName(ctx context.Context) string {
+func (c CredentialsTypeTable) TableName(context.Context) string {
 	return "identity_credential_types"
 }
 
-func (c CredentialIdentifier) TableName(ctx context.Context) string {
+func (c CredentialIdentifier) TableName(context.Context) string {
 	return "identity_credential_identifiers"
 }
 
@@ -190,7 +246,14 @@ func CredentialsEqual(a, b map[CredentialsType]Credentials) bool {
 			return false
 		}
 
-		if !reflect.DeepEqual(expect.Identifiers, actual.Identifiers) {
+		expectIdentifiers, actualIdentifiers := make(map[string]struct{}, len(expect.Identifiers)), make(map[string]struct{}, len(actual.Identifiers))
+		for _, i := range expect.Identifiers {
+			expectIdentifiers[i] = struct{}{}
+		}
+		for _, i := range actual.Identifiers {
+			actualIdentifiers[i] = struct{}{}
+		}
+		if !reflect.DeepEqual(expectIdentifiers, actualIdentifiers) {
 			return false
 		}
 	}

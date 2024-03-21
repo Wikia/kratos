@@ -17,6 +17,8 @@ import (
 	"github.com/ory/x/stringsx"
 	"github.com/ory/x/urlx"
 
+	"github.com/samber/lo"
+
 	"github.com/ory/kratos/driver/config"
 )
 
@@ -143,8 +145,10 @@ func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureR
 
 	return nil, errors.WithStack(herodot.ErrBadRequest.
 		WithID(text.ErrIDRedirectURLNotAllowed).
-		WithReasonf("Requested return_to URL \"%s\" is not allowed.", returnTo).
-		WithDebugf("Allowed domains are: %v", o.allowlist))
+		WithReasonf("Requested return_to URL %q is not allowed.", returnTo).
+		WithDebugf("Allowed domains are: %v", strings.Join(lo.Map(o.allowlist, func(u url.URL, _ int) string {
+			return u.String()
+		}), ", ")))
 }
 
 func SecureContentNegotiationRedirection(

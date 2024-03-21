@@ -18,7 +18,8 @@ import (
 
 // LoginFlow This object represents a login flow. A login flow is initiated at the \"Initiate Login API / Browser Flow\" endpoint by a client.  Once a login flow is completed successfully, a session cookie or session token will be issued.
 type LoginFlow struct {
-	Active *IdentityCredentialsType `json:"active,omitempty"`
+	// The active login method  If set contains the login method used. If the flow is new, it is unset. password CredentialsTypePassword oidc CredentialsTypeOIDC totp CredentialsTypeTOTP lookup_secret CredentialsTypeLookup webauthn CredentialsTypeWebAuthn code CredentialsTypeCodeAuth link_recovery CredentialsTypeRecoveryLink  CredentialsTypeRecoveryLink is a special credential type linked to the link strategy (recovery flow).  It is not used within the credentials object itself. code_recovery CredentialsTypeRecoveryCode
+	Active *string `json:"active,omitempty"`
 	// CreatedAt is a helper struct field for gobuffalo.pop.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	// ExpiresAt is the time (UTC) when the flow expires. If the user still wishes to log in, a new flow has to be initiated.
@@ -30,6 +31,7 @@ type LoginFlow struct {
 	// Ory OAuth 2.0 Login Challenge.  This value is set using the `login_challenge` query parameter of the registration and login endpoints. If set will cooperate with Ory OAuth2 and OpenID to act as an OAuth2 server / OpenID Provider.
 	Oauth2LoginChallenge *string             `json:"oauth2_login_challenge,omitempty"`
 	Oauth2LoginRequest   *OAuth2LoginRequest `json:"oauth2_login_request,omitempty"`
+	OrganizationId       NullableString      `json:"organization_id,omitempty"`
 	// Refresh stores whether this login flow should enforce re-authentication.
 	Refresh *bool `json:"refresh,omitempty"`
 	// RequestURL is the initial URL that was requested from Ory Kratos. It can be used to forward information contained in the URL's path or query for example.
@@ -39,6 +41,8 @@ type LoginFlow struct {
 	ReturnTo *string `json:"return_to,omitempty"`
 	// SessionTokenExchangeCode holds the secret code that the client can use to retrieve a session token after the login flow has been completed. This is only set if the client has requested a session token exchange code, and if the flow is of type \"api\", and only on creating the login flow.
 	SessionTokenExchangeCode *string `json:"session_token_exchange_code,omitempty"`
+	// State represents the state of this request:  choose_method: ask the user to choose a method to sign in with sent_email: the email has been sent to the user passed_challenge: the request was successful and the login challenge was passed.
+	State interface{} `json:"state"`
 	// The flow type can either be `api` or `browser`.
 	Type string      `json:"type"`
 	Ui   UiContainer `json:"ui"`
@@ -50,12 +54,13 @@ type LoginFlow struct {
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewLoginFlow(expiresAt time.Time, id string, issuedAt time.Time, requestUrl string, type_ string, ui UiContainer) *LoginFlow {
+func NewLoginFlow(expiresAt time.Time, id string, issuedAt time.Time, requestUrl string, state interface{}, type_ string, ui UiContainer) *LoginFlow {
 	this := LoginFlow{}
 	this.ExpiresAt = expiresAt
 	this.Id = id
 	this.IssuedAt = issuedAt
 	this.RequestUrl = requestUrl
+	this.State = state
 	this.Type = type_
 	this.Ui = ui
 	return &this
@@ -70,9 +75,9 @@ func NewLoginFlowWithDefaults() *LoginFlow {
 }
 
 // GetActive returns the Active field value if set, zero value otherwise.
-func (o *LoginFlow) GetActive() IdentityCredentialsType {
+func (o *LoginFlow) GetActive() string {
 	if o == nil || o.Active == nil {
-		var ret IdentityCredentialsType
+		var ret string
 		return ret
 	}
 	return *o.Active
@@ -80,7 +85,7 @@ func (o *LoginFlow) GetActive() IdentityCredentialsType {
 
 // GetActiveOk returns a tuple with the Active field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *LoginFlow) GetActiveOk() (*IdentityCredentialsType, bool) {
+func (o *LoginFlow) GetActiveOk() (*string, bool) {
 	if o == nil || o.Active == nil {
 		return nil, false
 	}
@@ -96,8 +101,8 @@ func (o *LoginFlow) HasActive() bool {
 	return false
 }
 
-// SetActive gets a reference to the given IdentityCredentialsType and assigns it to the Active field.
-func (o *LoginFlow) SetActive(v IdentityCredentialsType) {
+// SetActive gets a reference to the given string and assigns it to the Active field.
+func (o *LoginFlow) SetActive(v string) {
 	o.Active = &v
 }
 
@@ -269,6 +274,49 @@ func (o *LoginFlow) SetOauth2LoginRequest(v OAuth2LoginRequest) {
 	o.Oauth2LoginRequest = &v
 }
 
+// GetOrganizationId returns the OrganizationId field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *LoginFlow) GetOrganizationId() string {
+	if o == nil || o.OrganizationId.Get() == nil {
+		var ret string
+		return ret
+	}
+	return *o.OrganizationId.Get()
+}
+
+// GetOrganizationIdOk returns a tuple with the OrganizationId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *LoginFlow) GetOrganizationIdOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return o.OrganizationId.Get(), o.OrganizationId.IsSet()
+}
+
+// HasOrganizationId returns a boolean if a field has been set.
+func (o *LoginFlow) HasOrganizationId() bool {
+	if o != nil && o.OrganizationId.IsSet() {
+		return true
+	}
+
+	return false
+}
+
+// SetOrganizationId gets a reference to the given NullableString and assigns it to the OrganizationId field.
+func (o *LoginFlow) SetOrganizationId(v string) {
+	o.OrganizationId.Set(&v)
+}
+
+// SetOrganizationIdNil sets the value for OrganizationId to be an explicit nil
+func (o *LoginFlow) SetOrganizationIdNil() {
+	o.OrganizationId.Set(nil)
+}
+
+// UnsetOrganizationId ensures that no value is present for OrganizationId, not even an explicit nil
+func (o *LoginFlow) UnsetOrganizationId() {
+	o.OrganizationId.Unset()
+}
+
 // GetRefresh returns the Refresh field value if set, zero value otherwise.
 func (o *LoginFlow) GetRefresh() bool {
 	if o == nil || o.Refresh == nil {
@@ -421,6 +469,32 @@ func (o *LoginFlow) SetSessionTokenExchangeCode(v string) {
 	o.SessionTokenExchangeCode = &v
 }
 
+// GetState returns the State field value
+// If the value is explicit nil, the zero value for interface{} will be returned
+func (o *LoginFlow) GetState() interface{} {
+	if o == nil {
+		var ret interface{}
+		return ret
+	}
+
+	return o.State
+}
+
+// GetStateOk returns a tuple with the State field value
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *LoginFlow) GetStateOk() (*interface{}, bool) {
+	if o == nil || o.State == nil {
+		return nil, false
+	}
+	return &o.State, true
+}
+
+// SetState sets field value
+func (o *LoginFlow) SetState(v interface{}) {
+	o.State = v
+}
+
 // GetType returns the Type field value
 func (o *LoginFlow) GetType() string {
 	if o == nil {
@@ -524,6 +598,9 @@ func (o LoginFlow) MarshalJSON() ([]byte, error) {
 	if o.Oauth2LoginRequest != nil {
 		toSerialize["oauth2_login_request"] = o.Oauth2LoginRequest
 	}
+	if o.OrganizationId.IsSet() {
+		toSerialize["organization_id"] = o.OrganizationId.Get()
+	}
 	if o.Refresh != nil {
 		toSerialize["refresh"] = o.Refresh
 	}
@@ -538,6 +615,9 @@ func (o LoginFlow) MarshalJSON() ([]byte, error) {
 	}
 	if o.SessionTokenExchangeCode != nil {
 		toSerialize["session_token_exchange_code"] = o.SessionTokenExchangeCode
+	}
+	if o.State != nil {
+		toSerialize["state"] = o.State
 	}
 	if true {
 		toSerialize["type"] = o.Type

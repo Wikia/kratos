@@ -18,9 +18,10 @@ type (
 		m *VerificationValidModel
 	}
 	VerificationValidModel struct {
-		To              string
-		VerificationURL string
-		Identity        map[string]interface{}
+		To              string                 `json:"to"`
+		VerificationURL string                 `json:"verification_url"`
+		Identity        map[string]interface{} `json:"identity"`
+		RequestURL      string                 `json:"request_url"`
 	}
 )
 
@@ -48,4 +49,8 @@ func (t *VerificationValid) EmailBodyPlaintext(ctx context.Context) (string, err
 
 func (t *VerificationValid) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.m)
+}
+
+func (t *VerificationValid) TemplateType() template.TemplateType {
+	return template.TypeVerificationValid
 }

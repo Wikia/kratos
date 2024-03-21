@@ -19,13 +19,13 @@ import (
 type UiNodeInputAttributes struct {
 	// The autocomplete attribute for the input. email InputAttributeAutocompleteEmail tel InputAttributeAutocompleteTel url InputAttributeAutocompleteUrl current-password InputAttributeAutocompleteCurrentPassword new-password InputAttributeAutocompleteNewPassword one-time-code InputAttributeAutocompleteOneTimeCode
 	Autocomplete *string `json:"autocomplete,omitempty"`
-	// The minlength attribute for the input.
-	MinLength uint `json:"minlength,omitempty"`
-	// The maxlength attribute for the input.
-	MaxLength uint `json:"maxlength,omitempty"`
 	// Sets the input's disabled field to true or false.
 	Disabled bool    `json:"disabled"`
 	Label    *UiText `json:"label,omitempty"`
+	// The maxlength attribute for the input.
+	Maxlength *int32 `json:"maxlength,omitempty"`
+	// The minlength attribute for the input.
+	Minlength *int32 `json:"minlength,omitempty"`
 	// The input's element name.
 	Name string `json:"name"`
 	// NodeType represents this node's types. It is a mirror of `node.type` and is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is \"input\".
@@ -149,6 +149,70 @@ func (o *UiNodeInputAttributes) HasLabel() bool {
 // SetLabel gets a reference to the given UiText and assigns it to the Label field.
 func (o *UiNodeInputAttributes) SetLabel(v UiText) {
 	o.Label = &v
+}
+
+// GetMaxlength returns the Maxlength field value if set, zero value otherwise.
+func (o *UiNodeInputAttributes) GetMaxlength() int32 {
+	if o == nil || o.Maxlength == nil {
+		var ret int32
+		return ret
+	}
+	return *o.Maxlength
+}
+
+// GetMaxlengthOk returns a tuple with the Maxlength field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UiNodeInputAttributes) GetMaxlengthOk() (*int32, bool) {
+	if o == nil || o.Maxlength == nil {
+		return nil, false
+	}
+	return o.Maxlength, true
+}
+
+// HasMaxlength returns a boolean if a field has been set.
+func (o *UiNodeInputAttributes) HasMaxlength() bool {
+	if o != nil && o.Maxlength != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetMaxlength gets a reference to the given int32 and assigns it to the Maxlength field.
+func (o *UiNodeInputAttributes) SetMaxlength(v int32) {
+	o.Maxlength = &v
+}
+
+// GetMinlength returns the Minlength field value if set, zero value otherwise.
+func (o *UiNodeInputAttributes) GetMinlength() int32 {
+	if o == nil || o.Minlength == nil {
+		var ret int32
+		return ret
+	}
+	return *o.Minlength
+}
+
+// GetMinlengthOk returns a tuple with the Minlength field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *UiNodeInputAttributes) GetMinlengthOk() (*int32, bool) {
+	if o == nil || o.Minlength == nil {
+		return nil, false
+	}
+	return o.Minlength, true
+}
+
+// HasMinlength returns a boolean if a field has been set.
+func (o *UiNodeInputAttributes) HasMinlength() bool {
+	if o != nil && o.Minlength != nil {
+		return true
+	}
+
+	return false
+}
+
+// SetMinlength gets a reference to the given int32 and assigns it to the Minlength field.
+func (o *UiNodeInputAttributes) SetMinlength(v int32) {
+	o.Minlength = &v
 }
 
 // GetName returns the Name field value
@@ -362,6 +426,12 @@ func (o UiNodeInputAttributes) MarshalJSON() ([]byte, error) {
 	}
 	if o.Label != nil {
 		toSerialize["label"] = o.Label
+	}
+	if o.Maxlength != nil {
+		toSerialize["maxlength"] = o.Maxlength
+	}
+	if o.Minlength != nil {
+		toSerialize["minlength"] = o.Minlength
 	}
 	if true {
 		toSerialize["name"] = o.Name

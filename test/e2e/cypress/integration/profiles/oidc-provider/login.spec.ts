@@ -17,7 +17,7 @@ context("OpenID Provider", () => {
     scopes: ["openid", "offline", "email", "website"],
     callbacks: [
       "http://localhost:5555/callback",
-      "https://httpbin.org/anything",
+      "https://ory-network-httpbin-ijakee5waq-ez.a.run.app/anything",
     ],
   }
 
@@ -160,7 +160,7 @@ context("OpenID Provider - change between flows", () => {
     scopes: ["openid", "offline", "email", "website"],
     callbacks: [
       "http://localhost:5555/callback",
-      "https://httpbin.org/anything",
+      "https://ory-network-httpbin-ijakee5waq-ez.a.run.app/anything",
     ],
   }
 
@@ -273,7 +273,9 @@ context("OpenID Provider - change between flows", () => {
     cy.notifyUnknownRecipients("recovery", false)
     cy.longPrivilegedSessionTime()
 
-    const fakeOidcFlow = (identity: identityWithWebsite) => {
+    const fakeOidcFlow = (
+      identity: ReturnType<typeof gen.identityWithWebsite>,
+    ) => {
       cy.get("input[name='username']").type(identity.email)
       cy.get("button[name='action'][value='accept']").click()
       // consent screen for the 'fake' oidc provider

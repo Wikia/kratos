@@ -6,8 +6,11 @@ package internal
 import (
 	"context"
 	"os"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/ory/x/contextx"
 	"github.com/ory/x/jsonnetsecure"
@@ -38,7 +41,7 @@ func NewConfigurationWithDefaults(t testing.TB) *config.Config {
 	c := config.MustNew(t, logrusx.New("", ""),
 		os.Stderr,
 		configx.WithValues(map[string]interface{}{
-			"log.level":                                      "trace",
+			"log.level":                                      "error",
 			config.ViperKeyDSN:                               dbal.NewSQLiteTestDatabase(t),
 			config.ViperKeyHasherArgon2ConfigMemory:          16384,
 			config.ViperKeyHasherArgon2ConfigIterations:      1,
@@ -81,11 +84,12 @@ func NewRegistryDefaultWithDSN(t testing.TB, dsn string) (*config.Config, *drive
 	ctx := context.Background()
 	c := NewConfigurationWithDefaults(t)
 	c.MustSet(ctx, config.ViperKeyDSN, stringsx.Coalesce(dsn, dbal.NewSQLiteTestDatabase(t)))
-
-	reg, err := driver.NewRegistryFromDSN(ctx, c, logrusx.New("", ""))
+	reg, err := driver.NewRegistryFromDSN(ctx, c, logrusx.New("", "", logrusx.ForceLevel(logrus.ErrorLevel)))
 	require.NoError(t, err)
 	reg.Config().MustSet(ctx, "dev", true)
-	require.NoError(t, reg.Init(context.Background(), &contextx.Default{}, driver.SkipNetworkInit))
+	pool := jsonnetsecure.NewProcessPool(runtime.GOMAXPROCS(0))
+	t.Cleanup(pool.Close)
+	require.NoError(t, reg.Init(context.Background(), &contextx.Default{}, driver.SkipNetworkInit, driver.WithDisabledMigrationLogging(), driver.WithJsonnetPool(pool)))
 	require.NoError(t, reg.Persister().MigrateUp(context.Background())) // always migrate up
 
 	actual, err := reg.Persister().DetermineNetwork(context.Background())

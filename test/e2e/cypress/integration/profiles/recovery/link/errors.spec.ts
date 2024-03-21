@@ -27,14 +27,18 @@ context("Account Recovery Errors", () => {
 
       beforeEach(() => {
         cy.deleteMail()
-        cy.longRecoveryLifespan()
-        cy.longLinkLifespan()
-        cy.disableVerification()
-        cy.enableRecovery()
-        cy.useRecoveryStrategy("link")
-        cy.disableRecoveryStrategy("code")
         cy.clearAllCookies()
-        cy.notifyUnknownRecipients("verification", false)
+
+        cy.useConfig((builder) =>
+          builder
+            .longRecoveryLifespan()
+            .longLinkLifespan()
+            .disableVerification()
+            .enableRecovery()
+            .useRecoveryStrategy("link")
+            .disableRecoveryStrategy("code")
+            .notifyUnknownRecipients("verification", false),
+        )
       })
 
       it("responds with a HTML response on link click of an API flow if the link is expired", () => {
@@ -68,7 +72,10 @@ context("Account Recovery Errors", () => {
         cy.recoverApi({ email: identity.email })
         cy.wait(1000)
 
-        cy.getMail().should((message) => {
+        cy.getMail({
+          subject: "Recover access to your account",
+          email: identity.email,
+        }).should((message) => {
           expect(message.subject).to.equal("Recover access to your account")
           expect(message.toAddresses[0].trim()).to.equal(identity.email)
 
@@ -100,7 +107,10 @@ context("Account Recovery Errors", () => {
         )
         cy.get('input[name="email"]').should("have.value", email)
 
-        cy.getMail().should((message) => {
+        cy.getMail({
+          subject: "Account access attempted",
+          email,
+        }).should((message) => {
           expect(message.subject).to.equal("Account access attempted")
           expect(message.fromAddress.trim()).to.equal("no-reply@ory.kratos.sh")
           expect(message.toAddresses).to.have.length(1)
@@ -168,7 +178,10 @@ context("Account Recovery Errors", () => {
         cy.registerApi(identity)
         cy.recoverApi({ email: identity.email })
 
-        cy.getMail().then((mail) => {
+        cy.getMail({
+          subject: "Recover access to your account",
+          email: identity.email,
+        }).then((mail) => {
           console.log(mail)
           const link = parseHtml(mail.body).querySelector("a")
           cy.visit(link.href + "-not") // add random stuff to the confirm challenge
@@ -185,7 +198,10 @@ context("Account Recovery Errors", () => {
         cy.registerApi(identity)
         cy.recoverApi({ email: identity.email })
 
-        cy.getMail().then((mail) => {
+        cy.getMail({
+          subject: "Recover access to your account",
+          email: identity.email,
+        }).then((mail) => {
           const link = parseHtml(mail.body).querySelector("a")
 
           // Workaround for cypress cy.visit limitation.
@@ -211,7 +227,10 @@ context("Account Recovery Errors", () => {
         const identity = gen.identityWithWebsite()
         cy.recoverApi({ email: identity.email })
 
-        cy.getMail().then((mail) => {
+        cy.getMail({
+          subject: "Account Access Attempted",
+          email: identity.email,
+        }).then((mail) => {
           expect(mail.body).to.include(
             "this is a remote invalid recovery template",
           )

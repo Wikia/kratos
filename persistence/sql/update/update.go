@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/ory/x/otelx"
 	"github.com/ory/x/sqlcon"
 )
 
@@ -21,9 +22,9 @@ type Model interface {
 	GetNID() uuid.UUID
 }
 
-func Generic(ctx context.Context, c *pop.Connection, tracer trace.Tracer, v Model, columnNames ...string) error {
+func Generic(ctx context.Context, c *pop.Connection, tracer trace.Tracer, v Model, columnNames ...string) (err error) {
 	ctx, span := tracer.Start(ctx, "persistence.sql.update")
-	defer span.End()
+	defer otelx.End(span, &err)
 
 	quoter, ok := c.Dialect.(interface{ Quote(key string) string })
 	if !ok {
@@ -42,22 +43,7 @@ func Generic(ctx context.Context, c *pop.Connection, tracer trace.Tracer, v Mode
 	}
 
 	//#nosec G201 -- TableName is static
-	stmt := fmt.Sprintf("SELECT COUNT(id) FROM %s AS %s WHERE %s.id = ? AND %s.nid = ?",
-		quoter.Quote(model.TableName()),
-		model.Alias(),
-		model.Alias(),
-		model.Alias(),
-	)
-
-	var count int
-	if err := c.Store.GetContext(ctx, &count, c.Dialect.TranslateSQL(stmt), v.GetID(), v.GetNID()); err != nil {
-		return sqlcon.HandleError(err)
-	} else if count == 0 {
-		return errors.WithStack(sqlcon.ErrNoRows)
-	}
-
-	//#nosec G201 -- TableName is static
-	stmt = fmt.Sprintf("UPDATE %s AS %s SET %s WHERE %s AND %s.nid = :nid",
+	stmt := fmt.Sprintf("UPDATE %s AS %s SET %s WHERE %s AND %s.nid = :nid",
 		quoter.Quote(model.TableName()),
 		model.Alias(),
 		cols.Writeable().QuotedUpdateString(quoter),
@@ -65,8 +51,13 @@ func Generic(ctx context.Context, c *pop.Connection, tracer trace.Tracer, v Mode
 		model.Alias(),
 	)
 
-	if _, err := c.Store.NamedExecContext(ctx, stmt, v); err != nil {
+	if result, err := c.Store.NamedExecContext(ctx, stmt, v); err != nil {
 		return sqlcon.HandleError(err)
+	} else if affected, err := result.RowsAffected(); err != nil {
+		return sqlcon.HandleError(err)
+	} else if affected == 0 {
+		return errors.WithStack(sqlcon.ErrNoRows)
 	}
+
 	return nil
 }

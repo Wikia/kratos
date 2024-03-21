@@ -18,9 +18,9 @@ type (
 	}
 
 	TestStubModel struct {
-		To       string
-		Body     string
-		Identity map[string]interface{}
+		To       string                 `json:"to"`
+		Body     string                 `json:"body"`
+		Identity map[string]interface{} `json:"identity"`
 	}
 )
 
@@ -38,4 +38,8 @@ func (t *TestStub) SMSBody(ctx context.Context) (string, error) {
 
 func (t *TestStub) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.m)
+}
+
+func (t *TestStub) TemplateType() template.TemplateType {
+	return template.TypeTestStub
 }

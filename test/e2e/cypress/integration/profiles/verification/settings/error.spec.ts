@@ -41,7 +41,7 @@ context("Account Verification Settings Error", () => {
         })
 
         beforeEach(() => {
-          cy.longCodeLifespan()
+          cy.useConfig((builder) => builder.longCodeLifespan())
           identity = gen.identityWithWebsite()
           cy.clearAllCookies()
           cy.registerApi(identity)
@@ -71,7 +71,10 @@ context("Account Verification Settings Error", () => {
           cy.get('input[name="traits.email"]').clear().type(email)
           cy.get('button[value="profile"]').click()
 
-          cy.getMail().then((mail) => {
+          cy.getMail({
+            subject: "Please verify your email address",
+            email,
+          }).then((mail) => {
             const link = parseHtml(mail.body).querySelector("a")
 
             expect(verifyHrefPattern.test(link.href)).to.be.true

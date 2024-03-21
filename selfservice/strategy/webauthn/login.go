@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ory/kratos/selfservice/flowhelpers"
+	"github.com/ory/kratos/session"
 
 	"github.com/gofrs/uuid"
 
@@ -19,8 +20,8 @@ import (
 
 	"github.com/ory/x/urlx"
 
-	"github.com/duo-labs/webauthn/protocol"
-	"github.com/duo-labs/webauthn/webauthn"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
@@ -90,9 +91,18 @@ func (s *Strategy) populateLoginMethodForPasswordless(r *http.Request, sr *login
 		return nil
 	}
 
+	ds, err := s.d.Config().DefaultIdentityTraitsSchemaURL(r.Context())
+	if err != nil {
+		return err
+	}
+	identifierLabel, err := login.GetIdentifierLabelFromSchema(r.Context(), ds.String())
+	if err != nil {
+		return err
+	}
+
 	sr.UI.SetCSRF(s.d.GenerateCSRFToken(r))
-	sr.UI.SetNode(node.NewInputField("identifier", "", node.DefaultGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeLabelID()))
-	sr.UI.GetNodes().Append(node.NewInputField("method", "webauthn", node.WebAuthnGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoLoginPasswordlessWebAuthn()))
+	sr.UI.SetNode(node.NewInputField("identifier", "", node.DefaultGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).WithMetaLabel(identifierLabel))
+	sr.UI.GetNodes().Append(node.NewInputField("method", "webauthn", node.WebAuthnGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoSelfServiceLoginWebAuthn()))
 	return nil
 }
 
@@ -191,7 +201,7 @@ type updateLoginFlowWithWebAuthnMethod struct {
 	Login string `json:"webauthn_login"`
 }
 
-func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, identityID uuid.UUID) (i *identity.Identity, err error) {
+func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, sess *session.Session) (i *identity.Identity, err error) {
 	if f.Type != flow.TypeBrowser {
 		return nil, flow.ErrStrategyNotResponsible
 	}
@@ -211,7 +221,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return nil, flow.ErrStrategyNotResponsible
 	}
 
-	if err := flow.MethodEnabledAndAllowed(r.Context(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
+	if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
 		return nil, s.handleLoginError(r, f, err)
 	}
 
@@ -223,7 +233,7 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		return s.loginPasswordless(w, r, f, &p)
 	}
 
-	return s.loginMultiFactor(w, r, f, identityID, &p)
+	return s.loginMultiFactor(w, r, f, sess.IdentityID, &p)
 }
 
 func (s *Strategy) loginPasswordless(w http.ResponseWriter, r *http.Request, f *login.Flow, p *updateLoginFlowWithWebAuthnMethod) (i *identity.Identity, err error) {

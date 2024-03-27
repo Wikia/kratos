@@ -4,7 +4,6 @@
 package link
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 	"time"
@@ -24,9 +23,7 @@ import (
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/schema"
 	"github.com/ory/kratos/selfservice/flow"
-	"github.com/ory/kratos/selfservice/flow/login"
 	"github.com/ory/kratos/selfservice/flow/recovery"
-	"github.com/ory/kratos/selfservice/flow/settings"
 	"github.com/ory/kratos/selfservice/strategy"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
@@ -336,36 +333,9 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	// Fandom-start handle 2FA authentication https://github.com/Wikia/kratos/pull/84
-	return s.handleAALLevels(w, r, sf, sess, id)
-}
-
-func (s *Strategy) handleAALLevels(w http.ResponseWriter, r *http.Request, sf *settings.Flow, sess *session.Session, id *identity.Identity) error {
-	requiredAAL := s.d.Config().SelfServiceSettingsRequiredAAL(r.Context())
-	if requiredAAL == string(identity.AuthenticatorAssuranceLevel1) {
-		if sess.AuthenticatorAssuranceLevel >= identity.AuthenticatorAssuranceLevel1 {
-			http.Redirect(w, r, sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
-			return errors.WithStack(flow.ErrCompletedByStrategy)
-		}
-	}
-	available, err := s.GetIdentityHighestAAL(r.Context(), id.ID)
-	if err != nil {
-		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
-	}
-	if identity.AuthenticatorAssuranceLevel1 >= available {
-		http.Redirect(w, r, sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
-		return errors.WithStack(flow.ErrCompletedByStrategy)
-	}
-
-	// Redirect user to login page for 2FA authorization with settings flow as return url
-	// User will provide 2FA authorization and will be redirected to settings flow to update their credentials
-	settingFlowUrl := sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String()
-	loginPath := urlx.AppendPaths(s.d.Config().SelfPublicURL(r.Context()), login.RouteInitBrowserFlow)
-	http.Redirect(w, r, urlx.CopyWithQuery(loginPath, url.Values{"aal": {"aal2"}, "return_to": {settingFlowUrl}}).String(), http.StatusSeeOther)
+	http.Redirect(w, r, sf.AppendTo(s.d.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
 	return errors.WithStack(flow.ErrCompletedByStrategy)
 }
-
-// Fandom-end
 
 func (s *Strategy) recoveryUseToken(w http.ResponseWriter, r *http.Request, fID uuid.UUID, body *recoverySubmitPayload) error {
 	token, err := s.d.RecoveryTokenPersister().UseRecoveryToken(r.Context(), fID, body.Token)
@@ -571,26 +541,3 @@ func (s *Strategy) decodeRecovery(r *http.Request) (*recoverySubmitPayload, erro
 
 	return &body, nil
 }
-
-// Fandom-start https://github.com/Wikia/kratos/pull/84
-func (s *Strategy) GetIdentityHighestAAL(ctx context.Context, identityId uuid.UUID) (available identity.AuthenticatorAssuranceLevel, err error) {
-	available = identity.NoAuthenticatorAssuranceLevel
-	id, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, identityId)
-	if err != nil {
-		return available, err
-	}
-	if firstCount, err := s.d.IdentityManager().CountActiveFirstFactorCredentials(ctx, id); err != nil {
-		return available, err
-	} else if firstCount > 0 {
-		available = identity.AuthenticatorAssuranceLevel1
-	}
-
-	if secondCount, err := s.d.IdentityManager().CountActiveMultiFactorCredentials(ctx, id); err != nil {
-		return available, err
-	} else if secondCount > 0 {
-		available = identity.AuthenticatorAssuranceLevel2
-	}
-	return available, nil
-}
-
-// Fandom-end

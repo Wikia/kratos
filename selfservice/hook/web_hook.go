@@ -150,6 +150,25 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 	})
 }
 
+func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow) error {
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteAfterSubmitLoginHook", func(ctx context.Context) error {
+		return e.execute(ctx, &templateContext{
+			Flow:           flow,
+			RequestHeaders: req.Header,
+			RequestMethod:  req.Method,
+			RequestURL:     x.RequestURL(req).String(),
+			RequestCookies: cookies(req),
+			Fields:         req.Form,
+		})
+	})
+}
+
 func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.UiNodeGroup, flow *login.Flow, session *session.Session) error {
 	// fandom-start
 	if req.Body != nil {

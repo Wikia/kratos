@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v2-beta
         with:
           node-version: "14"
-      - uses: ory/closed-reference-notifier@v1
+      - uses: ory/closed-reference-notifier@e389079345c8c974f59bd8ee2869539b41de8252
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           issueLabels: upstream,good first issue,help wanted

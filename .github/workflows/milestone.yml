@@ -19,12 +19,12 @@ jobs:
         with:
           token: ${{ secrets.TOKEN_PRIVILEGED }}
       - name: Milestone Documentation Generator
-        uses: ory/milestone-action@v0
+        uses: ory/milestone-action@0d8347b062af50e640f1658e8308ba391664d196
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           outputFile: docs/docs/milestones.md
       - name: Commit Milestone Documentation
-        uses: EndBug/add-and-commit@v4.4.0
+        uses: EndBug/add-and-commit@a988073222b8bd50f3ecfca9c0ab7dfbf0d08ceb
         with:
           message: "autogen(docs): update milestone document"
           author_name: aeneasr

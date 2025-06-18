@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Synchronize Issue Labels
-        uses: ory/label-sync-action@v0
+        uses: ory/label-sync-action@f080c2b8ac988f2fc90ddbbc8749c6ee55477f21
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           dry: false

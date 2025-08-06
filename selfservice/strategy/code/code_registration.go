@@ -32,7 +32,7 @@ type RegistrationCode struct {
 
 	// AddressType represents the type of the address
 	// this can be an email address or a phone number.
-	AddressType identity.CodeAddressType `json:"-" db:"address_type"`
+	AddressType identity.CodeChannel `json:"-" db:"address_type"`
 
 	// CodeHMAC represents the HMACed value of the verification code
 	CodeHMAC string `json:"-" db:"code"`
@@ -60,7 +60,7 @@ type RegistrationCode struct {
 	NID uuid.UUID `json:"-"  faker:"-" db:"nid"`
 }
 
-func (RegistrationCode) TableName(ctx context.Context) string {
+func (RegistrationCode) TableName(context.Context) string {
 	return "identity_registration_codes"
 }
 
@@ -93,7 +93,7 @@ type CreateRegistrationCodeParams struct {
 
 	// AddressType is the type of the address (email or phone number).
 	// required: true
-	AddressType identity.CodeAddressType
+	AddressType identity.CodeChannel
 
 	// Code represents the recovery code
 	// required: true

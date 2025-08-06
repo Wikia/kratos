@@ -19,6 +19,7 @@ import (
 // ContinueWith - struct for ContinueWith
 type ContinueWith struct {
 	ContinueWithRecoveryUi         *ContinueWithRecoveryUi
+	ContinueWithRedirectBrowserTo  *ContinueWithRedirectBrowserTo
 	ContinueWithSetOrySessionToken *ContinueWithSetOrySessionToken
 	ContinueWithSettingsUi         *ContinueWithSettingsUi
 	ContinueWithVerificationUi     *ContinueWithVerificationUi
@@ -28,6 +29,13 @@ type ContinueWith struct {
 func ContinueWithRecoveryUiAsContinueWith(v *ContinueWithRecoveryUi) ContinueWith {
 	return ContinueWith{
 		ContinueWithRecoveryUi: v,
+	}
+}
+
+// ContinueWithRedirectBrowserToAsContinueWith is a convenience function that returns ContinueWithRedirectBrowserTo wrapped in ContinueWith
+func ContinueWithRedirectBrowserToAsContinueWith(v *ContinueWithRedirectBrowserTo) ContinueWith {
+	return ContinueWith{
+		ContinueWithRedirectBrowserTo: v,
 	}
 }
 
@@ -55,78 +63,144 @@ func ContinueWithVerificationUiAsContinueWith(v *ContinueWithVerificationUi) Con
 // Unmarshal JSON data into one of the pointers in the struct
 func (dst *ContinueWith) UnmarshalJSON(data []byte) error {
 	var err error
-	match := 0
-	// try to unmarshal data into ContinueWithRecoveryUi
-	err = newStrictDecoder(data).Decode(&dst.ContinueWithRecoveryUi)
-	if err == nil {
-		jsonContinueWithRecoveryUi, _ := json.Marshal(dst.ContinueWithRecoveryUi)
-		if string(jsonContinueWithRecoveryUi) == "{}" { // empty struct
-			dst.ContinueWithRecoveryUi = nil
-		} else {
-			match++
-		}
-	} else {
-		dst.ContinueWithRecoveryUi = nil
+	// use discriminator value to speed up the lookup
+	var jsonDict map[string]interface{}
+	err = newStrictDecoder(data).Decode(&jsonDict)
+	if err != nil {
+		return fmt.Errorf("Failed to unmarshal JSON into map for the discrimintor lookup.")
 	}
 
-	// try to unmarshal data into ContinueWithSetOrySessionToken
-	err = newStrictDecoder(data).Decode(&dst.ContinueWithSetOrySessionToken)
-	if err == nil {
-		jsonContinueWithSetOrySessionToken, _ := json.Marshal(dst.ContinueWithSetOrySessionToken)
-		if string(jsonContinueWithSetOrySessionToken) == "{}" { // empty struct
+	// check if the discriminator value is 'redirect_browser_to'
+	if jsonDict["action"] == "redirect_browser_to" {
+		// try to unmarshal JSON data into ContinueWithRedirectBrowserTo
+		err = json.Unmarshal(data, &dst.ContinueWithRedirectBrowserTo)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithRedirectBrowserTo, return on the first match
+		} else {
+			dst.ContinueWithRedirectBrowserTo = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithRedirectBrowserTo: %s", err.Error())
+		}
+	}
+
+	// check if the discriminator value is 'set_ory_session_token'
+	if jsonDict["action"] == "set_ory_session_token" {
+		// try to unmarshal JSON data into ContinueWithSetOrySessionToken
+		err = json.Unmarshal(data, &dst.ContinueWithSetOrySessionToken)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithSetOrySessionToken, return on the first match
+		} else {
 			dst.ContinueWithSetOrySessionToken = nil
-		} else {
-			match++
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithSetOrySessionToken: %s", err.Error())
 		}
-	} else {
-		dst.ContinueWithSetOrySessionToken = nil
 	}
 
-	// try to unmarshal data into ContinueWithSettingsUi
-	err = newStrictDecoder(data).Decode(&dst.ContinueWithSettingsUi)
-	if err == nil {
-		jsonContinueWithSettingsUi, _ := json.Marshal(dst.ContinueWithSettingsUi)
-		if string(jsonContinueWithSettingsUi) == "{}" { // empty struct
+	// check if the discriminator value is 'show_recovery_ui'
+	if jsonDict["action"] == "show_recovery_ui" {
+		// try to unmarshal JSON data into ContinueWithRecoveryUi
+		err = json.Unmarshal(data, &dst.ContinueWithRecoveryUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithRecoveryUi, return on the first match
+		} else {
+			dst.ContinueWithRecoveryUi = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithRecoveryUi: %s", err.Error())
+		}
+	}
+
+	// check if the discriminator value is 'show_settings_ui'
+	if jsonDict["action"] == "show_settings_ui" {
+		// try to unmarshal JSON data into ContinueWithSettingsUi
+		err = json.Unmarshal(data, &dst.ContinueWithSettingsUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithSettingsUi, return on the first match
+		} else {
 			dst.ContinueWithSettingsUi = nil
-		} else {
-			match++
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithSettingsUi: %s", err.Error())
 		}
-	} else {
-		dst.ContinueWithSettingsUi = nil
 	}
 
-	// try to unmarshal data into ContinueWithVerificationUi
-	err = newStrictDecoder(data).Decode(&dst.ContinueWithVerificationUi)
-	if err == nil {
-		jsonContinueWithVerificationUi, _ := json.Marshal(dst.ContinueWithVerificationUi)
-		if string(jsonContinueWithVerificationUi) == "{}" { // empty struct
+	// check if the discriminator value is 'show_verification_ui'
+	if jsonDict["action"] == "show_verification_ui" {
+		// try to unmarshal JSON data into ContinueWithVerificationUi
+		err = json.Unmarshal(data, &dst.ContinueWithVerificationUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithVerificationUi, return on the first match
+		} else {
 			dst.ContinueWithVerificationUi = nil
-		} else {
-			match++
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithVerificationUi: %s", err.Error())
 		}
-	} else {
-		dst.ContinueWithVerificationUi = nil
 	}
 
-	if match > 1 { // more than 1 match
-		// reset to nil
-		dst.ContinueWithRecoveryUi = nil
-		dst.ContinueWithSetOrySessionToken = nil
-		dst.ContinueWithSettingsUi = nil
-		dst.ContinueWithVerificationUi = nil
-
-		return fmt.Errorf("Data matches more than one schema in oneOf(ContinueWith)")
-	} else if match == 1 {
-		return nil // exactly one match
-	} else { // no match
-		return fmt.Errorf("Data failed to match schemas in oneOf(ContinueWith)")
+	// check if the discriminator value is 'continueWithRecoveryUi'
+	if jsonDict["action"] == "continueWithRecoveryUi" {
+		// try to unmarshal JSON data into ContinueWithRecoveryUi
+		err = json.Unmarshal(data, &dst.ContinueWithRecoveryUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithRecoveryUi, return on the first match
+		} else {
+			dst.ContinueWithRecoveryUi = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithRecoveryUi: %s", err.Error())
+		}
 	}
+
+	// check if the discriminator value is 'continueWithRedirectBrowserTo'
+	if jsonDict["action"] == "continueWithRedirectBrowserTo" {
+		// try to unmarshal JSON data into ContinueWithRedirectBrowserTo
+		err = json.Unmarshal(data, &dst.ContinueWithRedirectBrowserTo)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithRedirectBrowserTo, return on the first match
+		} else {
+			dst.ContinueWithRedirectBrowserTo = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithRedirectBrowserTo: %s", err.Error())
+		}
+	}
+
+	// check if the discriminator value is 'continueWithSetOrySessionToken'
+	if jsonDict["action"] == "continueWithSetOrySessionToken" {
+		// try to unmarshal JSON data into ContinueWithSetOrySessionToken
+		err = json.Unmarshal(data, &dst.ContinueWithSetOrySessionToken)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithSetOrySessionToken, return on the first match
+		} else {
+			dst.ContinueWithSetOrySessionToken = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithSetOrySessionToken: %s", err.Error())
+		}
+	}
+
+	// check if the discriminator value is 'continueWithSettingsUi'
+	if jsonDict["action"] == "continueWithSettingsUi" {
+		// try to unmarshal JSON data into ContinueWithSettingsUi
+		err = json.Unmarshal(data, &dst.ContinueWithSettingsUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithSettingsUi, return on the first match
+		} else {
+			dst.ContinueWithSettingsUi = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithSettingsUi: %s", err.Error())
+		}
+	}
+
+	// check if the discriminator value is 'continueWithVerificationUi'
+	if jsonDict["action"] == "continueWithVerificationUi" {
+		// try to unmarshal JSON data into ContinueWithVerificationUi
+		err = json.Unmarshal(data, &dst.ContinueWithVerificationUi)
+		if err == nil {
+			return nil // data stored in dst.ContinueWithVerificationUi, return on the first match
+		} else {
+			dst.ContinueWithVerificationUi = nil
+			return fmt.Errorf("Failed to unmarshal ContinueWith as ContinueWithVerificationUi: %s", err.Error())
+		}
+	}
+
+	return nil
 }
 
 // Marshal data from the first non-nil pointers in the struct to JSON
 func (src ContinueWith) MarshalJSON() ([]byte, error) {
 	if src.ContinueWithRecoveryUi != nil {
 		return json.Marshal(&src.ContinueWithRecoveryUi)
+	}
+
+	if src.ContinueWithRedirectBrowserTo != nil {
+		return json.Marshal(&src.ContinueWithRedirectBrowserTo)
 	}
 
 	if src.ContinueWithSetOrySessionToken != nil {
@@ -151,6 +225,10 @@ func (obj *ContinueWith) GetActualInstance() interface{} {
 	}
 	if obj.ContinueWithRecoveryUi != nil {
 		return obj.ContinueWithRecoveryUi
+	}
+
+	if obj.ContinueWithRedirectBrowserTo != nil {
+		return obj.ContinueWithRedirectBrowserTo
 	}
 
 	if obj.ContinueWithSetOrySessionToken != nil {

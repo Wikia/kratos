@@ -5,24 +5,21 @@ package identity
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
 
-	"github.com/ory/x/snapshotx"
-
-	"github.com/ory/kratos/x"
-
+	"github.com/gofrs/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 
-	"github.com/gofrs/uuid"
-
-	"github.com/ory/x/sqlxx"
-
+	"github.com/ory/kratos/cipher"
 	"github.com/ory/kratos/driver/config"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/ory/kratos/x"
+	"github.com/ory/x/snapshotx"
+	"github.com/ory/x/sqlxx"
 )
 
 func TestNewIdentity(t *testing.T) {
@@ -316,6 +313,12 @@ func TestVerifiableAddresses(t *testing.T) {
 	assert.Equal(t, addresses, CollectVerifiableAddresses([]*Identity{id1, id2, id3}))
 }
 
+type cipherProvider struct{}
+
+func (c *cipherProvider) Cipher(ctx context.Context) cipher.Cipher {
+	return cipher.NewNoop()
+}
+
 func TestWithDeclassifiedCredentials(t *testing.T) {
 	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
 	credentials := map[CredentialsType]Credentials{
@@ -327,7 +330,7 @@ func TestWithDeclassifiedCredentials(t *testing.T) {
 		CredentialsTypeOIDC: {
 			Type:        CredentialsTypeOIDC,
 			Identifiers: []string{"bar", "baz"},
-			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+			Config:      sqlxx.JSONRawMessage(`{"providers": [{"initial_id_token": "666f6f"}]}`),
 		},
 		CredentialsTypeWebAuthn: {
 			Type:        CredentialsTypeWebAuthn,
@@ -338,7 +341,7 @@ func TestWithDeclassifiedCredentials(t *testing.T) {
 	i.Credentials = credentials
 
 	t.Run("case=no-include", func(t *testing.T) {
-		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, nil)
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, &cipherProvider{}, nil)
 		require.NoError(t, err)
 
 		for ct, actual := range actualIdentity.Credentials {
@@ -349,7 +352,7 @@ func TestWithDeclassifiedCredentials(t *testing.T) {
 	})
 
 	t.Run("case=include-webauthn", func(t *testing.T) {
-		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, []CredentialsType{CredentialsTypeWebAuthn})
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, &cipherProvider{}, []CredentialsType{CredentialsTypeWebAuthn})
 		require.NoError(t, err)
 
 		for ct, actual := range actualIdentity.Credentials {
@@ -360,7 +363,7 @@ func TestWithDeclassifiedCredentials(t *testing.T) {
 	})
 
 	t.Run("case=include-multi", func(t *testing.T) {
-		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, nil, []CredentialsType{CredentialsTypeWebAuthn, CredentialsTypePassword})
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, &cipherProvider{}, []CredentialsType{CredentialsTypeWebAuthn, CredentialsTypePassword})
 		require.NoError(t, err)
 
 		for ct, actual := range actualIdentity.Credentials {
@@ -369,4 +372,70 @@ func TestWithDeclassifiedCredentials(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("case=oidc", func(t *testing.T) {
+		actualIdentity, err := i.WithDeclassifiedCredentials(ctx, &cipherProvider{}, []CredentialsType{CredentialsTypeOIDC})
+		require.NoError(t, err)
+
+		for ct, actual := range actualIdentity.Credentials {
+			t.Run("credential="+string(ct), func(t *testing.T) {
+				snapshotx.SnapshotT(t, actual)
+			})
+		}
+	})
+}
+
+func TestDeleteCredentialOIDCFromIdentity(t *testing.T) {
+	i := NewIdentity(config.DefaultIdentityTraitsSchemaID)
+
+	err := i.deleteCredentialOIDCFromIdentity("")
+	assert.Error(t, err)
+	err = i.deleteCredentialOIDCFromIdentity("does-not-exist")
+	assert.Error(t, err)
+
+	credentials := map[CredentialsType]Credentials{
+		CredentialsTypePassword: {
+			Identifiers: []string{"zab", "bar"},
+			Type:        CredentialsTypePassword,
+			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+		},
+		CredentialsTypeOIDC: {
+			Type:        CredentialsTypeOIDC,
+			Identifiers: []string{"bar:1234", "baz:5678"},
+			Config:      sqlxx.JSONRawMessage(`{"providers": [{"provider": "bar", "subject": "1234"}, {"provider": "baz", "subject": "5678"}]}`),
+		},
+		CredentialsTypeWebAuthn: {
+			Type:        CredentialsTypeWebAuthn,
+			Identifiers: []string{"foo", "bar"},
+			Config:      sqlxx.JSONRawMessage("{\"some\" : \"secret\"}"),
+		},
+	}
+	i.Credentials = credentials
+
+	err = i.deleteCredentialOIDCFromIdentity("zab")
+	assert.Error(t, err)
+	err = i.deleteCredentialOIDCFromIdentity("foo")
+	assert.Error(t, err)
+	err = i.deleteCredentialOIDCFromIdentity("bar")
+	assert.Error(t, err, "matches multiple OIDC credentials")
+
+	require.NoError(t, i.deleteCredentialOIDCFromIdentity("bar:1234"))
+
+	assert.Len(t, i.Credentials, 3)
+
+	assert.Contains(t, i.Credentials, CredentialsTypePassword)
+	assert.EqualValues(t, i.Credentials[CredentialsTypePassword].Identifiers, []string{"zab", "bar"})
+
+	assert.Contains(t, i.Credentials, CredentialsTypeWebAuthn)
+	assert.EqualValues(t, i.Credentials[CredentialsTypeWebAuthn].Identifiers, []string{"foo", "bar"})
+
+	assert.Contains(t, i.Credentials, CredentialsTypeOIDC)
+
+	oidc, ok := i.GetCredentials(CredentialsTypeOIDC)
+	require.True(t, ok)
+	assert.EqualValues(t, oidc.Identifiers, []string{"baz:5678"})
+	var cfg CredentialsOIDC
+	_, err = i.ParseCredentials(CredentialsTypeOIDC, &cfg)
+	require.NoError(t, err)
+	assert.EqualValues(t, CredentialsOIDC{Providers: []CredentialsOIDCProvider{{Provider: "baz", Subject: "5678"}}}, cfg)
 }

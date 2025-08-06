@@ -20,9 +20,8 @@ type Strategy interface {
 	ID() identity.CredentialsType
 	NodeGroup() node.UiNodeGroup
 	RegisterLoginRoutes(*x.RouterPublic)
-	PopulateLoginMethod(r *http.Request, requestedAAL identity.AuthenticatorAssuranceLevel, sr *Flow) error
 	Login(w http.ResponseWriter, r *http.Request, f *Flow, sess *session.Session) (i *identity.Identity, err error)
-	CompletedAuthenticationMethod(ctx context.Context, methods session.AuthenticationMethods) session.AuthenticationMethod
+	CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod
 }
 
 type Strategies []Strategy

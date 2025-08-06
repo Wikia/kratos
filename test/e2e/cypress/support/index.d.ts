@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Session as KratosSession } from "@ory/kratos-client"
-import { OryKratosConfiguration } from "./config"
+import { OryKratosConfiguration } from "../../shared/config"
 import { ConfigBuilder } from "./configHelpers"
 
 export interface MailMessage {
@@ -38,7 +38,12 @@ declare global {
       getSession(opts?: {
         expectAal?: "aal2" | "aal1"
         expectMethods?: Array<
-          "password" | "webauthn" | "lookup_secret" | "totp" | "code"
+          | "password"
+          | "webauthn"
+          | "lookup_secret"
+          | "totp"
+          | "code"
+          | "passkey"
         >
         token?: string
       }): Chainable<KratosSession>
@@ -186,7 +191,7 @@ declare global {
           | "verification"
           | "settings",
         phase: "before" | "after",
-        kind: "password" | "webauthn" | "oidc" | "code",
+        kind: "password" | "webauthn" | "oidc" | "code" | "passkey",
         hooks: Array<{ hook: string; config?: any }>,
       ): Chainable<void>
 
@@ -359,7 +364,7 @@ declare global {
       /**
        * Submits a profile form by clicking the button with method=profile
        */
-      submitProfileForm(): Chainable<null>
+      submitProfileForm(app?: "mobile" | "express" | "react"): Chainable<null>
 
       /**
        * Submits a code form by clicking the button with method=code

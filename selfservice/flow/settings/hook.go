@@ -282,7 +282,8 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		WithField("flow_method", settingsType).
 		Debug("Completed all PostSettingsPrePersistHooks and PostSettingsPostPersistHooks.")
 
-	trace.SpanFromContext(r.Context()).AddEvent(events.NewSettingsSucceeded(r.Context(), i.ID, string(ctxUpdate.Flow.Type), ctxUpdate.Flow.Active.String()))
+	trace.SpanFromContext(r.Context()).AddEvent(events.NewSettingsSucceeded(
+		r.Context(), i.ID, string(ctxUpdate.Flow.Type), settingsType))
 
 	if ctxUpdate.Flow.Type == flow.TypeAPI {
 		updatedFlow, err := e.d.SettingsFlowPersister().GetSettingsFlow(r.Context(), ctxUpdate.Flow.ID)
@@ -308,6 +309,7 @@ func (e *HookExecutor) PostSettingsHook(w http.ResponseWriter, r *http.Request, 
 		}
 		// ContinueWith items are transient items, not stored in the database, and need to be carried over here, so
 		// they can be returned to the client.
+		ctxUpdate.Flow.AddContinueWith(flow.NewContinueWithRedirectBrowserTo(returnTo.String()))
 		updatedFlow.ContinueWithItems = ctxUpdate.Flow.ContinueWithItems
 
 		e.d.Writer().Write(w, r, updatedFlow)

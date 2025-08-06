@@ -10,6 +10,10 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ory/x/otelx"
+
 	"github.com/pquerna/otp"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -85,6 +89,11 @@ type updateSettingsFlowWithLookupMethod struct {
 	//
 	// swagger:ignore
 	Flow string `json:"flow"`
+
+	// Transient data to pass along to any webhooks
+	//
+	// required: false
+	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
 }
 
 func (p *updateSettingsFlowWithLookupMethod) GetFlowID() uuid.UUID {
@@ -95,7 +104,9 @@ func (p *updateSettingsFlowWithLookupMethod) SetFlowID(rid uuid.UUID) {
 	p.Flow = rid.String()
 }
 
-func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (*settings.UpdateContext, error) {
+func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (_ *settings.UpdateContext, err error) {
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.lookup.strategy.Settings")
+	defer otelx.End(span, &err)
 	// fandom-start
 	enabled, err := s.isEnabledForIdentity(r.Context(), ss.IdentityID)
 	if err != nil {
@@ -108,29 +119,30 @@ func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.
 	var p updateSettingsFlowWithLookupMethod
 	ctxUpdate, err := settings.PrepareUpdate(s.d, w, r, f, ss, settings.ContinuityKey(s.SettingsStrategyID()), &p)
 	if errors.Is(err, settings.ErrContinuePreviousAction) {
-		return ctxUpdate, s.continueSettingsFlow(w, r, ctxUpdate, &p)
+		return ctxUpdate, s.continueSettingsFlow(ctx, r, ctxUpdate, p)
 	} else if err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
 
 	if err := s.decodeSettingsFlow(r, &p); err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
 
 	if p.RegenerateLookup || p.RevealLookup || p.ConfirmLookup || p.DisableLookup {
 		// This method has only two submit buttons
 		p.Method = s.SettingsStrategyID()
-		if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
-			return nil, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
+			return nil, s.handleSettingsError(w, r, ctxUpdate, p, err)
 		}
 	} else {
+		span.SetAttributes(attribute.String("not_responsible_reason", "neither reveal, regenerate, confirm, nor disable was set"))
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
 
 	// This does not come from the payload!
 	p.Flow = ctxUpdate.Flow.ID.String()
-	if err := s.continueSettingsFlow(w, r, ctxUpdate, &p); err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+	if err := s.continueSettingsFlow(ctx, r, ctxUpdate, p); err != nil {
+		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
 
 	return ctxUpdate, nil
@@ -148,20 +160,17 @@ func (s *Strategy) decodeSettingsFlow(r *http.Request, dest interface{}) error {
 	)
 }
 
-func (s *Strategy) continueSettingsFlow(
-	w http.ResponseWriter, r *http.Request,
-	ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod,
-) error {
+func (s *Strategy) continueSettingsFlow(ctx context.Context, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithLookupMethod) error {
 	if p.ConfirmLookup || p.RevealLookup || p.RegenerateLookup || p.DisableLookup {
-		if err := flow.MethodEnabledAndAllowed(r.Context(), flow.SettingsFlow, s.SettingsStrategyID(), s.SettingsStrategyID(), s.d); err != nil {
+		if err := flow.MethodEnabledAndAllowed(ctx, flow.SettingsFlow, s.SettingsStrategyID(), s.SettingsStrategyID(), s.d); err != nil {
 			return err
 		}
 
-		if err := flow.EnsureCSRF(s.d, r, ctxUpdate.Flow.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+		if err := flow.EnsureCSRF(s.d, r, ctxUpdate.Flow.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 			return err
 		}
 
-		if ctxUpdate.Session.AuthenticatedAt.Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(r.Context())).Before(time.Now()) {
+		if ctxUpdate.Session.AuthenticatedAt.Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(ctx)).Before(time.Now()) {
 			return errors.WithStack(settings.NewFlowNeedsReAuth())
 		}
 	} else {
@@ -169,16 +178,16 @@ func (s *Strategy) continueSettingsFlow(
 	}
 
 	if p.ConfirmLookup {
-		return s.continueSettingsFlowConfirm(w, r, ctxUpdate, p)
+		return s.continueSettingsFlowConfirm(ctx, ctxUpdate)
 	} else if p.RevealLookup {
-		if err := s.continueSettingsFlowReveal(w, r, ctxUpdate, p); err != nil {
+		if err := s.continueSettingsFlowReveal(ctx, ctxUpdate); err != nil {
 			return err
 		}
 		return flow.ErrStrategyAsksToReturnToUI
 	} else if p.DisableLookup {
-		return s.continueSettingsFlowDisable(w, r, ctxUpdate, p)
+		return s.continueSettingsFlowDisable(ctx, ctxUpdate)
 	} else if p.RegenerateLookup {
-		if err := s.continueSettingsFlowRegenerate(w, r, ctxUpdate, p); err != nil {
+		if err := s.continueSettingsFlowRegenerate(ctx, ctxUpdate); err != nil {
 			return err
 		}
 		// regen
@@ -188,8 +197,8 @@ func (s *Strategy) continueSettingsFlow(
 	return errors.New("ended up in unexpected state")
 }
 
-func (s *Strategy) continueSettingsFlowDisable(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod) error {
-	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), ctxUpdate.Session.Identity.ID)
+func (s *Strategy) continueSettingsFlowDisable(ctx context.Context, ctxUpdate *settings.UpdateContext) error {
+	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.Identity.ID)
 	if err != nil {
 		return err
 	}
@@ -210,7 +219,7 @@ func (s *Strategy) continueSettingsFlowDisable(w http.ResponseWriter, r *http.Re
 		return err
 	}
 
-	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
+	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
 		return err
 	}
 
@@ -218,8 +227,8 @@ func (s *Strategy) continueSettingsFlowDisable(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (s *Strategy) continueSettingsFlowReveal(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod) error {
-	hasLookup, err := s.identityHasLookup(r.Context(), ctxUpdate.Session.IdentityID)
+func (s *Strategy) continueSettingsFlowReveal(ctx context.Context, ctxUpdate *settings.UpdateContext) error {
+	hasLookup, err := s.identityHasLookup(ctx, ctxUpdate.Session.IdentityID)
 	if err != nil {
 		return err
 	}
@@ -228,7 +237,7 @@ func (s *Strategy) continueSettingsFlowReveal(w http.ResponseWriter, r *http.Req
 		return errors.WithStack(herodot.ErrBadRequest.WithReasonf("Can not reveal lookup codes because you have none."))
 	}
 
-	_, cred, err := s.d.PrivilegedIdentityPool().FindByCredentialsIdentifier(r.Context(), s.ID(), ctxUpdate.Session.IdentityID.String())
+	_, cred, err := s.d.PrivilegedIdentityPool().FindByCredentialsIdentifier(ctx, s.ID(), ctxUpdate.Session.IdentityID.String())
 	if err != nil {
 		return err
 	}
@@ -251,14 +260,14 @@ func (s *Strategy) continueSettingsFlowReveal(w http.ResponseWriter, r *http.Req
 		return err
 	}
 
-	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
+	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *Strategy) continueSettingsFlowRegenerate(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod) error {
+func (s *Strategy) continueSettingsFlowRegenerate(ctx context.Context, ctxUpdate *settings.UpdateContext) error {
 	codes := make([]identity.RecoveryCode, numCodes)
 	for k := range codes {
 		codes[k] = identity.RecoveryCode{Code: randx.MustString(8, randx.AlphaLowerNum)}
@@ -277,14 +286,14 @@ func (s *Strategy) continueSettingsFlowRegenerate(w http.ResponseWriter, r *http
 		return err
 	}
 
-	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
+	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *Strategy) continueSettingsFlowConfirm(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod) error {
+func (s *Strategy) continueSettingsFlowConfirm(ctx context.Context, ctxUpdate *settings.UpdateContext) error {
 	codes := gjson.GetBytes(ctxUpdate.Flow.InternalContext, flow.PrefixInternalContextKey(s.ID(), InternalContextKeyRegenerated)).Array()
 	if len(codes) != numCodes {
 		return errors.WithStack(herodot.ErrBadRequest.WithReasonf("You must (re-)generate recovery backup codes before you can save them."))
@@ -300,7 +309,7 @@ func (s *Strategy) continueSettingsFlowConfirm(w http.ResponseWriter, r *http.Re
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode totp options to JSON: %s", err))
 	}
 
-	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), ctxUpdate.Session.Identity.ID)
+	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.Identity.ID)
 	if err != nil {
 		return err
 	}
@@ -316,12 +325,12 @@ func (s *Strategy) continueSettingsFlowConfirm(w http.ResponseWriter, r *http.Re
 		return err
 	}
 
-	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
+	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
 		return err
 	}
 
 	// Since we added the method, it also means that we have authenticated it
-	if err := s.d.SessionManager().SessionAddAuthenticationMethods(r.Context(), ctxUpdate.Session.ID, session.AuthenticationMethod{
+	if err := s.d.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
 		Method: s.ID(),
 		AAL:    identity.AuthenticatorAssuranceLevel2,
 	}); err != nil {
@@ -338,7 +347,7 @@ func (s *Strategy) identityHasLookup(ctx context.Context, id uuid.UUID) (bool, e
 		return false, err
 	}
 
-	count, err := s.CountActiveMultiFactorCredentials(confidential.Credentials)
+	count, err := s.CountActiveMultiFactorCredentials(ctx, confidential.Credentials)
 	if err != nil {
 		return false, err
 	}
@@ -374,7 +383,7 @@ func (s *Strategy) PopulateSettingsMethod(r *http.Request, id *identity.Identity
 	return nil
 }
 
-func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithLookupMethod, err error) error {
+func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithLookupMethod, err error) error {
 	// Do not pause flow if the flow type is an API flow as we can't save cookies in those flows.
 	if e := new(settings.FlowNeedsReAuth); errors.As(err, &e) && ctxUpdate.Flow != nil && ctxUpdate.Flow.Type == flow.TypeBrowser {
 		if err := s.d.ContinuityManager().Pause(r.Context(), w, r, settings.ContinuityKey(s.SettingsStrategyID()), settings.ContinuityOptions(p, ctxUpdate.GetSessionIdentity())...); err != nil {

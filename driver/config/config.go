@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/ory/x/crdbx"
+	"github.com/ory/x/pointerx"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -115,6 +116,8 @@ const (
 	ViperKeySessionTokenizerTemplates                        = "session.whoami.tokenizer.templates"
 	ViperKeySessionWhoAmIAAL                                 = "session.whoami.required_aal"
 	ViperKeySessionWhoAmICaching                             = "feature_flags.cacheable_sessions"
+	ViperKeyFeatureFlagFasterSessionExtend                   = "feature_flags.faster_session_extend"
+	ViperKeySessionWhoAmICachingMaxAge                       = "feature_flags.cacheable_sessions_max_age"
 	ViperKeyUseContinueWithTransitions                       = "feature_flags.use_continue_with_transitions"
 	ViperKeySessionWhoAmIRefreshAllowed                      = "session.whoami.refresh_allowed"
 	ViperKeySessionRefreshMinTimeLeft                        = "session.earliest_possible_extend"
@@ -126,11 +129,14 @@ const (
 	ViperKeyURLsAllowedReturnToDomains                       = "selfservice.allowed_return_urls"
 	ViperKeySelfServiceRegistrationEnabled                   = "selfservice.flows.registration.enabled"
 	ViperKeySelfServiceRegistrationLoginHints                = "selfservice.flows.registration.login_hints"
+	ViperKeySelfServiceRegistrationEnableLegacyOneStep       = "selfservice.flows.registration.enable_legacy_one_step"
 	ViperKeySelfServiceRegistrationUI                        = "selfservice.flows.registration.ui_url"
 	ViperKeySelfServiceRegistrationRequestLifespan           = "selfservice.flows.registration.lifespan"
 	ViperKeySelfServiceRegistrationAfter                     = "selfservice.flows.registration.after"
 	ViperKeySelfServiceRegistrationBeforeHooks               = "selfservice.flows.registration.before.hooks"
 	ViperKeySelfServiceLoginUI                               = "selfservice.flows.login.ui_url"
+	ViperKeySelfServiceLoginFlowStyle                        = "selfservice.flows.login.style"
+	ViperKeySecurityAccountEnumerationMitigate               = "security.account_enumeration.mitigate"
 	ViperKeySelfServiceLoginRequestLifespan                  = "selfservice.flows.login.lifespan"
 	ViperKeySelfServiceLoginAfter                            = "selfservice.flows.login.after"
 	ViperKeySelfServiceLoginBeforeHooks                      = "selfservice.flows.login.before.hooks"
@@ -177,6 +183,7 @@ const (
 	ViperKeyLinkLifespan                                     = "selfservice.methods.link.config.lifespan"
 	ViperKeyLinkBaseURL                                      = "selfservice.methods.link.config.base_url"
 	ViperKeyCodeLifespan                                     = "selfservice.methods.code.config.lifespan"
+	ViperKeyCodeConfigMissingCredentialFallbackEnabled       = "selfservice.methods.code.config.missing_credential_fallback_enabled"
 	ViperKeyPasswordHaveIBeenPwnedHost                       = "selfservice.methods.password.config.haveibeenpwned_host"
 	ViperKeyPasswordHaveIBeenPwnedEnabled                    = "selfservice.methods.password.config.haveibeenpwned_enabled"
 	ViperKeyPasswordMaxBreaches                              = "selfservice.methods.password.config.max_breaches"
@@ -191,6 +198,10 @@ const (
 	ViperKeyWebAuthnRPOrigin                                 = "selfservice.methods.webauthn.config.rp.origin"
 	ViperKeyWebAuthnRPOrigins                                = "selfservice.methods.webauthn.config.rp.origins"
 	ViperKeyWebAuthnPasswordless                             = "selfservice.methods.webauthn.config.passwordless"
+	ViperKeyPasskeyEnabled                                   = "selfservice.methods.passkey.enabled"
+	ViperKeyPasskeyRPDisplayName                             = "selfservice.methods.passkey.config.rp.display_name"
+	ViperKeyPasskeyRPID                                      = "selfservice.methods.passkey.config.rp.id"
+	ViperKeyPasskeyRPOrigins                                 = "selfservice.methods.passkey.config.rp.origins"
 	ViperKeyOAuth2ProviderURL                                = "oauth2_provider.url"
 	ViperKeyOAuth2ProviderHeader                             = "oauth2_provider.headers"
 	ViperKeyOAuth2ProviderOverrideReturnTo                   = "oauth2_provider.override_return_to"
@@ -198,6 +209,7 @@ const (
 	ViperKeyClientHTTPPrivateIPExceptionURLs                 = "clients.http.private_ip_exception_urls"
 	ViperKeyPreviewDefaultReadConsistencyLevel               = "preview.default_read_consistency_level"
 	ViperKeyVersion                                          = "version"
+	ViperKeyPasswordMigrationHook                            = "selfservice.methods.password.config.migrate_hook"
 	ViperKeyHasherLegacyFandomCost                           = "hashers.legacyfandom.cost"
 	ViperKeyHasherLegacyFandomAESKey                         = "hashers.legacyfandom.key"
 	ViperKeyIdentityCaseSensitiveIdentifier                  = "identity.case_sensitive_identifier"
@@ -309,6 +321,10 @@ type (
 		Headers        map[string]string `json:"headers" koanf:"headers"`
 		LocalName      string            `json:"local_name" koanf:"local_name"`
 	}
+	PasswordMigrationHook struct {
+		Enabled bool            `json:"enabled" koanf:"enabled"`
+		Config  json.RawMessage `json:"config" koanf:"config"`
+	}
 	Config struct {
 		l                  *logrusx.Logger
 		p                  *configx.Provider
@@ -386,13 +402,13 @@ func (s Schemas) FindSchemaByID(id string) (*Schema, error) {
 	return nil, errors.Errorf("unable to find identity schema with id: %s", id)
 }
 
-func MustNew(t testing.TB, l *logrusx.Logger, stdOutOrErr io.Writer, opts ...configx.OptionModifier) *Config {
-	p, err := New(context.TODO(), l, stdOutOrErr, opts...)
+func MustNew(t testing.TB, l *logrusx.Logger, stdOutOrErr io.Writer, ctxer contextx.Contextualizer, opts ...configx.OptionModifier) *Config {
+	p, err := New(context.TODO(), l, stdOutOrErr, ctxer, opts...)
 	require.NoError(t, err)
 	return p
 }
 
-func New(ctx context.Context, l *logrusx.Logger, stdOutOrErr io.Writer, opts ...configx.OptionModifier) (*Config, error) {
+func New(ctx context.Context, l *logrusx.Logger, stdOutOrErr io.Writer, ctxer contextx.Contextualizer, opts ...configx.OptionModifier) (*Config, error) {
 	var c *Config
 
 	opts = append([]configx.OptionModifier{
@@ -421,7 +437,7 @@ func New(ctx context.Context, l *logrusx.Logger, stdOutOrErr io.Writer, opts ...
 
 	l.UseConfig(p)
 
-	c = NewCustom(l, p, stdOutOrErr, &contextx.Default{})
+	c = NewCustom(l, p, stdOutOrErr, ctxer)
 
 	if !p.SkipValidation() {
 		if err := c.validateIdentitySchemas(ctx); err != nil {
@@ -499,7 +515,7 @@ func (p *Config) validateIdentitySchemas(ctx context.Context) error {
 		}
 		defer resource.Close()
 
-		schema, err := io.ReadAll(resource)
+		schema, err := io.ReadAll(io.LimitReader(resource, 1024*1024))
 		if err != nil {
 			return errors.WithStack(err)
 		}
@@ -537,12 +553,14 @@ func (p *Config) cors(ctx context.Context, prefix string) (cors.Options, bool) {
 	})
 }
 
-func (p *Config) Set(ctx context.Context, key string, value interface{}) error {
-	return p.GetProvider(ctx).Set(key, value)
+// Deprecated: use context-based WithConfigValue instead
+func (p *Config) Set(_ context.Context, key string, value interface{}) error {
+	return p.p.Set(key, value)
 }
 
-func (p *Config) MustSet(ctx context.Context, key string, value interface{}) {
-	if err := p.GetProvider(ctx).Set(key, value); err != nil {
+// Deprecated: use context-based WithConfigValue instead
+func (p *Config) MustSet(_ context.Context, key string, value interface{}) {
+	if err := p.p.Set(key, value); err != nil {
 		p.l.WithError(err).Fatalf("Unable to set \"%s\" to \"%s\".", key, value)
 	}
 }
@@ -722,6 +740,10 @@ func (p *Config) SelfServiceFlowRegistrationLoginHints(ctx context.Context) bool
 	return p.GetProvider(ctx).Bool(ViperKeySelfServiceRegistrationLoginHints)
 }
 
+func (p *Config) SelfServiceFlowRegistrationTwoSteps(ctx context.Context) bool {
+	return !p.GetProvider(ctx).BoolF(ViperKeySelfServiceRegistrationEnableLegacyOneStep, false)
+}
+
 func (p *Config) SelfServiceFlowVerificationEnabled(ctx context.Context) bool {
 	return p.GetProvider(ctx).Bool(ViperKeySelfServiceVerificationEnabled)
 }
@@ -763,7 +785,12 @@ func (p *Config) SelfServiceFlowSettingsBeforeHooks(ctx context.Context) []SelfS
 }
 
 func (p *Config) SelfServiceFlowRegistrationBeforeHooks(ctx context.Context) []SelfServiceHook {
-	return p.selfServiceHooks(ctx, ViperKeySelfServiceRegistrationBeforeHooks)
+	hooks := p.selfServiceHooks(ctx, ViperKeySelfServiceRegistrationBeforeHooks)
+	if p.SelfServiceFlowRegistrationTwoSteps(ctx) {
+		hooks = append(hooks, SelfServiceHook{"two_step_registration", json.RawMessage("{}")})
+	}
+
+	return hooks
 }
 
 func (p *Config) selfServiceHooks(ctx context.Context, key string) []SelfServiceHook {
@@ -812,7 +839,7 @@ func (p *Config) SelfServiceStrategy(ctx context.Context, strategy string) *Self
 	var err error
 	config, err = json.Marshal(pp.GetF(basePath+".config", config))
 	if err != nil {
-		p.l.WithError(err).Warn("Unable to marshal self service strategy configuration.")
+		p.l.WithError(err).Warn("Unable to marshal self-service strategy configuration.")
 		config = json.RawMessage("{}")
 	}
 
@@ -820,6 +847,8 @@ func (p *Config) SelfServiceStrategy(ctx context.Context, strategy string) *Self
 	// we need to forcibly set these values here:
 	defaultEnabled := false
 	switch strategy {
+	case "identifier_first":
+		defaultEnabled = p.SelfServiceLoginFlowIdentifierFirstEnabled(ctx)
 	case "code", "password", "profile":
 		defaultEnabled = true
 	}
@@ -892,6 +921,10 @@ func (p *Config) SecretsSession(ctx context.Context) [][]byte {
 
 func (p *Config) SecretsCipher(ctx context.Context) [][32]byte {
 	secrets := p.GetProvider(ctx).Strings(ViperKeySecretsCipher)
+	return ToCipherSecrets(secrets)
+}
+
+func ToCipherSecrets(secrets []string) [][32]byte {
 	var cleanSecrets []string
 	for k := range secrets {
 		if len(secrets[k]) == 32 {
@@ -904,7 +937,7 @@ func (p *Config) SecretsCipher(ctx context.Context) [][32]byte {
 	result := make([][32]byte, len(cleanSecrets))
 	for n, s := range secrets {
 		for k, v := range []byte(s) {
-			result[n][k] = byte(v)
+			result[n][k] = v
 		}
 	}
 	return result
@@ -1082,7 +1115,7 @@ func (p *Config) SelfServiceFlowLogoutRedirectURL(ctx context.Context) *url.URL 
 }
 
 func (p *Config) CourierEmailStrategy(ctx context.Context) string {
-	return p.GetProvider(ctx).String(ViperKeyCourierDeliveryStrategy)
+	return p.GetProvider(ctx).StringF(ViperKeyCourierDeliveryStrategy, "smtp")
 }
 
 func (p *Config) CourierEmailRequestConfig(ctx context.Context) json.RawMessage {
@@ -1231,7 +1264,6 @@ func (p *Config) CourierChannels(ctx context.Context) (ccs []*CourierChannel, _ 
 				}
 			}
 		}
-		return ccs, nil
 	}
 
 	// load legacy configs
@@ -1250,7 +1282,8 @@ func (p *Config) CourierChannels(ctx context.Context) (ccs []*CourierChannel, _ 
 			return nil, errors.WithStack(err)
 		}
 	}
-	return []*CourierChannel{&channel}, nil
+	ccs = append(ccs, &channel)
+	return ccs, nil
 }
 
 func splitUrlAndFragment(s string) (string, string) {
@@ -1364,6 +1397,10 @@ func (p *Config) SelfServiceCodeMethodLifespan(ctx context.Context) time.Duratio
 	return p.GetProvider(ctx).DurationF(ViperKeyCodeLifespan, time.Hour)
 }
 
+func (p *Config) SelfServiceCodeMethodMissingCredentialFallbackEnabled(ctx context.Context) bool {
+	return p.GetProvider(ctx).Bool(ViperKeyCodeConfigMissingCredentialFallbackEnabled)
+}
+
 func (p *Config) DatabaseCleanupSleepTables(ctx context.Context) time.Duration {
 	return p.GetProvider(ctx).Duration(ViperKeyDatabaseCleanupSleepTables)
 }
@@ -1413,6 +1450,14 @@ func (p *Config) SessionWhoAmIAAL(ctx context.Context) string {
 
 func (p *Config) SessionWhoAmICaching(ctx context.Context) bool {
 	return p.GetProvider(ctx).Bool(ViperKeySessionWhoAmICaching)
+}
+
+func (p *Config) FeatureFlagFasterSessionExtend(ctx context.Context) bool {
+	return p.GetProvider(ctx).Bool(ViperKeyFeatureFlagFasterSessionExtend)
+}
+
+func (p *Config) SessionWhoAmICachingMaxAge(ctx context.Context) time.Duration {
+	return p.GetProvider(ctx).DurationF(ViperKeySessionWhoAmICachingMaxAge, 0)
 }
 
 func (p *Config) UseContinueWithTransitions(ctx context.Context) bool {
@@ -1511,6 +1556,24 @@ func (p *Config) WebAuthnConfig(ctx context.Context) *webauthn.Config {
 		RPOrigins:     origins,
 		AuthenticatorSelection: protocol.AuthenticatorSelection{
 			UserVerification: protocol.VerificationDiscouraged,
+		},
+		EncodeUserIDAsString: false,
+	}
+}
+
+func (p *Config) PasskeyConfig(ctx context.Context) *webauthn.Config {
+	scheme := p.SelfPublicURL(ctx).Scheme
+	id := p.GetProvider(ctx).String(ViperKeyPasskeyRPID)
+	origins := p.GetProvider(ctx).StringsF(ViperKeyPasskeyRPOrigins, []string{scheme + "://" + id})
+	return &webauthn.Config{
+		RPDisplayName: p.GetProvider(ctx).String(ViperKeyPasskeyRPDisplayName),
+		RPID:          id,
+		RPOrigins:     origins,
+		AuthenticatorSelection: protocol.AuthenticatorSelection{
+			AuthenticatorAttachment: "platform",
+			RequireResidentKey:      pointerx.Ptr(true),
+			ResidentKey:             protocol.ResidentKeyRequirementRequired,
+			UserVerification:        protocol.VerificationPreferred,
 		},
 		EncodeUserIDAsString: false,
 	}
@@ -1621,4 +1684,30 @@ func (p *Config) TokenizeTemplate(ctx context.Context, key string) (_ *SessionTo
 
 func (p *Config) DefaultConsistencyLevel(ctx context.Context) crdbx.ConsistencyLevel {
 	return crdbx.ConsistencyLevelFromString(p.GetProvider(ctx).String(ViperKeyPreviewDefaultReadConsistencyLevel))
+}
+
+func (p *Config) PasswordMigrationHook(ctx context.Context) *PasswordMigrationHook {
+	hook := &PasswordMigrationHook{
+		Enabled: p.GetProvider(ctx).BoolF(ViperKeyPasswordMigrationHook+".enabled", false),
+	}
+	if !hook.Enabled {
+		return hook
+	}
+
+	hook.Config, _ = json.Marshal(p.GetProvider(ctx).Get(ViperKeyPasswordMigrationHook + ".config"))
+
+	return hook
+}
+
+func (p *Config) SelfServiceLoginFlowIdentifierFirstEnabled(ctx context.Context) bool {
+	switch p.GetProvider(ctx).String(ViperKeySelfServiceLoginFlowStyle) {
+	case "identifier_first":
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Config) SecurityAccountEnumerationMitigate(ctx context.Context) bool {
+	return p.GetProvider(ctx).Bool(ViperKeySecurityAccountEnumerationMitigate)
 }

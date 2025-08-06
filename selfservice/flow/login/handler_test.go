@@ -21,12 +21,11 @@ import (
 
 	"github.com/ory/x/sqlxx"
 
+	stdtotp "github.com/pquerna/otp/totp"
+
 	"github.com/ory/kratos/hydra"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/strategy/totp"
-	"github.com/ory/kratos/session"
-
-	stdtotp "github.com/pquerna/otp/totp"
 
 	"github.com/ory/kratos/ui/container"
 
@@ -466,7 +465,7 @@ func TestFlowLifecycle(t *testing.T) {
 			require.NoError(t, reg.IdentityManager().Update(context.Background(), id, identity.ManagerAllowWriteProtectedTraits))
 
 			h := func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-				sess, err := session.NewActiveSession(r, id, reg.Config(), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+				sess, err := testhelpers.NewActiveSession(r, reg, id, time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 				require.NoError(t, err)
 				sess.AuthenticatorAssuranceLevel = identity.AuthenticatorAssuranceLevel1
 				require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), sess))
@@ -554,10 +553,21 @@ func TestFlowLifecycle(t *testing.T) {
 				assert.Empty(t, gjson.GetBytes(body, "session_token_exchange_code").String())
 			})
 
-			t.Run("case=returns session exchange code", func(t *testing.T) {
-				res, body := initFlow(t, urlx.ParseOrPanic("/?return_session_token_exchange_code=true").Query(), true)
-				assert.Contains(t, res.Request.URL.String(), login.RouteInitAPIFlow)
-				assert.NotEmpty(t, gjson.GetBytes(body, "session_token_exchange_code").String())
+			t.Run("case=returns session exchange code with any truthy value", func(t *testing.T) {
+				conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.sh", "https://example.com"})
+				parameters := []string{"true", "True", "1"}
+
+				for _, param := range parameters {
+					t.Run("return_session_token_exchange_code="+param, func(t *testing.T) {
+						res, body := initFlow(t, url.Values{
+							"return_session_token_exchange_code": {param},
+							"return_to":                          {"https://example.com/redirect"},
+						}, true)
+						assert.Contains(t, res.Request.URL.String(), login.RouteInitAPIFlow)
+						assert.NotEmpty(t, gjson.GetBytes(body, "session_token_exchange_code").String())
+						assert.Equal(t, "https://example.com/redirect", gjson.GetBytes(body, "return_to").String())
+					})
+				}
 			})
 
 			t.Run("case=can not request refresh and aal at the same time on unauthenticated request", func(t *testing.T) {

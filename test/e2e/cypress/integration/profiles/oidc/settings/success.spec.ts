@@ -44,7 +44,7 @@ context("Social Sign In Settings Success", () => {
 
         cy.get('[data-testid="ui/message/1010016"]').should(
           "contain.text",
-          "Signing in will link your account",
+          "as another way to sign in.",
         )
 
         cy.noSession()
@@ -94,7 +94,7 @@ context("Social Sign In Settings Success", () => {
 
           cy.get('[value="hydra"]')
             .should("have.attr", "name", "unlink")
-            .should("contain.text", "Unlink hydra")
+            .should("contain.text", "Unlink Ory")
         })
 
         it("should link google", () => {

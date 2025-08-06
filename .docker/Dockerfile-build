@@ -1,6 +1,5 @@
 # syntax = docker/dockerfile:1-experimental
-# Workaround for https://github.com/GoogleContainerTools/distroless/issues/1342
-FROM golang:1.21 AS builder
+FROM golang:1.23-bullseye AS builder
 
 RUN apt-get update && apt-get upgrade -y &&\
   mkdir -p /var/lib/sqlite
@@ -9,7 +8,6 @@ WORKDIR /go/src/github.com/ory/kratos
 
 COPY go.mod go.mod
 COPY go.sum go.sum
-COPY internal/httpclient/go.* internal/httpclient/
 COPY internal/client-go/go.* internal/client-go/
 
 ENV GO111MODULE on

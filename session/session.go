@@ -16,7 +16,7 @@ import (
 
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/pagination/keysetpagination"
-	"github.com/ory/x/stringsx"
+	"github.com/ory/x/pointerx"
 
 	"github.com/pkg/errors"
 
@@ -227,6 +227,9 @@ func (s *Session) SetAuthenticatorAssuranceLevel() {
 			isAAL1 = true
 		case identity.AuthenticatorAssuranceLevel2:
 			isAAL2 = true
+		// The following section is a graceful migration from Ory Kratos v0.9.
+		//
+		// TODO remove this section, it is already over 2 years old.
 		case "":
 			// Sessions before Ory Kratos 0.9 did not have the AAL
 			// be part of the AMR.
@@ -255,18 +258,9 @@ func (s *Session) SetAuthenticatorAssuranceLevel() {
 	} else if isAAL1 {
 		s.AuthenticatorAssuranceLevel = identity.AuthenticatorAssuranceLevel1
 	} else if len(s.AMR) > 0 {
-		// A fallback. If an AMR is set but we did not satisfy the above, gracefully fall back to level 1.
+		// A fallback. If an AMR is set, but we did not satisfy the above, gracefully fall back to level 1.
 		s.AuthenticatorAssuranceLevel = identity.AuthenticatorAssuranceLevel1
 	}
-}
-
-func NewActiveSession(r *http.Request, i *identity.Identity, c lifespanProvider, authenticatedAt time.Time, completedLoginFor identity.CredentialsType, completedLoginAAL identity.AuthenticatorAssuranceLevel) (*Session, error) {
-	s := NewInactiveSession()
-	s.CompletedLoginFor(completedLoginFor, completedLoginAAL)
-	if err := s.Activate(r, i, c, authenticatedAt); err != nil {
-		return nil, err
-	}
-	return s, nil
 }
 
 func NewInactiveSession() *Session {
@@ -279,32 +273,15 @@ func NewInactiveSession() *Session {
 	}
 }
 
-func (s *Session) Activate(r *http.Request, i *identity.Identity, c lifespanProvider, authenticatedAt time.Time) error {
-	if i != nil && !i.IsActive() {
-		return ErrIdentityDisabled.WithDetail("identity_id", i.ID)
-	}
-
-	s.Active = true
-	s.ExpiresAt = authenticatedAt.Add(c.SessionLifespan(r.Context()))
-	s.AuthenticatedAt = authenticatedAt
-	s.IssuedAt = authenticatedAt
-	s.Identity = i
-	s.IdentityID = i.ID
-
-	s.SetSessionDeviceInformation(r)
-	s.SetAuthenticatorAssuranceLevel()
-	return nil
-}
-
 func (s *Session) SetSessionDeviceInformation(r *http.Request) {
 	device := Device{
 		SessionID: s.ID,
-		IPAddress: stringsx.GetPointer(httpx.ClientIP(r)),
+		IPAddress: pointerx.Ptr(httpx.ClientIP(r)),
 	}
 
 	agent := r.Header["User-Agent"]
 	if len(agent) > 0 {
-		device.UserAgent = stringsx.GetPointer(strings.Join(agent, " "))
+		device.UserAgent = pointerx.Ptr(strings.Join(agent, " "))
 	}
 
 	var clientGeoLocation []string
@@ -314,7 +291,7 @@ func (s *Session) SetSessionDeviceInformation(r *http.Request) {
 	if r.Header.Get("Cf-Ipcountry") != "" {
 		clientGeoLocation = append(clientGeoLocation, r.Header.Get("Cf-Ipcountry"))
 	}
-	device.Location = stringsx.GetPointer(strings.Join(clientGeoLocation, ", "))
+	device.Location = pointerx.Ptr(strings.Join(clientGeoLocation, ", "))
 
 	s.Devices = append(s.Devices, device)
 }

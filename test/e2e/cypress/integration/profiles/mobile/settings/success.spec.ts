@@ -25,6 +25,7 @@ context("Mobile Profile", () => {
 
       beforeEach(() => {
         cy.loginMobile({ email, password })
+        cy.location("pathname").should("not.contain", "/Login")
         // In our case we enabled setCookies for API request to support mobile webview
         // Therefore, after login to make test consistent with upstream we need to clear
         // cookies.
@@ -72,6 +73,7 @@ context("Mobile Profile", () => {
           fields: { "traits.website": website },
         })
         cy.loginMobile({ email, password })
+        cy.location("pathname").should("not.contain", "/Login")
         cy.visit(MOBILE_URL + "/Settings")
       })
 

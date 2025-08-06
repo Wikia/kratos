@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -210,7 +211,7 @@ func TestVerification(t *testing.T) {
 		assert.Equal(t, http.StatusOK, res.StatusCode)
 		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String()+"?flow=")
 
-		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendApi.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendAPI.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 		require.NoError(t, err)
 
 		require.Len(t, sr.Ui.Messages, 1)
@@ -262,7 +263,7 @@ func TestVerification(t *testing.T) {
 		assert.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowVerificationUI(ctx).String())
 		assert.NotContains(t, res.Request.URL.String(), gjson.Get(body, "id").String())
 
-		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendApi.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+		sr, _, err := testhelpers.NewSDKCustomClient(public, c).FrontendAPI.GetVerificationFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 		require.NoError(t, err)
 
 		require.Len(t, sr.Ui.Messages, 1)
@@ -270,6 +271,12 @@ func TestVerification(t *testing.T) {
 	})
 
 	t.Run("description=should verify an email address", func(t *testing.T) {
+		var wg sync.WaitGroup
+		testhelpers.NewVerifyAfterHookWebHookTarget(ctx, t, conf, func(t *testing.T, msg []byte) {
+			defer wg.Done()
+			assert.EqualValues(t, true, gjson.GetBytes(msg, "identity.verifiable_addresses.0.verified").Bool(), string(msg))
+			assert.EqualValues(t, "completed", gjson.GetBytes(msg, "identity.verifiable_addresses.0.status").String(), string(msg))
+		})
 		check := func(t *testing.T, actual string) {
 			assert.EqualValues(t, string(node.LinkGroup), gjson.Get(actual, "active").String(), "%s", actual)
 			assert.EqualValues(t, verificationEmail, gjson.Get(actual, "ui.nodes.#(attributes.name==email).attributes.value").String(), "%s", actual)
@@ -310,15 +317,21 @@ func TestVerification(t *testing.T) {
 		}
 
 		t.Run("type=browser", func(t *testing.T) {
+			wg.Add(1)
 			check(t, expectSuccess(t, nil, false, false, values))
+			wg.Wait()
 		})
 
 		t.Run("type=spa", func(t *testing.T) {
+			wg.Add(1)
 			check(t, expectSuccess(t, nil, false, true, values))
+			wg.Wait()
 		})
 
 		t.Run("type=api", func(t *testing.T) {
+			wg.Add(1)
 			check(t, expectSuccess(t, nil, true, false, values))
+			wg.Wait()
 		})
 	})
 

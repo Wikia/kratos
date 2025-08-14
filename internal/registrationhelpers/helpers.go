@@ -278,6 +278,7 @@ func AssertRegistrationRespectsValidation(t *testing.T, reg *driver.RegistryDefa
 func AssertCommonErrorCases(t *testing.T, flows []string) {
 	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
+	conf.MustSet(ctx, "selfservice.flows.registration.enable_legacy_one_step", true)
 	testhelpers.SetDefaultIdentitySchemaFromRaw(conf, basicSchema)
 	uiTS := testhelpers.NewRegistrationUIFlowEchoServer(t, reg)
 	publicTS := setupServer(t, reg)
@@ -287,7 +288,7 @@ func AssertCommonErrorCases(t *testing.T, flows []string) {
 	t.Run("description=can call endpoints only without session", func(t *testing.T) {
 		values := url.Values{}
 		t.Run("type=browser", func(t *testing.T) {
-			res, err := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, reg).
+			res, err := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, ctx, reg).
 				Do(httpx.MustNewRequest("POST", publicTS.URL+registration.RouteSubmitFlow, strings.NewReader(values.Encode()), "application/x-www-form-urlencoded"))
 			require.NoError(t, err)
 			defer res.Body.Close()
@@ -296,7 +297,7 @@ func AssertCommonErrorCases(t *testing.T, flows []string) {
 		})
 
 		t.Run("type=api", func(t *testing.T) {
-			res, err := testhelpers.NewHTTPClientWithArbitrarySessionToken(t, reg).
+			res, err := testhelpers.NewHTTPClientWithArbitrarySessionToken(t, ctx, reg).
 				Do(httpx.MustNewRequest("POST", publicTS.URL+registration.RouteSubmitFlow, strings.NewReader(testhelpers.EncodeFormAsJSON(t, true, values)), "application/json"))
 			require.NoError(t, err)
 			assert.Len(t, res.Cookies(), 0)
@@ -336,7 +337,7 @@ func AssertCommonErrorCases(t *testing.T, flows []string) {
 		values := url.Values{}
 
 		t.Run("type=browser", func(t *testing.T) {
-			res, err := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, reg).
+			res, err := testhelpers.NewHTTPClientWithArbitrarySessionCookie(t, ctx, reg).
 				Do(httpx.MustNewRequest("POST", publicTS.URL+registration.RouteSubmitFlow, strings.NewReader(values.Encode()), "application/x-www-form-urlencoded"))
 			require.NoError(t, err)
 			defer res.Body.Close()
@@ -345,7 +346,7 @@ func AssertCommonErrorCases(t *testing.T, flows []string) {
 		})
 
 		t.Run("type=api", func(t *testing.T) {
-			res, err := testhelpers.NewHTTPClientWithArbitrarySessionToken(t, reg).
+			res, err := testhelpers.NewHTTPClientWithArbitrarySessionToken(t, ctx, reg).
 				Do(httpx.MustNewRequest("POST", publicTS.URL+registration.RouteSubmitFlow, strings.NewReader(testhelpers.EncodeFormAsJSON(t, true, values)), "application/json"))
 			require.NoError(t, err)
 			assert.Len(t, res.Cookies(), 0)

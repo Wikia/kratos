@@ -4,7 +4,7 @@
 import { appPrefix, gen, website } from "../../../../helpers"
 import { routes as express } from "../../../../helpers/express"
 import { routes as react } from "../../../../helpers/react"
-import { testRegistrationWebhook } from "../../../../helpers/webhook"
+import { testFlowWebhook } from "../../../../helpers/webhook"
 
 context("Social Sign Up Successes", () => {
   ;[
@@ -104,8 +104,12 @@ context("Social Sign Up Successes", () => {
       })
 
       it("should pass transient_payload to webhook", () => {
-        testRegistrationWebhook(
-          (hooks) => cy.setupHooks("registration", "after", "oidc", hooks),
+        testFlowWebhook(
+          (hooks) =>
+            cy.setupHooks("registration", "after", "oidc", [
+              ...hooks,
+              { hook: "session" },
+            ]),
           () => {
             const email = gen.email()
             cy.registerOidc({
@@ -190,9 +194,9 @@ context("Social Sign Up Successes", () => {
           app,
           email,
           website,
-          route: registration + "?return_to=https://www.ory.sh/",
+          route: registration + "?return_to=https://www.example.org/",
         })
-        cy.location("href").should("eq", "https://www.ory.sh/")
+        cy.location("href").should("eq", "https://www.example.org/")
         cy.logout()
       })
 
@@ -248,7 +252,6 @@ context("Social Sign Up Successes", () => {
 
         cy.location("href").should("contain", "/login")
 
-        cy.get("[name='provider'][value='hydra']").should("be.visible")
         cy.get("[name='provider'][value='google']").should("be.visible")
         cy.get("[name='provider'][value='github']").should("be.visible")
 
@@ -256,7 +259,6 @@ context("Social Sign Up Successes", () => {
           cy.get("[data-testid='forgot-password-link']").should("be.visible")
         }
 
-        cy.get("input[name='identifier']").type(email)
         cy.get("input[name='password']").type(password)
         cy.submitPasswordForm()
         cy.getSession()

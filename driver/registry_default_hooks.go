@@ -50,6 +50,13 @@ func (m *RegistryDefault) HookShowVerificationUI() *hook.ShowVerificationUIHook 
 	return m.hookShowVerificationUI
 }
 
+func (m *RegistryDefault) HookTwoStepRegistration() *hook.TwoStepRegistration {
+	if m.hookTwoStepRegistration == nil {
+		m.hookTwoStepRegistration = hook.NewTwoStepRegistration(m)
+	}
+	return m.hookTwoStepRegistration
+}
+
 // fandom-start
 
 func (m *RegistryDefault) HookTotpSecretsDestroyer() *hook.TotpSecretsDestroyer {
@@ -66,10 +73,12 @@ func (m *RegistryDefault) WithHooks(hooks map[string]func(config.SelfServiceHook
 }
 
 func (m *RegistryDefault) getHooks(credentialsType string, configs []config.SelfServiceHook) (i []interface{}) {
+	var addSessionIssuer bool
 	for _, h := range configs {
 		switch h.Name {
 		case hook.KeySessionIssuer:
-			i = append(i, m.HookSessionIssuer())
+			// The session issuer hook always needs to come last.
+			addSessionIssuer = true
 		case hook.KeySessionDestroyer:
 			i = append(i, m.HookSessionDestroyer())
 		case hook.KeyWebHook:
@@ -78,6 +87,10 @@ func (m *RegistryDefault) getHooks(credentialsType string, configs []config.Self
 			i = append(i, m.HookAddressVerifier())
 		case hook.KeyVerificationUI:
 			i = append(i, m.HookShowVerificationUI())
+		case hook.KeyTwoStepRegistration:
+			i = append(i, m.HookTwoStepRegistration())
+		case hook.KeyVerifier:
+			i = append(i, m.HookVerifier())
 			// fandom-start
 		case hook.KeyTotpLookupSecretsDestroyer:
 			i = append(i, m.HookTotpSecretsDestroyer())
@@ -99,6 +112,9 @@ func (m *RegistryDefault) getHooks(credentialsType string, configs []config.Self
 				WithField("hook", h.Name).
 				Errorf("A unknown hook was requested and can therefore not be used")
 		}
+	}
+	if addSessionIssuer {
+		i = append(i, m.HookSessionIssuer())
 	}
 
 	return i

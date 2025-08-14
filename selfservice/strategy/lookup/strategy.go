@@ -34,6 +34,8 @@ type lookupStrategyDependencies interface {
 	x.WriterProvider
 	x.CSRFTokenGeneratorProvider
 	x.CSRFProvider
+	x.TransactionPersistenceProvider
+	x.TracingProvider
 
 	config.Provider
 
@@ -61,6 +63,7 @@ type lookupStrategyDependencies interface {
 
 	identity.PrivilegedPoolProvider
 	identity.ValidationProvider
+	identity.ManagementProvider
 
 	session.HandlerProvider
 	session.ManagementProvider
@@ -78,11 +81,11 @@ func NewStrategy(d any) *Strategy {
 	}
 }
 
-func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+func (s *Strategy) CountActiveFirstFactorCredentials(_ context.Context, _ map[identity.CredentialsType]identity.Credentials) (count int, err error) {
 	return 0, nil
 }
 
-func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+func (s *Strategy) CountActiveMultiFactorCredentials(_ context.Context, cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
 	hasTotp := false
 	for _, c := range cc {
 		if c.Type == identity.CredentialsTypeTOTP {
@@ -90,7 +93,7 @@ func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.Credentials
 		}
 		if c.Type == s.ID() && len(c.Config) > 0 {
 			var conf identity.CredentialsLookupConfig
-			if err = json.Unmarshal(c.Config, &conf); err != nil {
+			if err := json.Unmarshal(c.Config, &conf); err != nil {
 				return 0, errors.WithStack(err)
 			}
 
@@ -117,7 +120,7 @@ func (s *Strategy) NodeGroup() node.UiNodeGroup {
 	return node.LookupGroup
 }
 
-func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context, _ session.AuthenticationMethods) session.AuthenticationMethod {
+func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod {
 	return session.AuthenticationMethod{
 		Method: s.ID(),
 		AAL:    identity.AuthenticatorAssuranceLevel2,

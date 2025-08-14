@@ -13,25 +13,21 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ory/x/otelx"
-
-	"github.com/ory/x/pagination/migrationpagination"
-
-	"github.com/ory/kratos/driver/config"
-
 	"github.com/julienschmidt/httprouter"
 	"github.com/pkg/errors"
 
 	"github.com/ory/herodot"
-
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/x"
+	"github.com/ory/x/otelx"
+	"github.com/ory/x/pagination/migrationpagination"
 )
 
 type (
 	handlerDependencies interface {
 		x.WriterProvider
 		x.LoggingProvider
-		IdentityTraitsProvider
+		IdentitySchemaProvider
 		x.CSRFProvider
 		config.Provider
 		x.TracingProvider
@@ -73,7 +69,16 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 //
 //nolint:deadcode,unused
 //lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
-type identitySchema = json.RawMessage
+type identitySchema json.RawMessage
+
+func (m identitySchema) MarshalJSON() ([]byte, error) {
+	return json.RawMessage(m).MarshalJSON()
+}
+
+func (m *identitySchema) UnmarshalJSON(data []byte) error {
+	mm := json.RawMessage(*m)
+	return mm.UnmarshalJSON(data)
+}
 
 // Get Identity JSON Schema Response
 //
@@ -155,7 +160,7 @@ type identitySchemaContainer struct {
 	// The ID of the Identity JSON Schema
 	ID string `json:"id"`
 	// The actual Identity JSON Schema
-	Schema identitySchema `json:"schema"`
+	Schema json.RawMessage `json:"schema"`
 }
 
 // List Identity JSON Schemas Response
@@ -218,7 +223,7 @@ func (h *Handler) getAll(w http.ResponseWriter, r *http.Request, ps httprouter.P
 			return
 		}
 
-		raw, err := io.ReadAll(src)
+		raw, err := io.ReadAll(io.LimitReader(src, 1024*1024))
 		_ = src.Close()
 		if err != nil {
 			h.r.Writer().WriteError(w, r, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The file for this JSON Schema ID could not be found or opened. This is a configuration issue.").WithDebugf("%+v", err)))

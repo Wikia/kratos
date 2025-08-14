@@ -74,7 +74,12 @@ func TestHandleError(t *testing.T) {
 		require.NoError(t, err)
 
 		for _, s := range reg.LoginStrategies(context.Background()) {
-			require.NoError(t, s.PopulateLoginMethod(req, identity.AuthenticatorAssuranceLevel1, f))
+			switch s.(type) {
+			case login.UnifiedFormHydrator:
+				require.NoError(t, s.(login.UnifiedFormHydrator).PopulateLoginMethod(req, identity.AuthenticatorAssuranceLevel1, f))
+			case login.FormHydrator:
+				require.NoError(t, s.(login.FormHydrator).PopulateLoginMethodFirstFactor(req, f))
+			}
 		}
 
 		require.NoError(t, reg.LoginFlowPersister().CreateLoginFlow(context.Background(), f))
@@ -87,7 +92,7 @@ func TestHandleError(t *testing.T) {
 		defer res.Body.Close()
 		require.Contains(t, res.Request.URL.String(), conf.SelfServiceFlowErrorURL(ctx).String()+"?id=")
 
-		sse, _, err := sdk.FrontendApi.GetFlowError(context.Background()).Id(res.Request.URL.Query().Get("id")).Execute()
+		sse, _, err := sdk.FrontendAPI.GetFlowError(context.Background()).Id(res.Request.URL.Query().Get("id")).Execute()
 		require.NoError(t, err)
 
 		return sse.Error, nil

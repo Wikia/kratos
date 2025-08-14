@@ -9,6 +9,7 @@ selfservice:
         default_browser_return_url: http://localhost:4455/login
 
     registration:
+      enable_legacy_one_step: true
       after:
         password:
           hooks:
@@ -18,7 +19,6 @@ selfservice:
 
     verification:
       enabled: false
-
   methods:
     totp:
       enabled: true

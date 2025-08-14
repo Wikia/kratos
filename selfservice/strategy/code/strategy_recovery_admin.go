@@ -73,6 +73,13 @@ type createRecoveryCodeForIdentityBody struct {
 	//	- 1m
 	//	- 1s
 	ExpiresIn string `json:"expires_in"`
+
+	// Flow Type
+	//
+	// The flow type for the recovery flow. Defaults to browser.
+	//
+	// required: false
+	FlowType *flow.Type `json:"flow_type"`
 }
 
 // Recovery Code for Identity
@@ -149,12 +156,21 @@ func (s *Strategy) createRecoveryCodeForIdentity(w http.ResponseWriter, r *http.
 		}
 	}
 
-	if time.Now().Add(expiresIn).Before(time.Now()) {
-		s.deps.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Value from "expires_in" must result to a future time: %s`, p.ExpiresIn)))
+	if expiresIn <= 0 {
+		s.deps.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Value from "expires_in" must result to a future time: %s`, expiresIn)))
 		return
 	}
 
-	recoveryFlow, err := recovery.NewFlow(config, expiresIn, s.deps.GenerateCSRFToken(r), r, s, flow.TypeBrowser)
+	flowType := flow.TypeBrowser
+	if p.FlowType != nil {
+		flowType = *p.FlowType
+	}
+	if !flowType.Valid() {
+		s.deps.Writer().WriteError(w, r, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Value from "flow_type" is not valid: %q`, flowType)))
+		return
+	}
+
+	recoveryFlow, err := recovery.NewFlow(config, expiresIn, s.deps.GenerateCSRFToken(r), r, s, flowType)
 	if err != nil {
 		s.deps.Writer().WriteError(w, r, err)
 		return
@@ -162,13 +178,16 @@ func (s *Strategy) createRecoveryCodeForIdentity(w http.ResponseWriter, r *http.
 	recoveryFlow.DangerousSkipCSRFCheck = true
 	recoveryFlow.State = flow.StateEmailSent
 	recoveryFlow.UI.Nodes = node.Nodes{}
-	recoveryFlow.UI.Nodes.Append(node.NewInputField("code", nil, node.CodeGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute).
+	recoveryFlow.UI.Nodes.Append(node.NewInputField("code", nil, node.CodeGroup, node.InputAttributeTypeText, node.WithRequiredInputAttribute, node.WithInputAttributes(func(a *node.InputAttributes) {
+		a.Pattern = "[0-9]+"
+		a.MaxLength = CodeLength
+	})).
 		WithMetaLabel(text.NewInfoNodeLabelRecoveryCode()),
 	)
 
 	recoveryFlow.UI.Nodes.
 		Append(node.NewInputField("method", s.RecoveryStrategyID(), node.CodeGroup, node.InputAttributeTypeSubmit).
-			WithMetaLabel(text.NewInfoNodeLabelSubmit()))
+			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	if err := s.deps.RecoveryFlowPersister().CreateRecoveryFlow(ctx, recoveryFlow); err != nil {
 		s.deps.Writer().WriteError(w, r, err)

@@ -12,6 +12,13 @@
     "traits": {},
     "csrf_token": {
       "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "transient_payload": {
+      "type": "object",
+      "additionalProperties": true
     }
   }
 }

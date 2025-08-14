@@ -101,6 +101,17 @@ func TestLoginExecutor(t *testing.T) {
 					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
 				})
 
+				t.Run("case=pass without hooks if client is ajax", func(t *testing.T) {
+					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
+
+					ts := newServer(t, flow.TypeBrowser, nil)
+					res, body := makeRequestPost(t, ts, true, url.Values{})
+					assert.EqualValues(t, http.StatusOK, res.StatusCode)
+					assert.Contains(t, res.Request.URL.String(), ts.URL)
+					assert.EqualValues(t, gjson.Get(body, "continue_with").Raw, `[{"action":"redirect_browser_to","redirect_browser_to":"https://www.ory.sh/"}]`)
+					t.Logf("%s", body)
+				})
+
 				t.Run("case=pass if hooks pass", func(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
 					viperSetPost(t, conf, strategy.String(), []config.SelfServiceHook{{Name: "err", Config: []byte(`{}`)}})
@@ -294,6 +305,7 @@ func TestLoginExecutor(t *testing.T) {
 					})
 				})
 			})
+
 			t.Run("case=maybe links credential", func(t *testing.T) {
 				t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
 
@@ -308,9 +320,7 @@ func TestLoginExecutor(t *testing.T) {
 				require.NoError(t, reg.Persister().CreateIdentity(context.Background(), useIdentity))
 
 				credsOIDC, err := identity.NewCredentialsOIDC(
-					"id-token",
-					"access-token",
-					"refresh-token",
+					&identity.CredentialsOIDCEncryptedTokens{IDToken: "id-token", AccessToken: "access-token", RefreshToken: "refresh-token"},
 					"my-provider",
 					email,
 					"",

@@ -39,7 +39,7 @@ context("Social Sign In Successes", () => {
         cy.loginOidc({ app, url: login })
       })
 
-      it.only("should be able to sign up and link existing account", () => {
+      it("should be able to sign up and link existing account", () => {
         const email = gen.email()
         const password = gen.password()
 
@@ -60,7 +60,6 @@ context("Social Sign In Successes", () => {
         cy.noSession()
 
         // Log in with the same identifier through the login flow. This should link the accounts.
-        cy.get(`${appPrefix(app)}input[name="identifier"]`).type(email)
         cy.get('input[name="password"]').type(password)
         cy.submitPasswordForm()
         cy.location("pathname").should("not.contain", "/login")
@@ -70,7 +69,7 @@ context("Social Sign In Successes", () => {
         cy.visit(settings)
         cy.get('[value="hydra"]')
           .should("have.attr", "name", "unlink")
-          .should("contain.text", "Unlink hydra")
+          .should("contain.text", "Unlink Ory")
       })
 
       it("should be able to sign up with redirects", () => {

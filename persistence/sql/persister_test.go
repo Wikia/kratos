@@ -29,6 +29,7 @@ import (
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/internal/testhelpers"
 	"github.com/ory/kratos/persistence/sql"
+	"github.com/ory/kratos/persistence/sql/batch"
 	sqltesthelpers "github.com/ory/kratos/persistence/sql/testhelpers"
 	"github.com/ory/kratos/schema"
 	errorx "github.com/ory/kratos/selfservice/errorx/test"
@@ -94,18 +95,22 @@ func pl(t testing.TB) func(lvl logging.Level, s string, args ...interface{}) {
 
 func createCleanDatabases(t testing.TB) map[string]*driver.RegistryDefault {
 	conns := map[string]string{
-		"sqlite": "sqlite://file:" + t.TempDir() + "/db.sqlite?_fk=true",
+		"sqlite": "sqlite://file:" + t.TempDir() + "/db.sqlite?_fk=true&max_conns=1&lock=false",
 	}
 
 	var l sync.Mutex
 	if !testing.Short() {
 		funcs := map[string]func(t testing.TB) string{
 			// fandom-start
-			//"postgres":  dockertest.RunTestPostgreSQL,
+			//"postgres": func(t testing.TB) string {
+			//	return dockertest.RunTestPostgreSQLWithVersion(t, "16")
+			//},
 			// fandom-end
-			"mysql": dockertest.RunTestMySQL,
+			"mysql": func(t testing.TB) string {
+				return dockertest.RunTestMySQLWithVersion(t, "8.0")
+			},
 			// fandom-start
-			//"cockroach": dockertest.NewLocalTestCRDBServer
+			//"cockroach": newLocalTestCRDBServer,
 			// fandom-end
 		}
 
@@ -164,63 +169,56 @@ func createCleanDatabases(t testing.TB) map[string]*driver.RegistryDefault {
 }
 
 func TestPersister(t *testing.T) {
-	conns := createCleanDatabases(t)
-	ctx := context.Background()
+	t.Parallel()
 
-	for name := range conns {
-		name := name
-		reg := conns[name]
+	conns := createCleanDatabases(t)
+	ctx := testhelpers.WithDefaultIdentitySchema(context.Background(), "file://./stub/identity.schema.json")
+
+	for name, reg := range conns {
 		t.Run(fmt.Sprintf("database=%s", name), func(t *testing.T) {
 			t.Parallel()
 
 			_, p := testhelpers.NewNetwork(t, ctx, reg.Persister())
-			conf := reg.Config()
 
-			t.Logf("DSN: %s", conf.DSN(ctx))
+			t.Logf("DSN: %s", reg.Config().DSN(ctx))
 
-			// This test must remain the first test in the test suite!
 			t.Run("racy identity creation", func(t *testing.T) {
-				defaultSchema := schema.Schema{
-					ID:     config.DefaultIdentityTraitsSchemaID,
-					URL:    urlx.ParseOrPanic("file://./stub/identity.schema.json"),
-					RawURL: "file://./stub/identity.schema.json",
-				}
+				t.Parallel()
 
 				var wg sync.WaitGroup
-				testhelpers.SetDefaultIdentitySchema(reg.Config(), defaultSchema.RawURL)
+
 				_, ps := testhelpers.NewNetwork(t, ctx, reg.Persister())
 
-				for i := 0; i < 10; i++ {
+				for i := range 10 {
 					wg.Add(1)
-					// capture i
-					ii := i
 					go func() {
 						defer wg.Done()
 
 						id := ri.NewIdentity("")
 						id.SetCredentials(ri.CredentialsTypePassword, ri.Credentials{
 							Type:        ri.CredentialsTypePassword,
-							Identifiers: []string{fmt.Sprintf("racy identity %d", ii)},
+							Identifiers: []string{fmt.Sprintf("racy identity %d", i)},
 							Config:      sqlxx.JSONRawMessage(`{"foo":"bar"}`),
 						})
 						id.Traits = ri.Traits("{}")
 
-						require.NoError(t, ps.CreateIdentity(context.Background(), id))
+						require.NoError(t, ps.CreateIdentity(ctx, id))
 					}()
 				}
 
 				wg.Wait()
 			})
 
-			t.Run("case=credentials types", func(t *testing.T) {
+			t.Run("case=credential types exist", func(t *testing.T) {
+				t.Parallel()
 				for _, ct := range []ri.CredentialsType{ri.CredentialsTypeOIDC, ri.CredentialsTypePassword} {
 					require.NoError(t, p.(*sql.Persister).Connection(context.Background()).Where("name = ?", ct).First(&ri.CredentialsTypeTable{}))
 				}
 			})
 
 			t.Run("contract=identity.TestPool", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				identity.TestPool(ctx, conf, p, reg.IdentityManager(), name)(t)
+				t.Parallel()
+				identity.TestPool(ctx, p, reg.IdentityManager(), name)(t)
 			})
 			t.Run("contract=identity.TestPool (case sensitive)", func(t *testing.T) {
 				pop.SetLogger(pl(t))
@@ -230,53 +228,57 @@ func TestPersister(t *testing.T) {
 				identity.TestPool(ctx, caseConf, p, reg.IdentityManager(), name)(t)
 			})
 			t.Run("contract=registration.TestFlowPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
+				t.Parallel()
 				registration.TestFlowPersister(ctx, p)(t)
 			})
 			t.Run("contract=errorx.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
+				t.Parallel()
 				errorx.TestPersister(ctx, p)(t)
 			})
 			t.Run("contract=login.TestFlowPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
+				t.Parallel()
 				login.TestFlowPersister(ctx, p)(t)
 			})
 			t.Run("contract=settings.TestFlowPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				settings.TestFlowPersister(ctx, conf, p)(t)
+				t.Parallel()
+				settings.TestFlowPersister(ctx, p)(t)
 			})
 			t.Run("contract=session.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				session.TestPersister(ctx, conf, p)(t)
+				t.Parallel()
+				session.TestPersister(ctx, reg.Config(), p)(t)
 			})
 			t.Run("contract=sessiontokenexchange.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				sessiontokenexchange.TestPersister(ctx, conf, p)(t)
+				t.Parallel()
+				sessiontokenexchange.TestPersister(ctx, p)(t)
 			})
 			t.Run("contract=courier.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
+				t.Parallel()
 				upsert, insert := sqltesthelpers.DefaultNetworkWrapper(p)
 				courier.TestPersister(ctx, upsert, insert)(t)
 			})
 			t.Run("contract=verification.TestFlowPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				verification.TestFlowPersister(ctx, conf, p)(t)
+				t.Parallel()
+				verification.TestFlowPersister(ctx, p)(t)
 			})
 			t.Run("contract=recovery.TestFlowPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				recovery.TestFlowPersister(ctx, conf, p)(t)
+				t.Parallel()
+				recovery.TestFlowPersister(ctx, p)(t)
 			})
 			t.Run("contract=link.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				link.TestPersister(ctx, conf, p)(t)
+				t.Parallel()
+				link.TestPersister(ctx, p)(t)
 			})
 			t.Run("contract=code.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
-				code.TestPersister(ctx, conf, p)(t)
+				t.Parallel()
+				code.TestPersister(ctx, p)(t)
 			})
 			t.Run("contract=continuity.TestPersister", func(t *testing.T) {
-				pop.SetLogger(pl(t))
+				t.Parallel()
 				continuity.TestPersister(ctx, p)(t)
+			})
+			t.Run("contract=batch.TestPersister", func(t *testing.T) {
+				t.Parallel()
+				batch.TestPersister(ctx, reg.Tracer(ctx), p)(t)
 			})
 		})
 	}
@@ -294,6 +296,8 @@ func getErr(args ...interface{}) error {
 }
 
 func TestPersister_Transaction(t *testing.T) {
+	t.Parallel()
+
 	_, reg := internal.NewFastRegistryWithMocks(t)
 	p := reg.Persister()
 

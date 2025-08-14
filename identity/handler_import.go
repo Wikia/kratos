@@ -19,7 +19,15 @@ func (h *Handler) importCredentials(ctx context.Context, i *Identity, creds *Ide
 		return nil
 	}
 
+	// This method only support password and OIDC import at the moment.
+	// If other methods are added please ensure that the available AAL is set correctly in the identity.
+	//
+	// It would actually be good if we would validate the identity post-creation to see if the credentials are working.
 	if creds.Password != nil {
+		// This method is somewhat hacky, because it does not set the credential's identifier. It relies on the
+		// identity validation to set the identifier, which is called after this method.
+		//
+		// It would be good to make this explicit.
 		if err := h.importPasswordCredentials(ctx, i, creds.Password); err != nil {
 			return err
 		}
@@ -35,6 +43,10 @@ func (h *Handler) importCredentials(ctx context.Context, i *Identity, creds *Ide
 }
 
 func (h *Handler) importPasswordCredentials(ctx context.Context, i *Identity, creds *AdminIdentityImportCredentialsPassword) (err error) {
+	if creds.Config.UsePasswordMigrationHook {
+		return i.SetCredentialsWithConfig(CredentialsTypePassword, Credentials{}, CredentialsPassword{UsePasswordMigrationHook: true})
+	}
+
 	// In here we deliberately ignore any password policies as the point here is to import passwords, even if they
 	// are not matching the policy, as the user needs to able to sign in with their old password.
 	hashed := []byte(creds.Config.HashedPassword)

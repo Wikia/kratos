@@ -4,7 +4,6 @@
 package settings
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 
@@ -43,7 +42,7 @@ type (
 
 		HandlerProvider
 		FlowPersistenceProvider
-		IdentityTraitsSchemas(ctx context.Context) (schema.Schemas, error)
+		schema.IdentitySchemaProvider
 	}
 
 	ErrorHandlerProvider interface{ SettingsFlowErrorHandler() *ErrorHandler }
@@ -141,11 +140,12 @@ func (s *ErrorHandler) WriteFlowError(
 	id *identity.Identity,
 	err error,
 ) {
-	s.d.Audit().
+	logger := s.d.Audit().
 		WithError(err).
 		WithRequest(r).
-		WithField("settings_flow", f).
-		Info("Encountered self-service settings error.")
+		WithField("settings_flow", f.ToLoggerField())
+
+	logger.Info("Encountered self-service settings error.")
 
 	shouldRespondWithJSON := x.IsJSONRequest(r)
 	if f != nil && f.Type == flow.TypeAPI {

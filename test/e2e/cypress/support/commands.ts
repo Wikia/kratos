@@ -17,7 +17,7 @@ import {
 import dayjs from "dayjs"
 import YAML from "yamljs"
 import { MailMessage, Strategy } from "."
-import { OryKratosConfiguration } from "./config"
+import { OryKratosConfiguration } from "../../shared/config"
 import { UiNode } from "@ory/kratos-client"
 import { ConfigBuilder } from "./configHelpers"
 
@@ -429,7 +429,7 @@ Cypress.Commands.add(
                   f.group === "default" &&
                   "name" in f.attributes &&
                   f.attributes.name === "traits.email",
-              ).attributes.value,
+              )?.attributes.value,
             ).to.eq(email)
 
             return cy
@@ -845,7 +845,7 @@ Cypress.Commands.add(
     if (expectSession) {
       // for some reason react flakes here although the login succeeded and there should be a session it fails
       if (app === "react") {
-        cy.wait(2000) // adding arbitrary wait here. not sure if there is a better way in this case
+        cy.wait(500) // adding arbitrary wait here. not sure if there is a better way in this case
       }
       cy.getSession()
     } else {
@@ -922,8 +922,9 @@ Cypress.Commands.add("logout", () => {
     const c = cookies.find(
       ({ name }) => name.indexOf("ory_kratos_session") > -1,
     )
-    expect(c).to.not.be.undefined
-    cy.clearCookie(c.name)
+    if (c) {
+      cy.clearCookie(c.name)
+    }
   })
   cy.noSession()
 })
@@ -1348,9 +1349,14 @@ Cypress.Commands.add("submitPasswordForm", () => {
   cy.get('[name="method"][value="password"]:disabled').should("not.exist")
 })
 
-Cypress.Commands.add("submitProfileForm", () => {
-  cy.get('[name="method"][value="profile"]').click()
-  cy.get('[name="method"][value="profile"]:disabled').should("not.exist")
+Cypress.Commands.add("submitProfileForm", (app?: string) => {
+  if (app === "mobile") {
+    cy.get('[data-testid="field/method/profile"]').click()
+    cy.get('[data-testid="field/method/profile"]:disabled').should("not.exist")
+  } else {
+    cy.get('[name="method"][value="profile"]').click()
+    cy.get('[name="method"][value="profile"]:disabled').should("not.exist")
+  }
 })
 
 Cypress.Commands.add("submitCodeForm", (app) => {

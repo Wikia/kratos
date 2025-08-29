@@ -127,6 +127,14 @@ type Manager interface {
 	// RefreshCookie checks if the request uses an outdated cookie and refreshes the cookie if needed.
 	RefreshCookie(context.Context, http.ResponseWriter, *http.Request, *Session) error
 
+	// fandom-start
+
+	// IssueCookieWithoutCSRF it does the same logic as IssueCookie but without regenerating CSRF.
+	//
+	// Used to issue session cookie from admin endpoints where do not have CSRF handler
+	IssueCookieWithoutCSRF(context.Context, http.ResponseWriter, *http.Request, *Session) error
+	// fandom-end
+
 	// FetchFromRequest creates an HTTP session using cookies.
 	FetchFromRequest(context.Context, *http.Request) (*Session, error)
 

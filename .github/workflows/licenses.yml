@@ -10,6 +10,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    if: false # fandom - disable
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2

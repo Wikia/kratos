@@ -75,6 +75,7 @@ func TestSessionDestroyer(t *testing.T) {
 					nil,
 					i,
 					&session.Session{Identity: i},
+					"ExecuteSettingsPostPersistHook",
 				)
 			},
 		},

@@ -43,7 +43,7 @@ func TestSessionIssuer(t *testing.T) {
 			f := &registration.Flow{Type: flow.TypeBrowser}
 
 			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(w, &r,
-				f, &session.Session{ID: s.ID, Identity: s.Identity, Token: randx.MustString(12, randx.AlphaLowerNum)}))
+				f, &session.Session{ID: s.ID, Identity: s.Identity, Token: randx.MustString(12, randx.AlphaLowerNum)}, identity.CredentialsTypePassword))
 
 			require.Empty(t, f.ContinueWithItems)
 
@@ -71,7 +71,7 @@ func TestSessionIssuer(t *testing.T) {
 			require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
 			require.NoError(t, reg.SessionPersister().UpsertSession(ctx, s))
 
-			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s)
+			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s, identity.CredentialsTypePassword)
 			require.ErrorIs(t, err, registration.ErrHookAbortFlow, "%+v", err)
 			require.Len(t, f.ContinueWithItems, 1)
 
@@ -107,7 +107,7 @@ func TestSessionIssuer(t *testing.T) {
 			require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
 			require.NoError(t, reg.SessionPersister().UpsertSession(ctx, s))
 
-			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s)
+			err := h.ExecutePostRegistrationPostPersistHook(w, &http.Request{Header: http.Header{"Accept": {"application/json"}}}, f, s, identity.CredentialsTypePassword)
 			require.ErrorIs(t, err, registration.ErrHookAbortFlow, "%+v", err)
 			require.Empty(t, f.ContinueWithItems)
 

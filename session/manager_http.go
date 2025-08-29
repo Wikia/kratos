@@ -125,10 +125,18 @@ func (s *ManagerHTTP) RefreshCookie(ctx context.Context, w http.ResponseWriter, 
 	return nil
 }
 
-func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) (err error) {
-	ctx, span := s.r.Tracer(ctx).Tracer().Start(ctx, "sessions.ManagerHTTP.IssueCookie")
-	defer otelx.End(span, &err)
+// fandom-start
 
+func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error {
+	return s.issueCookiesAndCSRF(ctx, w, r, session, true)
+}
+
+func (s *ManagerHTTP) IssueCookieWithoutCSRF(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session) error {
+	return s.issueCookiesAndCSRF(ctx, w, r, session, false)
+}
+
+func (s *ManagerHTTP) issueCookiesAndCSRF(ctx context.Context, w http.ResponseWriter, r *http.Request, session *Session, generateCSRF bool) error {
+	// fandom-end
 	cookie, err := s.r.CookieManager(r.Context()).Get(r, s.cookieName(ctx))
 	// Fix for https://github.com/ory/kratos/issues/1695
 	if err != nil && cookie == nil {
@@ -149,14 +157,18 @@ func (s *ManagerHTTP) IssueCookie(ctx context.Context, w http.ResponseWriter, r 
 		cookie.Options.Path = alias.Path
 	}
 
-	old, err := s.FetchFromRequest(ctx, r)
-	if err != nil {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
-	} else if old.Identity.ID != session.Identity.ID {
-		// No session was set prior -> regenerate anti-csrf token
-		_ = s.r.CSRFHandler().RegenerateToken(w, r)
+	// fandom-start
+	if generateCSRF {
+		old, err := s.FetchFromRequest(ctx, r)
+		if err != nil {
+			// No session was set prior -> regenerate anti-csrf token
+			_ = s.r.CSRFHandler().RegenerateToken(w, r)
+		} else if old.Identity.ID != session.Identity.ID {
+			// No session was set prior -> regenerate anti-csrf token
+			_ = s.r.CSRFHandler().RegenerateToken(w, r)
+		}
 	}
+	// fandom-end
 
 	if s.r.Config().SessionSameSiteMode(ctx) != 0 {
 		cookie.Options.SameSite = s.r.Config().SessionSameSiteMode(ctx)

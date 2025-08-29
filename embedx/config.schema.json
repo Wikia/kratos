@@ -85,6 +85,18 @@
       "additionalProperties": false,
       "required": ["hook"]
     },
+    "selfServiceTotpSecretsDestroyerHook": {
+      "type": "object",
+      "properties": {
+        "hook": {
+          "const": "totp_destroys_lookup_secrets"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "hook"
+      ]
+    },
     "selfServiceShowVerificationUIHook": {
       "type": "object",
       "properties": {
@@ -220,6 +232,16 @@
         "hook": {
           "const": "web_hook"
         },
+        "persistence_phase": {
+          "type": "string",
+          "description": "Whether hook should be run before or after persisting data (or both)",
+          "enum": [
+            "all",
+            "pre-persist",
+            "post-persist"
+          ],
+          "default": "all"
+        },
         "config": {
           "type": "object",
           "title": "Web-Hook Configuration",
@@ -301,6 +323,26 @@
               "type": "boolean",
               "default": true,
               "description": "Emit tracing events for this webhook on delivery or error"
+            },
+            "retries": {
+              "type": "integer",
+              "default": 4,
+              "description": "Number of hook retries"
+            },
+            "timeout": {
+              "type": "string",
+              "default": "1m",
+              "description": "Hook connection timeout"
+            },
+            "min_wait": {
+              "type": "string",
+              "default": "1s",
+              "description": "Hook minimum wait time"
+            },
+            "max_wait": {
+              "type": "string",
+              "default": "30s",
+              "description": "Hook max wait time"
             },
             "auth": {
               "type": "object",
@@ -701,6 +743,9 @@
             "anyOf": [
               {
                 "$ref": "#/definitions/selfServiceWebHook"
+              },
+              {
+                "$ref": "#/definitions/selfServiceTotpSecretsDestroyerHook"
               }
             ]
           },
@@ -840,6 +885,9 @@
         "default_browser_return_url": {
           "$ref": "#/definitions/defaultReturnTo"
         },
+        "oidc": {
+          "$ref": "#/definitions/selfServiceAfterSettingsMethod"
+        },
         "password": {
           "$ref": "#/definitions/selfServiceAfterSettingsAuthMethod"
         },
@@ -859,6 +907,9 @@
           "$ref": "#/definitions/selfServiceAfterSettingsAuthMethod"
         },
         "profile": {
+          "$ref": "#/definitions/selfServiceAfterSettingsMethod"
+        },
+        "totp": {
           "$ref": "#/definitions/selfServiceAfterSettingsMethod"
         },
         "hooks": {
@@ -1301,6 +1352,15 @@
                 },
                 "after": {
                   "$ref": "#/definitions/selfServiceAfterLogin"
+                },
+                "after_submit": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "hooks": {
+                      "$ref": "#/definitions/selfServiceHooks"
+                    }
+                  }
                 }
               }
             },
@@ -1570,6 +1630,13 @@
                       "default": 8,
                       "minimum": 6
                     },
+                    "max_password_length": {
+                      "title": "Maximum Password Length",
+                      "description": "Defines the maximum length of the password.",
+                      "type": "integer",
+                      "default": 1024,
+                      "minimum": 20
+                    },
                     "identifier_similarity_check_enabled": {
                       "title": "Enable password-identifier similarity check",
                       "description": "If set to false the password validation does not check for similarity between the password and the user identifier.",
@@ -1612,6 +1679,17 @@
                   "type": "boolean",
                   "title": "Enables the lookup secret method",
                   "default": false
+                },
+                "config": {
+                  "type": "object",
+                  "title": "Lookup Secret Configuration",
+                  "properties": {
+                    "enabled_only_in_2fa": {
+                      "type": "boolean",
+                      "title": "Will enable lookup secret codes when 2FA is enabled for a user (i.e. TOTP)",
+                      "default": false
+                    }
+                  }
                 }
               }
             },
@@ -2502,6 +2580,12 @@
             },
             "required": ["id", "url"]
           }
+        },
+        "case_sensitive_identifier": {
+          "title": "Specifies if identity identifier (username-password) is case sensitive",
+          "description": "In some cases (legacy systems) it is required for the identity identifier to be case sensitive. This settings allows to toggle that behaviour.",
+          "type": "boolean",
+          "default": false
         }
       },
       "required": ["schemas"],
@@ -2550,10 +2634,10 @@
       "properties": {
         "algorithm": {
           "title": "Password hashing algorithm",
-          "description": "One of the values: argon2, bcrypt.\nAny other hashes will be migrated to the set algorithm once an identity authenticates using their password.",
+          "description": "One of the values: argon2, bcrypt, legacyfandom.\nAny other hashes will be migrated to the set algorithm once an identity authenticates using their password.",
           "type": "string",
           "default": "bcrypt",
-          "enum": ["argon2", "bcrypt"]
+          "enum": ["argon2", "bcrypt", "legacyfandom"]
         },
         "argon2": {
           "title": "Configuration for the Argon2id hasher.",
@@ -2616,6 +2700,31 @@
               "minimum": 4,
               "maximum": 31,
               "default": 12
+            }
+          }
+        },
+        "legacyfandom": {
+          "title": "Configuration for the legacy Fandom hasher.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cost": {
+              "title": "Cost of the BCrypt-AES algorithm. Minimum is 4 when --dev flag is used and 12 otherwise.",
+              "type": "integer",
+              "minimum": 4,
+              "maximum": 31,
+              "default": 12
+            },
+            "key": {
+              "type": "array",
+              "title": "Encryption Keys for BCrypt-AES hasher",
+              "description": "The first key in the array is used for encrypting/verifying credentials while all other keys are used to verify older hashes that were encrypted with that old key.",
+              "items": {
+                "type": "string",
+                "minLength": 32,
+                "maxLength": 32
+              },
+              "uniqueItems": true
             }
           }
         }
@@ -2708,6 +2817,12 @@
                   }
                 }
               }
+            },
+            "refresh_allowed": {
+              "title": "Allow session refresh from whoami endpoint",
+              "description": "If set to true will allow to refresh session lifespan if ?refresh=true is present",
+              "type": "boolean",
+              "default": false
             }
           },
           "additionalProperties": false

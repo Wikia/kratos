@@ -137,6 +137,9 @@ type AuthCodeContainer struct {
 	State            string          `json:"state"`
 	Traits           json.RawMessage `json:"traits"`
 	TransientPayload json.RawMessage `json:"transient_payload"`
+	// fandom-start
+	ExtraFields map[string]string `json:"extra_fields"`
+	// fandom-end
 }
 
 type State struct {

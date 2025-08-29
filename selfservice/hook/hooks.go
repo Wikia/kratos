@@ -11,4 +11,7 @@ const (
 	KeyVerificationUI      = "show_verification_ui"
 	KeyTwoStepRegistration = "two_step_registration"
 	KeyVerifier            = "verification"
+	// fandom-start
+	KeyTotpLookupSecretsDestroyer = "totp_destroys_lookup_secrets" // nolint:gosec
+	// fandom-end
 )

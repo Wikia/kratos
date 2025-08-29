@@ -211,7 +211,7 @@ func TestViperProvider(t *testing.T) {
 				config  string
 				enabled bool
 			}{
-				{id: "password", enabled: true, config: `{"haveibeenpwned_host":"api.pwnedpasswords.com","haveibeenpwned_enabled":true,"ignore_network_errors":true,"max_breaches":0,"min_password_length":8,"identifier_similarity_check_enabled":true}`},
+				{id: "password", enabled: true, config: `{"haveibeenpwned_host":"api.pwnedpasswords.com","haveibeenpwned_enabled":true,"ignore_network_errors":true,"max_breaches":0,"min_password_length":8,"max_password_length":1024,"identifier_similarity_check_enabled":true}`},
 				{id: "oidc", enabled: true, config: `{"providers":[{"client_id":"a","client_secret":"b","id":"github","provider":"github","mapper_url":"http://test.kratos.ory.sh/default-identity.schema.json"}]}`},
 				{id: "totp", enabled: true, config: `{"issuer":"issuer.ory.sh"}`},
 			} {
@@ -623,6 +623,10 @@ func TestSession(t *testing.T) {
 	assert.Equal(t, false, p.SessionWhoAmICaching(ctx))
 	p.MustSet(ctx, config.ViperKeySessionWhoAmICaching, true)
 	assert.Equal(t, true, p.SessionWhoAmICaching(ctx))
+
+	assert.Equal(t, false, p.SessionWhoAmIRefreshAllowed())
+	p.MustSet(ctx, config.ViperKeySessionWhoAmIRefreshAllowed, true)
+	assert.Equal(t, true, p.SessionWhoAmIRefreshAllowed())
 }
 
 func TestCookies(t *testing.T) {

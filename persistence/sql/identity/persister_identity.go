@@ -121,7 +121,7 @@ func stringToLowerTrim(match string) string {
 	return strings.ToLower(strings.TrimSpace(match))
 }
 
-func NormalizeIdentifier(ct identity.CredentialsType, match string) string {
+func (p *IdentityPersister) normalizeIdentifier(ct identity.CredentialsType, match string) string {
 	switch ct {
 	case identity.CredentialsTypeLookup:
 		// lookup credentials are case-sensitive
@@ -133,6 +133,12 @@ func NormalizeIdentifier(ct identity.CredentialsType, match string) string {
 		// OIDC credentials are case-sensitive
 		return match
 	case identity.CredentialsTypePassword:
+		// fandom-start
+		if p.r.Config().IdentityCaseSensitiveIdentifier() {
+			return match
+		}
+		// fandom-end
+
 		fallthrough
 	case identity.CredentialsTypeCodeAuth:
 		fallthrough
@@ -153,7 +159,7 @@ func (p *IdentityPersister) FindIdentityByCredentialIdentifier(ctx context.Conte
 	}
 
 	if !caseSensitive {
-		identifier = NormalizeIdentifier(identity.CredentialsTypePassword, identifier)
+		identifier = p.normalizeIdentifier(identity.CredentialsTypePassword, identifier)
 	}
 
 	nid := p.NetworkID(ctx)
@@ -200,7 +206,7 @@ func (p *IdentityPersister) FindByCredentialsIdentifier(ctx context.Context, ct 
 	}
 
 	// Force case-insensitivity and trimming for identifiers
-	match = NormalizeIdentifier(ct, match)
+	match = p.normalizeIdentifier(ct, match)
 
 	if err := p.GetConnection(ctx).RawQuery(`
 		SELECT
@@ -356,7 +362,7 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, conn 
 	for _, cred := range credentials {
 		for _, identifier := range cred.Identifiers {
 			// Force case-insensitivity and trimming for identifiers
-			identifier = NormalizeIdentifier(cred.Type, identifier)
+			identifier = p.normalizeIdentifier(cred.Type, identifier)
 
 			if identifier == "" {
 				return errors.WithStack(herodot.ErrInternalServerError.WithReasonf(
@@ -846,7 +852,7 @@ func (p *IdentityPersister) ListIdentities(ctx context.Context, params identity.
 			`, identifierOperator, identifierOperator)
 			args = append(args,
 				nid, nid,
-				identity.CredentialsTypeWebAuthn, identity.CredentialsTypePassword, identity.CredentialsTypeCodeAuth, NormalizeIdentifier(identity.CredentialsTypePassword, identifier),
+				identity.CredentialsTypeWebAuthn, identity.CredentialsTypePassword, identity.CredentialsTypeCodeAuth, p.normalizeIdentifier(identity.CredentialsTypePassword, identifier),
 				identity.CredentialsTypeOIDC, identifier)
 		}
 

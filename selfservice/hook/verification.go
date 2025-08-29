@@ -48,7 +48,7 @@ func NewVerifier(r verifierDependencies) *Verifier {
 	return &Verifier{r: r}
 }
 
-func (e *Verifier) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, f *registration.Flow, s *session.Session) error {
+func (e *Verifier) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, f *registration.Flow, s *session.Session, _ identity.CredentialsType) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.Verifier.ExecutePostRegistrationPostPersistHook", func(ctx context.Context) error {
 		return e.do(w, r.WithContext(ctx), s.Identity, f, func(v *verification.Flow) {
 			v.OAuth2LoginChallenge = f.OAuth2LoginChallenge
@@ -59,7 +59,7 @@ func (e *Verifier) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter,
 	})
 }
 
-func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, i *identity.Identity, _ *session.Session) error {
+func (e *Verifier) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, f *settings.Flow, i *identity.Identity, _ *session.Session, settingsType string) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.Verifier.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
 		return e.do(w, r.WithContext(ctx), i, f, nil)
 	})

@@ -52,7 +52,7 @@ func (e *SessionDestroyer) ExecutePostRecoveryHook(_ http.ResponseWriter, r *htt
 	})
 }
 
-func (e *SessionDestroyer) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, r *http.Request, _ *settings.Flow, i *identity.Identity, s *session.Session) error {
+func (e *SessionDestroyer) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, r *http.Request, _ *settings.Flow, i *identity.Identity, s *session.Session, settingsType string) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.SessionDestroyer.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
 		if _, err := e.r.SessionPersister().RevokeSessionsIdentityExcept(ctx, i.ID, s.ID); err != nil {
 			return err

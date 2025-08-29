@@ -20,10 +20,13 @@ type SchemaExtensionCredentials struct {
 	i *Identity
 	v map[CredentialsType][]string
 	l sync.Mutex
+	// fandom-start
+	caseSensitiveIds bool
+	// fandom-end
 }
 
-func NewSchemaExtensionCredentials(i *Identity) *SchemaExtensionCredentials {
-	return &SchemaExtensionCredentials{i: i}
+func NewSchemaExtensionCredentials(i *Identity, caseSensitiveIds bool) *SchemaExtensionCredentials {
+	return &SchemaExtensionCredentials{i: i, caseSensitiveIds: caseSensitiveIds}
 }
 
 func (r *SchemaExtensionCredentials) setIdentifier(ct CredentialsType, value interface{}) {
@@ -39,7 +42,14 @@ func (r *SchemaExtensionCredentials) setIdentifier(ct CredentialsType, value int
 		r.v = make(map[CredentialsType][]string)
 	}
 
-	r.v[ct] = stringslice.Unique(append(r.v[ct], strings.ToLower(fmt.Sprintf("%s", value))))
+	// fandom-start
+	if !r.caseSensitiveIds {
+		r.v[ct] = stringslice.Unique(append(r.v[ct], strings.ToLower(fmt.Sprintf("%s", value))))
+	} else {
+		r.v[ct] = stringslice.Unique(append(r.v[ct], fmt.Sprintf("%s", value)))
+	}
+	// fandom-end
+
 	cred.Identifiers = r.v[ct]
 	r.i.SetCredentials(ct, *cred)
 }

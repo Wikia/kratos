@@ -5,10 +5,12 @@ package hook
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/dgraph-io/ristretto"
@@ -37,6 +39,7 @@ import (
 	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
 	"github.com/ory/kratos/x/events"
+	"github.com/ory/x/httpx"
 	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
 )
@@ -72,6 +75,7 @@ type (
 		x.HTTPClientProvider
 		x.TracingProvider
 		jsonnetsecure.VMProvider
+		x.ResilientClientProvider
 	}
 
 	templateContext struct {
@@ -82,6 +86,11 @@ type (
 		RequestCookies map[string]string  `json:"request_cookies"`
 		Identity       *identity.Identity `json:"identity,omitempty"`
 		Session        *session.Session   `json:"session,omitempty"`
+		// fandom-start
+		Credentials *identity.Credentials `json:"credentials,omitempty"`
+		Fields      url.Values            `json:"fields,omitempty"`
+		HookType    string                `json:"hook_type,omitempty"`
+		// fandom-end
 	}
 
 	WebHook struct {
@@ -98,11 +107,20 @@ type (
 
 	errorMessage struct {
 		InstancePtr      string            `json:"instance_ptr"`
+		Message          string            `json:"message,omitempty"`
 		DetailedMessages []detailedMessage `json:"messages"`
 	}
 
 	rawHookResponse struct {
 		Messages []errorMessage `json:"messages"`
+	}
+
+	httpConfig struct {
+		sum     string
+		retries int
+		minWait time.Duration
+		maxWait time.Duration
+		timeout time.Duration
 	}
 )
 
@@ -128,11 +146,39 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "LoginPreHook",
+		})
+	})
+}
+
+func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow) error {
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteAfterSubmitLoginHook", func(ctx context.Context) error {
+		return e.execute(ctx, &templateContext{
+			Flow:           flow,
+			RequestHeaders: req.Header,
+			RequestMethod:  req.Method,
+			RequestURL:     x.RequestURL(req).String(),
+			RequestCookies: cookies(req),
+			Fields:         req.Form,
 		})
 	})
 }
 
 func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.UiNodeGroup, flow *login.Flow, session *session.Session) error {
+	// fandom-start
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	// fandom-end
+
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteLoginPostHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
 			Flow:           flow,
@@ -142,6 +188,8 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 			RequestCookies: cookies(req),
 			Identity:       session.Identity,
 			Session:        session,
+			HookType:       "LoginPostHook",
+			Fields:         req.Form,
 		})
 	})
 }
@@ -154,6 +202,7 @@ func (e *WebHook) ExecuteVerificationPreHook(_ http.ResponseWriter, req *http.Re
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "VerificationPreHook",
 		})
 	})
 }
@@ -167,6 +216,7 @@ func (e *WebHook) ExecutePostVerificationHook(_ http.ResponseWriter, req *http.R
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			HookType:       "VerificationPostHook",
 		})
 	})
 }
@@ -179,6 +229,7 @@ func (e *WebHook) ExecuteRecoveryPreHook(_ http.ResponseWriter, req *http.Reques
 			RequestMethod:  req.Method,
 			RequestCookies: cookies(req),
 			RequestURL:     x.RequestURL(req).String(),
+			HookType:       "RecoveryPreHook",
 		})
 	})
 }
@@ -192,6 +243,7 @@ func (e *WebHook) ExecutePostRecoveryHook(_ http.ResponseWriter, req *http.Reque
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       session.Identity,
+			HookType:       "RecoveryPostHook",
 		})
 	})
 }
@@ -204,15 +256,24 @@ func (e *WebHook) ExecuteRegistrationPreHook(_ http.ResponseWriter, req *http.Re
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "RegistrationPreHook",
 		})
 	})
 }
 
-func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
+func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, id *identity.Identity, ct identity.CredentialsType) error {
+	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
+	credentials, _ := id.GetCredentials(ct)
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
 	}
-
+	// fandom-end
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecutePostRegistrationPrePersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
 			Flow:           flow,
@@ -221,14 +282,28 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			// fandom-start
+			Credentials: credentials,
+			Fields:      req.Form,
+			HookType:    "PostRegistrationPrePersistHook:" + ct.String(),
+			// fandom-end
 		})
 	})
 }
 
-func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
+func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *registration.Flow, session *session.Session, ct identity.CredentialsType) error {
+	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
+	credentials, _ := session.Identity.GetCredentials(ct)
+	if req.Body != nil {
+		if err := req.ParseForm(); err != nil {
+			return errors.WithStack(err)
+		}
 	}
+	// fandom-end
 
 	// We want to decouple the request from the hook execution, so that the hooks still execute even
 	// if the request is canceled.
@@ -242,9 +317,57 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       session.Identity,
+			// fandom-start
+			Credentials: credentials,
+			Fields:      req.Form,
+			HookType:    "PostRegistrationPostPersistHook:" + ct.String(),
+			// fandom-end
 		})
 	})
 }
+
+// fandom-start
+
+func newHttpConfig(r json.RawMessage) (*httpConfig, error) {
+	type rawHttpConfig struct {
+		Retries int
+		Timeout string
+		MinWait string `json:"min_wait"`
+		MaxWait string `json:"max_wait"`
+	}
+	var rc rawHttpConfig
+	err := json.Unmarshal(r, &rc)
+	if err != nil {
+		return nil, err
+	}
+
+	timeout := time.Minute
+	retryWaitMin := 1 * time.Second
+	retryWaitMax := 30 * time.Second
+	retryMax := 4
+	if t, err := time.ParseDuration(rc.Timeout); err != nil {
+		timeout = t
+	}
+	if t, err := time.ParseDuration(rc.MinWait); err != nil {
+		retryWaitMin = t
+	}
+	if t, err := time.ParseDuration(rc.MaxWait); err != nil {
+		retryWaitMin = t
+	}
+	if rc.Retries > 0 {
+		retryMax = rc.Retries
+	}
+
+	return &httpConfig{
+		sum:     fmt.Sprintf("%x", md5.Sum(r)), //nolint:gosec
+		retries: retryMax,
+		timeout: timeout,
+		minWait: retryWaitMin,
+		maxWait: retryWaitMax,
+	}, nil
+}
+
+// fandom-end
 
 func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow) error {
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPreHook", func(ctx context.Context) error {
@@ -254,14 +377,24 @@ func (e *WebHook) ExecuteSettingsPreHook(_ http.ResponseWriter, req *http.Reques
 			RequestMethod:  req.Method,
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
+			HookType:       "SettingsPreHook",
 		})
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, _ *session.Session) error {
-	if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
-		return nil
+func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, _ *session.Session, settingsType string) error {
+	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool() {
+	//	return nil
+	//}
+	var credentials *identity.Credentials
+	if settingsType == "password" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
+	// fandom-end
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPostPersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
 			Flow:           flow,
@@ -270,14 +403,26 @@ func (e *WebHook) ExecuteSettingsPostPersistHook(_ http.ResponseWriter, req *htt
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			Credentials:    credentials,
+			HookType:       "SettingsPostPersistHook:" + settingsType,
 		})
 	})
 }
 
-func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity) error {
-	if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
-		return nil
+func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http.Request, flow *settings.Flow, id *identity.Identity, settingsType string) error {
+	// fandom-start
+	// we use a different approach to decide which hook to trigger
+	//if !(gjson.GetBytes(e.conf, "can_interrupt").Bool() || gjson.GetBytes(e.conf, "response.parse").Bool()) {
+	//	return nil
+	//}
+	var credentials *identity.Credentials
+	if settingsType == "password" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypePassword)
+	} else if settingsType == "oidc" {
+		credentials, _ = id.GetCredentials(identity.CredentialsTypeOIDC)
 	}
+	// fandom-end
+
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteSettingsPrePersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
 			Flow:           flow,
@@ -286,13 +431,28 @@ func (e *WebHook) ExecuteSettingsPrePersistHook(_ http.ResponseWriter, req *http
 			RequestURL:     x.RequestURL(req).String(),
 			RequestCookies: cookies(req),
 			Identity:       id,
+			// fandom-start
+			Credentials: credentials,
+			HookType:    "SettingsPrePersistHook:" + settingsType,
+			// fandom-end
 		})
 	})
 }
 
 func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
+	conf, err := newHttpConfig(e.conf)
+	if err != nil {
+		return fmt.Errorf("failed to parse http config: %w", err)
+	}
 	var (
-		httpClient     = e.deps.HTTPClient(ctx)
+		httpClient = e.deps.NamedHTTPClient(
+			ctx,
+			data.HookType+conf.sum,
+			httpx.ResilientClientWithMaxRetry(conf.retries),
+			httpx.ResilientClientWithConnectionTimeout(conf.timeout),
+			httpx.ResilientClientWithMinxRetryWait(conf.minWait),
+			httpx.ResilientClientWithMaxRetryWait(conf.maxWait),
+		)
 		ignoreResponse = gjson.GetBytes(e.conf, "response.ignore").Bool()
 		canInterrupt   = gjson.GetBytes(e.conf, "can_interrupt").Bool()
 		parseResponse  = gjson.GetBytes(e.conf, "response.parse").Bool()
@@ -393,7 +553,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		if resp.StatusCode >= http.StatusBadRequest {
 			span.SetStatus(codes.Error, "HTTP status code >= 400")
 			if canInterrupt || parseResponse {
-				if err := parseWebhookResponse(resp, data.Identity); err != nil {
+				if err := e.parseWebhookResponse(resp, data.Identity); err != nil {
 					return err
 				}
 			}
@@ -407,7 +567,7 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		}
 
 		if parseResponse {
-			return parseWebhookResponse(resp, data.Identity)
+			return e.parseWebhookResponse(resp, data.Identity)
 		}
 		return nil
 	}
@@ -422,17 +582,27 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	return nil
 }
 
-func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error) {
+func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error) {
 	if resp == nil {
 		return errors.Errorf("empty response provided from the webhook")
 	}
+
+	// fandom-start
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "could not read response body")
+	}
+
+	e.deps.Logger().WithField("response", string(body)).WithField("status_code", resp.StatusCode).Debug("webhook: received response")
+	// fandom-end
 
 	if resp.StatusCode == http.StatusOK {
 		type localIdentity identity.Identity
 		var hookResponse struct {
 			Identity *localIdentity `json:"identity"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&hookResponse); err != nil {
+
+		if err := json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
 
@@ -477,35 +647,43 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 		return nil
 	} else if resp.StatusCode >= http.StatusBadRequest {
 		var hookResponse rawHookResponse
-		if err := json.NewDecoder(resp.Body).Decode(&hookResponse); err != nil {
+		if err = json.Unmarshal(body, &hookResponse); err != nil {
 			return errors.Wrap(err, "webhook response could not be unmarshalled properly from JSON")
 		}
 
 		var validationErrs []*schema.ValidationError
-		for _, msg := range hookResponse.Messages {
-			messages := text.Messages{}
-			for _, detail := range msg.DetailedMessages {
-				var msgType text.UITextType
-				if detail.Type == "error" {
-					msgType = text.Error
-				} else {
-					msgType = text.Info
+
+		if len(hookResponse.Messages) != 0 && len(hookResponse.Messages[0].DetailedMessages) != 0 {
+			for _, msg := range hookResponse.Messages {
+				messages := text.Messages{}
+				for _, detail := range msg.DetailedMessages {
+					var msgType text.UITextType
+					if detail.Type == "error" {
+						msgType = text.Error
+					} else {
+						msgType = text.Info
+					}
+					messages.Add(&text.Message{
+						ID:      text.ID(detail.ID),
+						Text:    detail.Text,
+						Type:    msgType,
+						Context: detail.Context,
+					})
 				}
-				messages.Add(&text.Message{
-					ID:      text.ID(detail.ID),
-					Text:    detail.Text,
-					Type:    msgType,
-					Context: detail.Context,
-				})
+				validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
 			}
-			validationErrs = append(validationErrs, schema.NewHookValidationError(msg.InstancePtr, "a webhook target returned an error", messages))
 		}
 
+		// fandom-start
+		validationErr := schema.NewValidationListError(validationErrs)
+
 		if len(validationErrs) == 0 {
+			e.deps.Logger().WithField("validations", validationErr).Debug("webhook: parsed validations")
 			return errors.New("error while parsing webhook response: got no validation errors")
 		}
 
-		return schema.NewValidationListError(validationErrs)
+		return errors.WithStack(validationErr)
+		// fandom-end
 	}
 
 	return nil

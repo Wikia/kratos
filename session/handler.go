@@ -25,11 +25,13 @@ import (
 	"github.com/ory/herodot"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/x"
 )
 
 type (
 	handlerDependencies interface {
+		identity.PoolProvider
 		ManagementProvider
 		PersistenceProvider
 		x.WriterProvider
@@ -68,7 +70,9 @@ const (
 const (
 	AdminRouteIdentity           = "/identities"
 	AdminRouteIdentitiesSessions = AdminRouteIdentity + "/:id/sessions"
+	AdminRouteSessionExtend      = "/token/extend"
 	AdminRouteSessionExtendId    = RouteSession + "/extend"
+	RouteIdentitySession         = AdminRouteIdentity + "/:id/session"
 )
 
 func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
@@ -79,6 +83,8 @@ func (h *Handler) RegisterAdminRoutes(admin *x.RouterAdmin) {
 	admin.GET(AdminRouteIdentitiesSessions, h.listIdentitySessions)
 	admin.DELETE(AdminRouteIdentitiesSessions, h.deleteIdentitySessions)
 	admin.PATCH(AdminRouteSessionExtendId, h.adminSessionExtend)
+	admin.PATCH(AdminRouteSessionExtend, h.adminCurrentSessionExtend)
+	admin.GET(RouteIdentitySession, h.session)
 
 	admin.DELETE(RouteCollection, x.RedirectToPublicRoute(h.r))
 }
@@ -94,6 +100,7 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 
 	for _, m := range []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodConnect, http.MethodOptions, http.MethodTrace} {
 		public.Handle(m, RouteWhoami, h.whoami)
+		public.Handle(m, AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
 	}
 
 	public.DELETE(RouteCollection, h.deleteMySessions)
@@ -104,6 +111,114 @@ func (h *Handler) RegisterPublicRoutes(public *x.RouterPublic) {
 
 	public.DELETE(AdminRouteIdentitiesSessions, x.RedirectToAdminRoute(h.r))
 }
+
+// fandom-start
+// swagger:parameters adminIdentitySession
+//
+//nolint:deadcode,unused
+//lint:ignore U1000 Used to generate Swagger and OpenAPI definitions
+type adminIdentitySession struct {
+	// ID is the identity's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+
+	// Upgrade is a boolean flag that decides, if session should be upgrade to the highest possible level.
+	// If no value is provided, session returned is set with AAL1 level.
+	//
+	// required: false
+	// in: query
+	Upgrade bool `json:"upgrade"`
+}
+
+// swagger:model successfulAdminIdentitySession
+// nolint:deadcode,unused
+type AdminIdentitySessionResponse struct {
+	// The Session Token
+	//
+	// This field is only set when the session hook is configured as a post-registration hook.
+	//
+	// A session token is equivalent to a session cookie, but it can be sent in the HTTP Authorization
+	// Header:
+	//
+	// 		Authorization: bearer ${session-token}
+	//
+	// The session token is only issued for API flows, not for Browser flows!
+	Token string `json:"session_token"`
+
+	// Session
+	//
+	// The session contains information about the user, the session device, and so on.
+	//
+	// required: true
+	Session *Session `json:"session"`
+
+	// Identity
+	//
+	// The identity that just signed up.
+	//
+	// required: true
+	Identity *identity.Identity `json:"identity"`
+}
+
+// swagger:route GET /admin/identities/{id}/session identity adminIdentitySession
+//
+// Calling this endpoint issues a session for a given identity.
+//
+// This endpoint is useful for:
+//
+// - Issuing session or session token for a given identity without authenticating
+//
+//	Schemes: http, https
+//
+//	Security:
+//	  oryAccessToken:
+//
+//	Responses:
+//	  200: successfulAdminIdentitySession
+//	  404: errorGeneric
+//	  500: errorGeneric
+func (h *Handler) session(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	i, err := h.r.IdentityPool().GetIdentity(r.Context(), x.ParseUUID(ps.ByName("id")), identity.ExpandNothing)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	s, err := NewActiveSession(r, i, NewPiggybackLifespanProvider(time.Hour*24), time.Now().UTC(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+	if err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	upgrade := r.URL.Query().Get("upgrade")
+	upgradeBool, err := strconv.ParseBool(upgrade)
+	if upgrade != "" && err != nil {
+		h.r.Writer().WriteError(w, r, herodot.ErrBadRequest.WithError("could not parse parameter upgrade"))
+		return
+	}
+
+	// User need to go through all authentication steps for session to be on AAL2 level
+	if upgradeBool {
+		s.CompletedLoginFor(identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel2)
+		s.SetAuthenticatorAssuranceLevel()
+	}
+
+	if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	if err := h.r.SessionManager().IssueCookieWithoutCSRF(r.Context(), w, r, s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
+
+	h.r.Writer().Write(w, r, &AdminIdentitySessionResponse{Session: s, Token: s.Token, Identity: i})
+}
+
+// fandom-end
 
 // Check Session Request Parameters
 //
@@ -184,6 +299,7 @@ type toSession struct {
 // - AJAX calls. Remember to send credentials and set up CORS correctly!
 // - Reverse proxies and API Gateways
 // - Server-side calls - use the `X-Session-Token` header!
+// - Session refresh
 //
 // This endpoint authenticates users by checking:
 //
@@ -237,6 +353,20 @@ func (h *Handler) whoami(w http.ResponseWriter, r *http.Request, _ httprouter.Pa
 		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
 		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("Unable to determine AAL."))
 		return
+	}
+
+	// Refresh session if param was true
+	refresh := r.URL.Query().Get("refresh")
+	if c.SessionWhoAmIRefreshAllowed() && refresh == "true" && s.CanBeRefreshed(r.Context(), c) {
+		s = s.Refresh(r.Context(), c)
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+		if err := h.r.SessionManager().IssueCookie(r.Context(), w, r, s); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
 	}
 
 	// s.Devices = nil
@@ -837,6 +967,56 @@ func (h *Handler) listMySessions(w http.ResponseWriter, r *http.Request, _ httpr
 	x.PaginationHeader(w, *r.URL, total, page, perPage)
 	h.r.Writer().Write(w, r, sess)
 }
+
+// fandom-start
+
+// swagger:parameters adminSessionRefresh
+// nolint:deadcode,unused
+type adminSessionRefresh struct {
+	// ID is the session's ID.
+	//
+	// required: true
+	// in: path
+	ID string `json:"id"`
+}
+
+// swagger:route GET /admin/token/extend identity adminCurrentSessionExtend
+//
+// Calling this endpoint refreshes a current user session.
+// If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
+//
+// This endpoint is useful for:
+//
+// - Session refresh
+//
+//	Schemes: http, https
+//
+//	Security:
+//	  oryAccessToken:
+//
+//	Responses:
+//	  200: session
+//	  404: errorGeneric
+//	  500: errorGeneric
+func (h *Handler) adminCurrentSessionExtend(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	s, err := h.r.SessionManager().FetchFromRequest(r.Context(), r)
+	if err != nil {
+		h.r.Audit().WithRequest(r).WithError(err).Info("No valid session cookie found.")
+		h.r.Writer().WriteError(w, r, herodot.ErrUnauthorized.WithWrap(err).WithReasonf("No valid session cookie found."))
+		return
+	}
+	c := h.r.Config()
+	if s.CanBeRefreshed(r.Context(), c) {
+		if err := h.r.SessionPersister().UpsertSession(r.Context(), s.Refresh(r.Context(), c)); err != nil {
+			h.r.Writer().WriteError(w, r, err)
+			return
+		}
+	}
+
+	h.r.Writer().Write(w, r, s)
+}
+
+// fandom-end
 
 func (h *Handler) IsAuthenticated(wrap httprouter.Handle, onUnauthenticated httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {

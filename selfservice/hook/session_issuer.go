@@ -46,13 +46,13 @@ func NewSessionIssuer(r sessionIssuerDependencies) *SessionIssuer {
 	return &SessionIssuer{r: r}
 }
 
-func (e *SessionIssuer) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session) error {
+func (e *SessionIssuer) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session, credentialsType identity.CredentialsType) error {
 	return otelx.WithSpan(r.Context(), "selfservice.hook.SessionIssuer.ExecutePostRegistrationPostPersistHook", func(ctx context.Context) error {
-		return e.executePostRegistrationPostPersistHook(w, r.WithContext(ctx), a, s)
+		return e.executePostRegistrationPostPersistHook(w, r.WithContext(ctx), a, s, credentialsType)
 	})
 }
 
-func (e *SessionIssuer) executePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session) error {
+func (e *SessionIssuer) executePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session, _ identity.CredentialsType) error {
 	if a.Type == flow.TypeAPI {
 		// We don't want to redirect with the code, if the flow was submitted with an ID token.
 		// This is the case for Sign in with native Apple SDK or Google SDK.

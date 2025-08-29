@@ -56,11 +56,11 @@ func (e Error) ExecuteSettingsPreHook(w http.ResponseWriter, r *http.Request, a 
 	return e.err("ExecuteSettingsPreHook", settings.ErrHookAbortFlow)
 }
 
-func (e Error) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity) error {
+func (e Error) ExecuteSettingsPrePersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, s *identity.Identity, settingsType string) error {
 	return e.err("ExecuteSettingsPrePersistHook", settings.ErrHookAbortFlow)
 }
 
-func (e Error) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, id *identity.Identity, s *session.Session) error {
+func (e Error) ExecuteSettingsPostPersistHook(w http.ResponseWriter, r *http.Request, a *settings.Flow, id *identity.Identity, s *session.Session, settingsType string) error {
 	return e.err("ExecuteSettingsPostPersistHook", settings.ErrHookAbortFlow)
 }
 
@@ -72,15 +72,19 @@ func (e Error) ExecuteLoginPreHook(w http.ResponseWriter, r *http.Request, a *lo
 	return e.err("ExecuteLoginPreHook", login.ErrHookAbortFlow)
 }
 
+func (e Error) ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *login.Flow) error {
+	return e.err("ExecuteAfterSubmitLoginHook", login.ErrHookAbortFlow)
+}
+
 func (e Error) ExecuteRegistrationPreHook(w http.ResponseWriter, r *http.Request, a *registration.Flow) error {
 	return e.err("ExecuteRegistrationPreHook", registration.ErrHookAbortFlow)
 }
 
-func (e Error) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session) error {
+func (e Error) ExecutePostRegistrationPostPersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, s *session.Session, ct identity.CredentialsType) error {
 	return e.err("ExecutePostRegistrationPostPersistHook", registration.ErrHookAbortFlow)
 }
 
-func (e Error) ExecutePostRegistrationPrePersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, i *identity.Identity) error {
+func (e Error) ExecutePostRegistrationPrePersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, i *identity.Identity, ct identity.CredentialsType) error {
 	return e.err("ExecutePostRegistrationPrePersistHook", registration.ErrHookAbortFlow)
 }
 

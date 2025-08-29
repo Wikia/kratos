@@ -93,7 +93,10 @@ func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.Credentials
 			}
 
 			if len(c.Identifiers) > 0 && len(c.Identifiers[0]) > 0 &&
-				(hash.IsBcryptHash([]byte(conf.HashedPassword)) || hash.IsArgon2idHash([]byte(conf.HashedPassword))) {
+				(hash.IsBcryptHash([]byte(conf.HashedPassword)) || hash.IsArgon2idHash([]byte(conf.HashedPassword)) ||
+					// fandom-start
+					hash.IsFandomLegacyHash([]byte(conf.HashedPassword))) {
+				// fandom-end
 				count++
 			}
 		}

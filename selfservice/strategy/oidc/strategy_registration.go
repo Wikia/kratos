@@ -212,7 +212,18 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	}
 
 	state := generateState(f.ID.String())
-	if code, hasCode, _ := s.d.SessionTokenExchangePersister().CodeForFlow(ctx, f.ID); hasCode {
+	// fandom-start
+	extraFields := map[string]string{}
+	_ = r.ParseForm()
+	for k, v := range r.PostForm {
+		if len(v) == 0 || v[0] == "" {
+			continue
+		}
+		extraFields[k] = v[0]
+	}
+	// fandom-end
+
+	if code, hasCode, _ := s.d.SessionTokenExchangePersister().CodeForFlow(r.Context(), f.ID); hasCode {
 		state.setCode(code.InitCode)
 	}
 	if err := s.d.ContinuityManager().Pause(ctx, w, r, sessionName,
@@ -221,6 +232,9 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 			FlowID:           f.ID.String(),
 			Traits:           p.Traits,
 			TransientPayload: f.TransientPayload,
+			// fandom-start
+			ExtraFields: extraFields,
+			// fandom-end
 		}),
 		continuity.WithLifespan(time.Minute*30)); err != nil {
 		return s.handleError(w, r, f, pid, nil, err)
@@ -335,6 +349,22 @@ func (s *Strategy) processRegistration(w http.ResponseWriter, r *http.Request, r
 	if err != nil {
 		return nil, s.handleError(w, r, rf, provider.Config().ID, i.Traits, err)
 	}
+
+	// fandom-start
+	// copy stored Form values to allow passing non identity aware fields between callbacks/redirects
+	if container.ExtraFields != nil {
+		_ = r.ParseForm()
+		for k, v := range container.ExtraFields {
+			if v == "" {
+				continue
+			}
+			if _, ok := r.Form[k]; ok {
+				continue
+			}
+			r.Form.Add(k, v)
+		}
+	}
+	// fandom-end
 
 	i.SetCredentials(s.ID(), *creds)
 	if err := s.d.RegistrationExecutor().PostRegistrationHook(w, r, identity.CredentialsTypeOIDC, provider.Config().ID, rf, i); err != nil {

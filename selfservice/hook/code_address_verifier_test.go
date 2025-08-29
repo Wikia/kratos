@@ -68,7 +68,7 @@ func TestCodeAddressVerifier(t *testing.T) {
 		t.Helper()
 
 		r := &http.Request{}
-		require.NoError(t, verifier.ExecutePostRegistrationPrePersistHook(nil, r, flow, id))
+		require.NoError(t, verifier.ExecutePostRegistrationPrePersistHook(nil, r, flow, id, identity.CredentialsTypePassword))
 	}
 
 	t.Run("case=should set the verifiable email address to verified", func(t *testing.T) {

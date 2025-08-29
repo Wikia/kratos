@@ -94,7 +94,9 @@ func TestSchemaExtensionCredentials(t *testing.T) {
 			require.NoError(t, err)
 
 			i := new(identity.Identity)
-			e := identity.NewSchemaExtensionCredentials(i)
+			// fandom-start
+			e := identity.NewSchemaExtensionCredentials(i, false)
+			// fandom-end
 			if tc.existing != nil {
 				i.SetCredentials(tc.ct, *tc.existing)
 			}

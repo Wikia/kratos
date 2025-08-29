@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
@@ -258,6 +259,19 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			require.Equal(t, expected.ID, actual.ID)
 		}
 
+		// fandom-start
+		var randomAlphaString = func(n int) string {
+			var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+			s := make([]rune, n)
+			for i := range s {
+				s[i] = letters[rand.Intn(len(letters))] //nolint:gosec
+			}
+			return string(s)
+
+		}
+		// fandom-end
+
 		t.Run("case=should create and set missing ID", func(t *testing.T) {
 			i := identity.NewIdentity(config.DefaultIdentityTraitsSchemaID)
 			i.SetCredentials(identity.CredentialsTypeOIDC, identity.Credentials{
@@ -426,7 +440,13 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			require.NoError(t, p.CreateIdentity(ctx, initial))
 			createdIDs = append(createdIDs, initial.ID)
 
-			for _, ids := range []string{"foo@bar.com", "fOo@bar.com", "FOO@bar.com", "foo@Bar.com"} {
+			// fandom-start
+			cases := []string{"foo@bar.com"}
+			if !conf.IdentityCaseSensitiveIdentifier() {
+				cases = append(cases, "fOo@bar.com", "FOO@bar.com", "foo@Bar.com")
+			}
+			// fandom-end
+			for _, ids := range cases {
 				expected := passwordIdentity("", ids)
 				err := p.CreateIdentity(ctx, expected)
 				require.ErrorIs(t, err, sqlcon.ErrUniqueViolation, "%+v", err)
@@ -904,6 +924,9 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 
 			require.NoError(t, p.CreateIdentity(ctx, expected))
 			createdIDs = append(createdIDs, expected.ID)
+			// fandom-start
+			conf.MustSet(ctx, config.ViperKeyIdentityCaseSensitiveIdentifier, false)
+			// fandom-end
 
 			actual, err := p.FindIdentityByCredentialIdentifier(ctx, "find-credentials-IDENTIFIER-only@ory.sh", false)
 			require.NoError(t, err)
@@ -959,11 +982,17 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			createdIDs = append(createdIDs, expected.ID)
 
 			t.Run("case sensitive", func(t *testing.T) {
-				for _, ct := range []identity.CredentialsType{
+				caseSensitiveCred := []identity.CredentialsType{
 					identity.CredentialsTypeOIDC,
 					identity.CredentialsTypeTOTP,
 					identity.CredentialsTypeLookup,
-				} {
+				}
+
+				if conf.IdentityCaseSensitiveIdentifier() {
+					caseSensitiveCred = append(caseSensitiveCred, identity.CredentialsTypePassword)
+				}
+
+				for _, ct := range caseSensitiveCred {
 					t.Run(ct.String(), func(t *testing.T) {
 						_, _, err := p.FindByCredentialsIdentifier(ctx, ct, caseInsensitiveWithSpaces)
 						require.Error(t, err)
@@ -977,10 +1006,14 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			})
 
 			t.Run("case insensitive", func(t *testing.T) {
-				for _, ct := range []identity.CredentialsType{
-					identity.CredentialsTypePassword,
+				caseInsensitiveCred := []identity.CredentialsType{
 					identity.CredentialsTypeWebAuthn,
-				} {
+				}
+
+				if !conf.IdentityCaseSensitiveIdentifier() {
+					caseInsensitiveCred = append(caseInsensitiveCred, identity.CredentialsTypePassword)
+				}
+				for _, ct := range caseInsensitiveCred {
 					t.Run(ct.String(), func(t *testing.T) {
 						for _, cs := range []string{caseSensitive, caseInsensitiveWithSpaces} {
 							actual, creds, err := p.FindByCredentialsIdentifier(ctx, ct, cs)
@@ -995,9 +1028,12 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			})
 		})
 
-		t.Run("case=find identity by its credentials case insensitive", func(t *testing.T) {
-			identifier := x.NewUUID().String()
-			expected := passwordIdentity("", strings.ToUpper(identifier))
+		t.Run("case=find identity by its credentials case (in)sensitive", func(t *testing.T) {
+			// fandom-start
+			identifier := randomAlphaString(15)
+			identifier = strings.ToLower(identifier[:len(identifier)/2]) + strings.ToUpper(identifier[len(identifier)/2:])
+			expected := passwordIdentity("", identifier)
+			// fandom-end
 			expected.Traits = identity.Traits(`{}`)
 
 			require.NoError(t, p.CreateIdentity(ctx, expected))
@@ -1006,8 +1042,15 @@ func TestPool(ctx context.Context, conf *config.Config, p persistence.Persister,
 			actual, creds, err := p.FindByCredentialsIdentifier(ctx, identity.CredentialsTypePassword, identifier)
 			require.NoError(t, err)
 
+			// fandom-start
+			if !conf.IdentityCaseSensitiveIdentifier() {
+				identifier = strings.ToLower(identifier)
+			}
+			// fandom-end
 			assert.EqualValues(t, expected.Credentials[identity.CredentialsTypePassword].ID, creds.ID)
-			assert.EqualValues(t, []string{strings.ToLower(identifier)}, creds.Identifiers)
+			// fandom-start
+			assert.EqualValues(t, []string{identifier}, creds.Identifiers)
+			// fandom-end
 			assert.JSONEq(t, string(expected.Credentials[identity.CredentialsTypePassword].Config), string(creds.Config))
 
 			expected.Credentials = nil

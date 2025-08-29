@@ -685,6 +685,7 @@ type FrontendApi interface {
 		AJAX calls. Remember to send credentials and set up CORS correctly!
 		Reverse proxies and API Gateways
 		Server-side calls - use the `X-Session-Token` header!
+		Session refresh
 
 		This endpoint authenticates users by checking:
 
@@ -4588,6 +4589,7 @@ This endpoint is useful for:
 AJAX calls. Remember to send credentials and set up CORS correctly!
 Reverse proxies and API Gateways
 Server-side calls - use the `X-Session-Token` header!
+Session refresh
 
 This endpoint authenticates users by checking:
 

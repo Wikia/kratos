@@ -71,6 +71,23 @@ func (m Device) TableName(ctx context.Context) string {
 	return "session_devices"
 }
 
+// fandom-start
+
+// PiggybackLifespanProvider used to create short piggyback sessions
+type PiggybackLifespanProvider struct {
+	e time.Duration
+}
+
+func (p *PiggybackLifespanProvider) SessionLifespan(ctx context.Context) time.Duration {
+	return p.e
+}
+
+func NewPiggybackLifespanProvider(expiresIn time.Duration) *PiggybackLifespanProvider {
+	return &PiggybackLifespanProvider{e: expiresIn}
+}
+
+// fandom-end
+
 // A Session
 //
 // swagger:model session

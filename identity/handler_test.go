@@ -21,16 +21,19 @@ import (
 	"github.com/go-faker/faker/v4"
 	"github.com/gofrs/uuid"
 	"github.com/peterhellberg/link"
+	"github.com/pquerna/otp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 
+	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/internal"
 	"github.com/ory/kratos/internal/testhelpers"
 	"github.com/ory/kratos/schema"
+	"github.com/ory/kratos/selfservice/strategy/totp"
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/snapshotx"
 	"github.com/ory/x/sqlxx"
@@ -111,6 +114,40 @@ func TestHandler(t *testing.T) {
 	}
 
 	type patch map[string]interface{}
+
+	var createTotpIdentity = func(t *testing.T, reg driver.Registry) (*identity.Identity, string, *otp.Key) {
+		identifier := x.NewUUID().String() + "@ory.sh"
+		password := x.NewUUID().String()
+		key, err := totp.NewKey(context.Background(), "foo", reg)
+		require.NoError(t, err)
+		p, err := reg.Hasher(ctx).Generate(context.Background(), []byte(password))
+		require.NoError(t, err)
+		i := &identity.Identity{
+			Traits: identity.Traits(fmt.Sprintf(`{"subject":"%s"}`, identifier)),
+			VerifiableAddresses: []identity.VerifiableAddress{
+				{
+					Value:     identifier,
+					Verified:  false,
+					CreatedAt: time.Now(),
+				},
+			},
+		}
+		require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), i))
+		i.Credentials = map[identity.CredentialsType]identity.Credentials{
+			identity.CredentialsTypePassword: {
+				Type:        identity.CredentialsTypePassword,
+				Identifiers: []string{identifier},
+				Config:      sqlxx.JSONRawMessage(`{"hashed_password":"` + string(p) + `"}`),
+			},
+			identity.CredentialsTypeTOTP: {
+				Type:        identity.CredentialsTypeTOTP,
+				Identifiers: []string{i.ID.String()},
+				Config:      sqlxx.JSONRawMessage(`{"totp_url":"` + string(key.URL()) + `"}`),
+			},
+		}
+		require.NoError(t, reg.PrivilegedIdentityPool().UpdateIdentity(context.Background(), i))
+		return i, password, key
+	}
 
 	t.Run("case=should return an empty list", func(t *testing.T) {
 		for name, ts := range map[string]*httptest.Server{"public": publicTS, "admin": adminTS} {
@@ -239,7 +276,7 @@ func TestHandler(t *testing.T) {
 			assert.Contains(t, identifiers, "google:import-2")
 			assert.Contains(t, identifiers, "github:import-2")
 
-			require.NoError(t, hash.Compare(ctx, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+			require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("123456"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 		})
 
 		t.Run("with hashed passwords", func(t *testing.T) {
@@ -299,7 +336,7 @@ func TestHandler(t *testing.T) {
 
 					snapshotx.SnapshotT(t, identity.WithCredentialsAndAdminMetadataInJSON(*actual), snapshotx.ExceptNestedKeys(ignoreDefault...), snapshotx.ExceptNestedKeys("hashed_password"))
 
-					require.NoError(t, hash.Compare(ctx, []byte(tt.pass), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+					require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte(tt.pass), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 				})
 			}
 		})
@@ -714,7 +751,7 @@ func TestHandler(t *testing.T) {
 					assert.NotEqualValues(t, i.StateChangedAt, sqlxx.NullTime(res.Get("state_changed_at").Time()), "%s", res.Raw)
 					actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), i.ID)
 					require.NoError(t, err)
-					require.NoError(t, hash.Compare(ctx, []byte("pswd1234"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
+					require.NoError(t, hash.Compare(ctx, conf, actual.ID, []byte("pswd1234"), []byte(gjson.GetBytes(actual.Credentials[identity.CredentialsTypePassword].Config, "hashed_password").String())))
 				})
 			}
 		})
@@ -727,6 +764,22 @@ func TestHandler(t *testing.T) {
 					_ = get(t, ts, "/identities/"+res.Get("id").String(), http.StatusNotFound)
 				})
 			}
+		})
+	})
+
+	t.Run("suite=create and delete credentials", func(t *testing.T) {
+		i, _, _ := createTotpIdentity(t, reg)
+
+		t.Run("case=should delete TOTP credentials", func(t *testing.T) {
+			actual, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), i.ID)
+			require.NoError(t, err)
+			require.NotEmpty(t, actual.Credentials[identity.CredentialsTypeTOTP])
+
+			send(t, adminTS, "DELETE", fmt.Sprintf("/identities/%s/credentials/%s", i.ID.String(), identity.CredentialsTypeTOTP.String()), http.StatusNoContent, nil)
+
+			actual, err = reg.PrivilegedIdentityPool().GetIdentityConfidential(context.Background(), i.ID)
+			require.NoError(t, err)
+			assert.Empty(t, actual.Credentials[identity.CredentialsTypeTOTP])
 		})
 	})
 

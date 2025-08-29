@@ -25,6 +25,7 @@ import (
 	"github.com/ory/kratos/cipher"
 	"github.com/ory/kratos/continuity"
 	"github.com/ory/kratos/courier"
+	"github.com/ory/kratos/credentials"
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/hash"
 	"github.com/ory/kratos/hydra"
@@ -70,6 +71,7 @@ type RegistryDefault struct {
 	rwl sync.RWMutex
 	l   *logrusx.Logger
 	c   *config.Config
+	rc  *sync.Map
 
 	ctxer contextx.Contextualizer
 
@@ -85,13 +87,16 @@ type RegistryDefault struct {
 	persister       persistence.Persister
 	migrationStatus popx.MigrationStatuses
 
-	hookVerifier            *hook.Verifier
-	hookSessionIssuer       *hook.SessionIssuer
-	hookSessionDestroyer    *hook.SessionDestroyer
-	hookAddressVerifier     *hook.AddressVerifier
-	hookShowVerificationUI  *hook.ShowVerificationUIHook
-	hookCodeAddressVerifier *hook.CodeAddressVerifier
-	hookTwoStepRegistration *hook.TwoStepRegistration
+	hookVerifier             *hook.Verifier
+	hookSessionIssuer        *hook.SessionIssuer
+	hookSessionDestroyer     *hook.SessionDestroyer
+	hookAddressVerifier      *hook.AddressVerifier
+	hookShowVerificationUI   *hook.ShowVerificationUIHook
+	hookCodeAddressVerifier  *hook.CodeAddressVerifier
+	hookTwoStepRegistration  *hook.TwoStepRegistration
+	hookTotpSecretsDestroyer *hook.TotpSecretsDestroyer
+
+	credentialsHandler *credentials.Handler
 
 	identityHandler        *identity.Handler
 	identityValidator      *identity.Validator
@@ -203,6 +208,8 @@ func (m *RegistryDefault) RegisterAdminRoutes(ctx context.Context, router *x.Rou
 	m.CourierHandler().RegisterAdminRoutes(router)
 	m.SelfServiceErrorHandler().RegisterAdminRoutes(router)
 
+	m.CredentialsHandler().RegisterAdminRoutes(router)
+
 	m.RecoveryHandler().RegisterAdminRoutes(router)
 	m.AllRecoveryStrategies().RegisterAdminRoutes(router)
 	m.SessionHandler().RegisterAdminRoutes(router)
@@ -225,6 +232,7 @@ func (m *RegistryDefault) RegisterRoutes(ctx context.Context, public *x.RouterPu
 func NewRegistryDefault() *RegistryDefault {
 	return &RegistryDefault{
 		trc: otelx.NewNoop(nil, new(otelx.Config)),
+		rc:  new(sync.Map),
 	}
 }
 
@@ -450,6 +458,13 @@ func (m *RegistryDefault) IdentityHandler() *identity.Handler {
 	return m.identityHandler
 }
 
+func (m *RegistryDefault) CredentialsHandler() *credentials.Handler {
+	if m.credentialsHandler == nil {
+		m.credentialsHandler = credentials.NewHandler(m)
+	}
+	return m.credentialsHandler
+}
+
 func (m *RegistryDefault) CourierHandler() *courier.Handler {
 	if m.courierHandler == nil {
 		m.courierHandler = courier.NewHandler(m)
@@ -488,9 +503,12 @@ func (m *RegistryDefault) Cipher(ctx context.Context) cipher.Cipher {
 
 func (m *RegistryDefault) Hasher(ctx context.Context) hash.Hasher {
 	if m.passwordHasher == nil {
-		if m.c.HasherPasswordHashingAlgorithm(ctx) == "bcrypt" {
+		switch m.c.HasherPasswordHashingAlgorithm(ctx) {
+		case "bcrypt":
 			m.passwordHasher = hash.NewHasherBcrypt(m)
-		} else {
+		case "legacyfandom":
+			m.passwordHasher = hash.NewHasherLegacyFandom(m)
+		default:
 			m.passwordHasher = hash.NewHasherArgon2(m)
 		}
 	}
@@ -828,13 +846,26 @@ func (m *RegistryDefault) PrometheusManager() *prometheus.MetricsManager {
 	return m.pmm
 }
 
-func (m *RegistryDefault) HTTPClient(_ context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
-	opts = append(opts,
-		httpx.ResilientClientWithLogger(m.Logger()),
-		httpx.ResilientClientWithMaxRetry(2),
-		httpx.ResilientClientWithConnectionTimeout(30*time.Second),
-		httpx.ResilientClientWithTracer(noop.NewTracerProvider().Tracer("Ory Kratos")), // will use the tracer from a context if available
+func (m *RegistryDefault) NamedHTTPClient(ctx context.Context, name string, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	res, _ := m.rc.LoadOrStore(name, m.HTTPClient(ctx, opts...))
+	return res.(*retryablehttp.Client)
+}
+
+func (m *RegistryDefault) HTTPClient(ctx context.Context, opts ...httpx.ResilientOptions) *retryablehttp.Client {
+	opts = append(
+		[]httpx.ResilientOptions{
+			httpx.ResilientClientWithLogger(m.Logger()),
+			httpx.ResilientClientWithMaxRetry(2),
+			httpx.ResilientClientWithConnectionTimeout(30 * time.Second),
+			httpx.ResilientClientWithTracer(noop.NewTracerProvider().Tracer("Ory Kratos")), // will use the tracer from a context if available
+		},
+		opts...,
 	)
+
+	tracer := m.Tracer(ctx)
+	if tracer.IsLoaded() {
+		opts = append(opts, httpx.ResilientClientWithTracer(tracer.Tracer()))
+	}
 
 	// One of the few exceptions, this usually should not be hot reloaded.
 	if m.Config().ClientHTTPNoPrivateIPRanges(contextx.RootContext) {

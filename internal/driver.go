@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -48,9 +49,12 @@ func NewConfigurationWithDefaults(t testing.TB) *config.Config {
 			config.ViperKeyHasherArgon2ConfigSaltLength:      16,
 			config.ViperKeyHasherBcryptCost:                  4,
 			config.ViperKeyHasherArgon2ConfigKeyLength:       16,
+			config.ViperKeyHasherLegacyFandomAESKey:          []string{"QWERTYUIOPASDFGHQWERTYUIOPASDFGH"},
 			config.ViperKeyCourierSMTPURL:                    "smtp://foo:bar@baz.com/",
 			config.ViperKeySelfServiceBrowserDefaultReturnTo: "https://www.ory.sh/redirect-not-set",
 			config.ViperKeySecretsCipher:                     []string{"secret-thirty-two-character-long"},
+			config.ViperKeyDatabaseCleanupBatchSize:          100,
+			config.ViperKeyDatabaseCleanupSleepTables:        1 * time.Minute,
 		}),
 		configx.SkipValidation(),
 	)

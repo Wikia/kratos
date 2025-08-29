@@ -118,6 +118,7 @@ const (
 	ViperKeySessionWhoAmICaching                             = "feature_flags.cacheable_sessions"
 	ViperKeySessionWhoAmICachingMaxAge                       = "feature_flags.cacheable_sessions_max_age"
 	ViperKeyUseContinueWithTransitions                       = "feature_flags.use_continue_with_transitions"
+	ViperKeySessionWhoAmIRefreshAllowed                      = "session.whoami.refresh_allowed"
 	ViperKeySessionRefreshMinTimeLeft                        = "session.earliest_possible_extend"
 	ViperKeyCookieSameSite                                   = "cookies.same_site"
 	ViperKeyCookieDomain                                     = "cookies.domain"
@@ -136,6 +137,7 @@ const (
 	ViperKeySelfServiceLoginRequestLifespan                  = "selfservice.flows.login.lifespan"
 	ViperKeySelfServiceLoginAfter                            = "selfservice.flows.login.after"
 	ViperKeySelfServiceLoginBeforeHooks                      = "selfservice.flows.login.before.hooks"
+	ViperKeySelfServiceLoginAfterSubmitHooks                 = "selfservice.flows.login.after_submit.hooks"
 	ViperKeySelfServiceErrorUI                               = "selfservice.flows.error.ui_url"
 	ViperKeySelfServiceLogoutBrowserDefaultReturnTo          = "selfservice.flows.logout.after." + DefaultBrowserReturnURL
 	ViperKeySelfServiceSettingsURL                           = "selfservice.flows.settings.ui_url"
@@ -182,6 +184,7 @@ const (
 	ViperKeyPasswordHaveIBeenPwnedEnabled                    = "selfservice.methods.password.config.haveibeenpwned_enabled"
 	ViperKeyPasswordMaxBreaches                              = "selfservice.methods.password.config.max_breaches"
 	ViperKeyPasswordMinLength                                = "selfservice.methods.password.config.min_password_length"
+	ViperKeyPasswordMaxLength                                = "selfservice.methods.password.config.max_password_length"
 	ViperKeyPasswordIdentifierSimilarityCheckEnabled         = "selfservice.methods.password.config.identifier_similarity_check_enabled"
 	ViperKeyIgnoreNetworkErrors                              = "selfservice.methods.password.config.ignore_network_errors"
 	ViperKeyTOTPIssuer                                       = "selfservice.methods.totp.config.issuer"
@@ -202,6 +205,9 @@ const (
 	ViperKeyClientHTTPPrivateIPExceptionURLs                 = "clients.http.private_ip_exception_urls"
 	ViperKeyPreviewDefaultReadConsistencyLevel               = "preview.default_read_consistency_level"
 	ViperKeyVersion                                          = "version"
+	ViperKeyHasherLegacyFandomCost                           = "hashers.legacyfandom.cost"
+	ViperKeyHasherLegacyFandomAESKey                         = "hashers.legacyfandom.key"
+	ViperKeyIdentityCaseSensitiveIdentifier                  = "identity.case_sensitive_identifier"
 )
 
 const (
@@ -219,6 +225,17 @@ const (
 // DefaultSessionCookieName returns the default cookie name for the kratos session.
 const DefaultSessionCookieName = "ory_kratos_session"
 
+// fandom-start
+type PersistencePhase string
+
+const (
+	All         PersistencePhase = "all"
+	PrePersist  PersistencePhase = "pre-persist"
+	PostPersist PersistencePhase = "post-persist"
+)
+
+//fandom-end
+
 type (
 	Argon2 struct {
 		Memory            bytesize.ByteSize `json:"memory"`
@@ -233,8 +250,17 @@ type (
 	Bcrypt struct {
 		Cost uint32 `json:"cost"`
 	}
+	//fandom-start
+	LegacyFandom struct {
+		Cost uint32     `json:"cost"`
+		Key  [][32]byte `json:"key"`
+	}
+	//fandom-end
 	SelfServiceHook struct {
-		Name   string          `json:"hook"`
+		Name string `json:"hook"`
+		//fandom-start
+		PersistencePhase PersistencePhase `json:"persistence_phase"`
+		//fandom-end
 		Config json.RawMessage `json:"config"`
 	}
 	SelfServiceStrategy struct {
@@ -256,6 +282,7 @@ type (
 		MaxBreaches                      uint   `json:"max_breaches"`
 		IgnoreNetworkErrors              bool   `json:"ignore_network_errors"`
 		MinPasswordLength                uint   `json:"min_password_length"`
+		MaxPasswordLength                uint   `json:"max_password_length"`
 		IdentifierSimilarityCheckEnabled bool   `json:"identifier_similarity_check_enabled"`
 	}
 	Schemas                  []Schema
@@ -555,6 +582,37 @@ func (p *Config) HasherBcrypt(ctx context.Context) *Bcrypt {
 	return &Bcrypt{Cost: cost}
 }
 
+// fandom-start
+func (p *Config) HasherLegacyFandom(ctx context.Context) (*LegacyFandom, error) {
+	// warn about usage of default values and point to the docs
+	// warning will require https://github.com/ory/viper/issues/19
+	cost := uint32(p.p.IntF(ViperKeyHasherLegacyFandomCost, int(BcryptDefaultCost)))
+	if !p.IsInsecureDevMode(ctx) && cost < BcryptDefaultCost {
+		cost = BcryptDefaultCost
+	}
+
+	keys := p.p.Strings(ViperKeyHasherLegacyFandomAESKey)
+	result := make([][32]byte, len(keys))
+	for k, v := range keys {
+		copy(result[k][:], v)
+	}
+
+	if len(result) == 0 {
+		return nil, errors.New("no AES key provided")
+	}
+
+	return &LegacyFandom{
+		Cost: cost,
+		Key:  result,
+	}, nil
+}
+
+func (p *Config) IdentityCaseSensitiveIdentifier() bool {
+	return p.p.Bool(ViperKeyIdentityCaseSensitiveIdentifier)
+}
+
+//fandom-end
+
 func (p *Config) listenOn(ctx context.Context, key string) string {
 	fb := 4433
 	if key == "admin" {
@@ -691,6 +749,10 @@ func (p *Config) SelfServiceFlowLoginBeforeHooks(ctx context.Context) []SelfServ
 	return p.selfServiceHooks(ctx, ViperKeySelfServiceLoginBeforeHooks)
 }
 
+func (p *Config) SelfServiceFlowLoginAfterSubmitHooks(ctx context.Context) []SelfServiceHook {
+	return p.selfServiceHooks(ctx, ViperKeySelfServiceLoginAfterSubmitHooks)
+}
+
 func (p *Config) SelfServiceFlowRecoveryBeforeHooks(ctx context.Context) []SelfServiceHook {
 	return p.selfServiceHooks(ctx, ViperKeySelfServiceRecoveryBeforeHooks)
 }
@@ -714,7 +776,7 @@ func (p *Config) SelfServiceFlowSettingsBeforeHooks(ctx context.Context) []SelfS
 func (p *Config) SelfServiceFlowRegistrationBeforeHooks(ctx context.Context) []SelfServiceHook {
 	hooks := p.selfServiceHooks(ctx, ViperKeySelfServiceRegistrationBeforeHooks)
 	if p.SelfServiceFlowRegistrationTwoSteps(ctx) {
-		hooks = append(hooks, SelfServiceHook{"two_step_registration", json.RawMessage("{}")})
+		hooks = append(hooks, SelfServiceHook{"two_step_registration", PostPersist, json.RawMessage("{}")})
 	}
 
 	return hooks
@@ -1381,6 +1443,10 @@ func (p *Config) SessionRefreshMinTimeLeft(ctx context.Context) time.Duration {
 	return p.GetProvider(ctx).DurationF(ViperKeySessionRefreshMinTimeLeft, p.SessionLifespan(ctx))
 }
 
+func (p *Config) SessionWhoAmIRefreshAllowed() bool {
+	return p.p.Bool(ViperKeySessionWhoAmIRefreshAllowed)
+}
+
 func (p *Config) SelfServiceSettingsRequiredAAL(ctx context.Context) string {
 	return p.GetProvider(ctx).String(ViperKeySelfServiceSettingsRequiredAAL)
 }
@@ -1445,6 +1511,7 @@ func (p *Config) PasswordPolicyConfig(ctx context.Context) *PasswordPolicy {
 		MaxBreaches:                      uint(p.GetProvider(ctx).Int(ViperKeyPasswordMaxBreaches)),
 		IgnoreNetworkErrors:              p.GetProvider(ctx).BoolF(ViperKeyIgnoreNetworkErrors, true),
 		MinPasswordLength:                uint(p.GetProvider(ctx).IntF(ViperKeyPasswordMinLength, 8)),
+		MaxPasswordLength:                uint(p.GetProvider(ctx).IntF(ViperKeyPasswordMaxLength, 20)),
 		IdentifierSimilarityCheckEnabled: p.GetProvider(ctx).BoolF(ViperKeyPasswordIdentifierSimilarityCheckEnabled, true),
 	}
 }

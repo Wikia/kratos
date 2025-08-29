@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ory/kratos/identity"
+
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +31,7 @@ func TestExecutePostRegistrationPostPersistHook(t *testing.T) {
 			browserRequest := httptest.NewRequest("GET", "/", nil)
 			f := &registration.Flow{}
 			rec := httptest.NewRecorder()
-			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, f, nil))
+			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, f, nil, identity.CredentialsTypePassword))
 			require.Equal(t, 200, rec.Code)
 		})
 
@@ -40,7 +42,7 @@ func TestExecutePostRegistrationPostPersistHook(t *testing.T) {
 			browserRequest.Header.Add("Accept", "application/json")
 			f := &registration.Flow{}
 			rec := httptest.NewRecorder()
-			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, f, nil))
+			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, f, nil, identity.CredentialsTypePassword))
 			require.Equal(t, 200, rec.Code)
 		})
 
@@ -57,7 +59,7 @@ func TestExecutePostRegistrationPostPersistHook(t *testing.T) {
 				flow.NewContinueWithVerificationUI(vf, "some@ory.sh", ""),
 			}
 			rec := httptest.NewRecorder()
-			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, rf, nil))
+			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, rf, nil, identity.CredentialsTypePassword))
 			assert.Equal(t, 200, rec.Code)
 			assert.Equal(t, "/verification?flow="+vf.ID.String(), rf.ReturnToVerification)
 		})
@@ -72,7 +74,7 @@ func TestExecutePostRegistrationPostPersistHook(t *testing.T) {
 				flow.NewContinueWithSetToken("token"),
 			}
 			rec := httptest.NewRecorder()
-			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, rf, nil))
+			require.NoError(t, h.ExecutePostRegistrationPostPersistHook(rec, browserRequest, rf, nil, identity.CredentialsTypePassword))
 			assert.Equal(t, 200, rec.Code)
 		})
 	})

@@ -33,12 +33,17 @@ type (
 		ExecuteLoginPreHook(w http.ResponseWriter, r *http.Request, a *Flow) error
 	}
 
+	AfterSubmitHookExecutor interface {
+		ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow) error
+	}
+
 	PostHookExecutor interface {
 		ExecuteLoginPostHook(w http.ResponseWriter, r *http.Request, g node.UiNodeGroup, a *Flow, s *session.Session) error
 	}
 
 	HooksProvider interface {
 		PreLoginHooks(ctx context.Context) []PreHookExecutor
+		AfterSubmitLoginHooks(ctx context.Context) []AfterSubmitHookExecutor
 		PostLoginHooks(ctx context.Context, credentialsType identity.CredentialsType) []PostHookExecutor
 	}
 )
@@ -198,7 +203,10 @@ func (e *HookExecutor) PostLoginHook(
 
 	if f.Type == flow.TypeAPI {
 		span.SetAttributes(attribute.String("flow_type", string(flow.TypeAPI)))
-		if err := e.d.SessionPersister().UpsertSession(r.Context(), s); err != nil {
+		// Fandom-start set session cookie for API flow login -> https://fandom.atlassian.net/browse/PLATFORM-6395
+		// https://fandom.atlassian.net/wiki/spaces/MOB/pages/1963163864/Fandom+Auth+in+mobile-app
+		if err := e.d.SessionManager().UpsertAndIssueCookie(r.Context(), w, r, s); err != nil {
+			// Fandom-end
 			return errors.WithStack(err)
 		}
 		e.d.Audit().
@@ -326,6 +334,16 @@ func (e *HookExecutor) PostLoginHook(
 	}
 
 	x.ContentNegotiationRedirection(w, r, s, e.d.Writer(), finalReturnTo)
+	return nil
+}
+
+func (e *HookExecutor) AfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow) error {
+	for _, executor := range e.d.AfterSubmitLoginHooks(r.Context()) {
+		if err := executor.ExecuteAfterSubmitLoginHook(w, r, a); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

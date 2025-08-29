@@ -26,7 +26,7 @@ func NewCodeAddressVerifier(r codeAddressDependencies) *CodeAddressVerifier {
 	return &CodeAddressVerifier{r: r}
 }
 
-func (cv *CodeAddressVerifier) ExecutePostRegistrationPrePersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, i *identity.Identity) error {
+func (cv *CodeAddressVerifier) ExecutePostRegistrationPrePersistHook(w http.ResponseWriter, r *http.Request, a *registration.Flow, i *identity.Identity, ct identity.CredentialsType) error {
 	if a.Active != identity.CredentialsTypeCodeAuth {
 		return nil
 	}

@@ -57,6 +57,17 @@ func (m *RegistryDefault) HookTwoStepRegistration() *hook.TwoStepRegistration {
 	return m.hookTwoStepRegistration
 }
 
+// fandom-start
+
+func (m *RegistryDefault) HookTotpSecretsDestroyer() *hook.TotpSecretsDestroyer {
+	if m.hookTotpSecretsDestroyer == nil {
+		m.hookTotpSecretsDestroyer = hook.NewTotpSecretsDestroyer(m)
+	}
+	return m.hookTotpSecretsDestroyer
+}
+
+// fandom-end
+
 func (m *RegistryDefault) WithHooks(hooks map[string]func(config.SelfServiceHook) interface{}) {
 	m.injectedSelfserviceHooks = hooks
 }
@@ -80,6 +91,10 @@ func (m *RegistryDefault) getHooks(credentialsType string, configs []config.Self
 			i = append(i, m.HookTwoStepRegistration())
 		case hook.KeyVerifier:
 			i = append(i, m.HookVerifier())
+			// fandom-start
+		case hook.KeyTotpLookupSecretsDestroyer:
+			i = append(i, m.HookTotpSecretsDestroyer())
+			// fandom-end
 		default:
 			var found bool
 			for name, m := range m.injectedSelfserviceHooks {

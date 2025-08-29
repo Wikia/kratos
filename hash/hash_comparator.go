@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -60,7 +61,7 @@ func NewCryptDecoder() *crypt.Decoder {
 
 var CryptDecoder = NewCryptDecoder()
 
-func Compare(ctx context.Context, password []byte, hash []byte) error {
+func Compare(ctx context.Context, cfg *config.Config, identityId uuid.UUID, password []byte, hash []byte) error {
 	ctx, span := otel.GetTracerProvider().Tracer(tracingComponent).Start(ctx, "hash.Compare")
 	defer span.End()
 
@@ -86,6 +87,10 @@ func Compare(ctx context.Context, password []byte, hash []byte) error {
 	case IsPbkdf2Hash(hash):
 		span.SetAttributes(attribute.String("hash.type", "pbkdf2"))
 		return ComparePbkdf2(ctx, password, hash)
+	// fandom-start
+	case IsFandomLegacyHash(hash):
+		return CompareLegacyFandom(ctx, cfg, identityId, password, hash)
+	// fandom-end
 	case IsScryptHash(hash):
 		span.SetAttributes(attribute.String("hash.type", "scrypt"))
 		return CompareScrypt(ctx, password, hash)

@@ -83,7 +83,11 @@ func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.Credentials
 }
 
 func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+	hasTotp := false
 	for _, c := range cc {
+		if c.Type == identity.CredentialsTypeTOTP {
+			hasTotp = true
+		}
 		if c.Type == s.ID() && len(c.Config) > 0 {
 			var conf identity.CredentialsLookupConfig
 			if err = json.Unmarshal(c.Config, &conf); err != nil {
@@ -95,6 +99,13 @@ func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.Credentials
 			}
 		}
 	}
+	// fandom-start
+	// TODO: propagate context properly
+	conf, err := s.Config(context.Background())
+	if err == nil && conf.EnabledOnlyIn2FA && !hasTotp {
+		count = 0
+	}
+	// fandom-end
 	return
 }
 

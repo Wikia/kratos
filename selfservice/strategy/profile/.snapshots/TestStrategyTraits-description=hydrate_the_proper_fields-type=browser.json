@@ -114,6 +114,8 @@
       "attributes": {
         "autocomplete": "new-password",
         "disabled": false,
+        "maxlength": 1024,
+        "minlength": 8,
         "name": "password",
         "node_type": "input",
         "required": true,

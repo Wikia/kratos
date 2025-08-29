@@ -37,6 +37,7 @@ type SimpleLoggerWithClient struct {
 	L *logrusx.Logger
 	C *retryablehttp.Client
 	T *otelx.Tracer
+	ResilientClientProvider
 }
 
 func (s *SimpleLoggerWithClient) Tracer(_ context.Context) *otelx.Tracer {

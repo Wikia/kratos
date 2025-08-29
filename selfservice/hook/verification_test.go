@@ -45,7 +45,7 @@ func TestVerifier(t *testing.T) {
 			name: "login",
 			execHook: func(h *hook.Verifier, i *identity.Identity, f flow.Flow) error {
 				return h.ExecuteLoginPostHook(
-					httptest.NewRecorder(), u, node.CodeGroup, f.(*login.Flow), &session.Session{ID: x.NewUUID(), Identity: i})
+					httptest.NewRecorder(), u, node.CodeGroup, f.(*login.Flow), &session.Session{ID: x.NewUUID(), Identity: i}, "ExecuteSettingsPostPersistHook")
 			},
 			originalFlow: func() flow.FlowWithContinueWith {
 				return &login.Flow{RequestURL: "http://foo.com/login", RequestedAAL: "aal1"}
@@ -55,7 +55,7 @@ func TestVerifier(t *testing.T) {
 			name: "registration",
 			execHook: func(h *hook.Verifier, i *identity.Identity, f flow.Flow) error {
 				return h.ExecutePostRegistrationPostPersistHook(
-					httptest.NewRecorder(), u, f.(*registration.Flow), &session.Session{ID: x.NewUUID(), Identity: i})
+					httptest.NewRecorder(), u, f.(*registration.Flow), &session.Session{ID: x.NewUUID(), Identity: i}, identity.CredentialsTypePassword)
 			},
 			originalFlow: func() flow.FlowWithContinueWith {
 				return &registration.Flow{RequestURL: "http://foo.com/registration?after_verification_return_to=verification_callback"}

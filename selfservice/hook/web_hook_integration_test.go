@@ -27,6 +27,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"golang.org/x/exp/slices"
 
+	"github.com/ory/x/httpx"
+
+	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/internal"
@@ -55,15 +59,39 @@ var transientPayload = json.RawMessage(`{
 	}
 }`)
 
+type resilientClientProvider struct {
+	log *logrusx.Logger
+}
+
+func newResilientClient() *resilientClientProvider {
+	return &resilientClientProvider{
+		log: logrusx.New("kratos", "test"),
+	}
+}
+
+func (r *resilientClientProvider) GetSpecializedResilientClient(_ string, _ ...httpx.ResilientOptions) *retryablehttp.Client {
+	return retryablehttp.NewClient()
+}
+
+func (r *resilientClientProvider) Logger() *logrusx.Logger {
+	return r.log
+}
+
+func (r *resilientClientProvider) Audit() *logrusx.Logger {
+	return r.log
+}
+
 func TestWebHooks(t *testing.T) {
 	_, reg := internal.NewFastRegistryWithMocks(t)
 	logger := logrusx.New("kratos", "test")
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 	type WebHookRequest struct {
 		Body    string
@@ -168,14 +196,14 @@ func TestWebHooks(t *testing.T) {
 
 	for _, tc := range []struct {
 		uc           string
-		callWebHook  func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error
+		callWebHook  func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, ct identity.CredentialsType) error
 		expectedBody func(req *http.Request, f flow.Flow, s *session.Session) string
 		createFlow   func() flow.Flow
 	}{
 		{
 			uc:         "Pre Login Hook",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID()} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, _ *session.Session, _ identity.CredentialsType) error {
 				return wh.ExecuteLoginPreHook(nil, req, f.(*login.Flow))
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, _ *session.Session) string {
@@ -185,7 +213,7 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Post Login Hook",
 			createFlow: func() flow.Flow { return &login.Flow{ID: x.NewUUID(), TransientPayload: transientPayload} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
 				return wh.ExecuteLoginPostHook(nil, req, node.PasswordGroup, f.(*login.Flow), s)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
@@ -195,7 +223,7 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Pre Registration Hook",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, _ *session.Session) error {
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, _ *session.Session, _ identity.CredentialsType) error {
 				return wh.ExecuteRegistrationPreHook(nil, req, f.(*registration.Flow))
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, _ *session.Session) string {
@@ -210,8 +238,8 @@ func TestWebHooks(t *testing.T) {
 					TransientPayload: transientPayload,
 				}
 			},
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s)
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, ct identity.CredentialsType) error {
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, ct)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentityAndTransientPayload(req, f, s, transientPayload)
@@ -220,7 +248,7 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Post Recovery Hook",
 			createFlow: func() flow.Flow { return &recovery.Flow{ID: x.NewUUID(), TransientPayload: transientPayload} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
 				return wh.ExecutePostRecoveryHook(nil, req, f.(*recovery.Flow), s)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
@@ -230,7 +258,7 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Post Verification Hook",
 			createFlow: func() flow.Flow { return &verification.Flow{ID: x.NewUUID(), TransientPayload: transientPayload} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
 				return wh.ExecutePostVerificationHook(nil, req, f.(*verification.Flow), s.Identity)
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
@@ -240,8 +268,8 @@ func TestWebHooks(t *testing.T) {
 		{
 			uc:         "Post Settings Hook",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID(), TransientPayload: transientPayload} },
-			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session, _ identity.CredentialsType) error {
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s, "PostSettings")
 			},
 			expectedBody: func(req *http.Request, f flow.Flow, s *session.Session) string {
 				return bodyWithFlowAndIdentityAndTransientPayload(req, f, s, transientPayload)
@@ -348,7 +376,7 @@ func TestWebHooks(t *testing.T) {
 
 							wh := hook.NewWebHook(&whDeps, conf)
 
-							err = tc.callWebHook(wh, req, f, s)
+							err = tc.callWebHook(wh, req, f, s, identity.CredentialsTypePassword)
 							if method == "GARBAGE" {
 								assert.Error(t, err)
 								return
@@ -472,7 +500,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Registration Post Persist Hook - no block",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s)
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -483,19 +511,21 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Registration Post Persist Hook - block has no effect",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s)
+				return wh.ExecutePostRegistrationPostPersistHook(nil, req, f.(*registration.Flow), s, identity.CredentialsTypePassword)
 			},
 			// This would usually error, but post persist does not execute blocking web hooks, so we expect no error.
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
 			},
-			expectedError: nil,
+			// fandom-start
+			expectedError: webhookError,
+			// fandom-end
 		},
 		{
 			uc:         "Post Registration Pre Persist Hook - no block",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPrePersistHook(nil, req, f.(*registration.Flow), s.Identity)
+				return wh.ExecutePostRegistrationPrePersistHook(nil, req, f.(*registration.Flow), s.Identity, identity.CredentialsTypePassword)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -506,7 +536,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Registration Pre Persist Hook - block",
 			createFlow: func() flow.Flow { return &registration.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecutePostRegistrationPrePersistHook(nil, req, f.(*registration.Flow), s.Identity)
+				return wh.ExecutePostRegistrationPrePersistHook(nil, req, f.(*registration.Flow), s.Identity, identity.CredentialsTypePassword)
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -561,7 +591,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook - no block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusOK, []byte{}
@@ -572,7 +602,7 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook Pre Persist - block",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPrePersistHook(nil, req, f.(*settings.Flow), s.Identity)
+				return wh.ExecuteSettingsPrePersistHook(nil, req, f.(*settings.Flow), s.Identity, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
@@ -583,12 +613,14 @@ func TestWebHooks(t *testing.T) {
 			uc:         "Post Settings Hook Post Persist - block has no effect",
 			createFlow: func() flow.Flow { return &settings.Flow{ID: x.NewUUID()} },
 			callWebHook: func(wh *hook.WebHook, req *http.Request, f flow.Flow, s *session.Session) error {
-				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s)
+				return wh.ExecuteSettingsPostPersistHook(nil, req, f.(*settings.Flow), s.Identity, s, "PostSettings")
 			},
 			webHookResponse: func() (int, []byte) {
 				return http.StatusBadRequest, webHookResponse
 			},
-			expectedError: nil,
+			// fandom-start
+			expectedError: webhookError,
+			// fandom-end
 		},
 	} {
 		tc := tc
@@ -653,7 +685,7 @@ func TestWebHooks(t *testing.T) {
 			conf := json.RawMessage(fmt.Sprintf(`{"url": "%s", "method": "POST", "body": "%s", "response": {"parse":true}}`, ts.URL+path, "file://./stub/test_body.jsonnet"))
 			wh := hook.NewWebHook(&whDeps, conf)
 			in := &id
-			err := wh.ExecutePostRegistrationPrePersistHook(nil, req, f, in)
+			err := wh.ExecutePostRegistrationPrePersistHook(nil, req, f, in, identity.CredentialsTypePassword)
 			require.NoError(t, err)
 			result := identity.WithCredentialsAndAdminMetadataInJSON(*in)
 			return &result
@@ -785,11 +817,17 @@ func TestWebHooks(t *testing.T) {
 			in := &identity.Identity{ID: uuid}
 			s := &session.Session{ID: x.NewUUID(), Identity: in}
 
-			postPersistErr := wh.ExecuteSettingsPostPersistHook(nil, req, f, in, s)
+			postPersistErr := wh.ExecuteSettingsPostPersistHook(nil, req, f, in, s, "PostSettings")
 			assert.NoError(t, postPersistErr)
-			assert.Equal(t, in, &identity.Identity{ID: uuid})
+			// fandom-start
+			if tc.parse == true {
+				assert.Equal(t, in, &identity.Identity{ID: uuid, Traits: identity.Traits(`{"email":"some@other-example.org"}`)})
+			} else {
+				assert.Equal(t, in, &identity.Identity{ID: uuid})
+			}
+			// fandom-end
 
-			prePersistErr := wh.ExecuteSettingsPrePersistHook(nil, req, f, in)
+			prePersistErr := wh.ExecuteSettingsPrePersistHook(nil, req, f, in, "PostSettings")
 			assert.NoError(t, prePersistErr)
 			if tc.parse == true {
 				assert.Equal(t, in, &identity.Identity{ID: uuid, Traits: identity.Traits(`{"email":"some@other-example.org"}`)})
@@ -905,8 +943,8 @@ func TestWebHooks(t *testing.T) {
 		// error.
 
 		var wg sync.WaitGroup
-		wg.Add(3) // HTTP client does 3 attempts
 		ts := newServer(func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+			wg.Add(1)
 			defer wg.Done()
 			w.WriteHeader(500)
 			_, _ = w.Write([]byte(`{"error":"some error"}`))
@@ -982,9 +1020,11 @@ func TestDisallowPrivateIPRanges(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 
 	req := &http.Request{
@@ -1052,9 +1092,11 @@ func TestAsyncWebhook(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 
 	req := &http.Request{
@@ -1132,9 +1174,11 @@ func TestWebhookEvents(t *testing.T) {
 	whDeps := struct {
 		x.SimpleLoggerWithClient
 		*jsonnetsecure.TestProvider
+		x.ResilientClientProvider
 	}{
 		x.SimpleLoggerWithClient{L: logger, C: reg.HTTPClient(context.Background()), T: otelx.NewNoop(logger, &otelx.Config{ServiceName: "kratos"})},
 		jsonnetsecure.NewTestProvider(t),
+		reg,
 	}
 
 	req := &http.Request{

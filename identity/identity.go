@@ -24,6 +24,7 @@ import (
 	"github.com/ory/x/sqlxx"
 
 	"github.com/ory/kratos/driver/config"
+	"github.com/ory/kratos/x"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -203,6 +204,12 @@ func (i *Identity) SetCredentials(t CredentialsType, c Credentials) {
 	i.Credentials[t] = c
 }
 
+func (i *Identity) RemoveCredentials(t CredentialsType) {
+	i.lock().Lock()
+	defer i.lock().Unlock()
+	delete(i.Credentials, t)
+}
+
 func (i *Identity) SetCredentialsWithConfig(t CredentialsType, c Credentials, conf interface{}) (err error) {
 	i.lock().Lock()
 	defer i.lock().Unlock()
@@ -307,7 +314,7 @@ func NewIdentity(traitsSchemaID string) *Identity {
 
 	stateChangedAt := sqlxx.NullTime(time.Now().UTC())
 	return &Identity{
-		ID:                  uuid.Nil,
+		ID:                  x.NewUUID(), // fandom
 		Credentials:         map[CredentialsType]Credentials{},
 		Traits:              Traits("{}"),
 		SchemaID:            traitsSchemaID,

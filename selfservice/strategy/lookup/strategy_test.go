@@ -4,9 +4,11 @@
 package lookup_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/selfservice/strategy/lookup"
 
 	"github.com/stretchr/testify/assert"
@@ -17,7 +19,8 @@ import (
 )
 
 func TestCountActiveFirstFactorCredentials(t *testing.T) {
-	_, reg := internal.NewFastRegistryWithMocks(t)
+	ctx, _ := context.WithCancel(context.Background())
+	conf, reg := internal.NewFastRegistryWithMocks(t)
 	strategy := lookup.NewStrategy(reg)
 
 	t.Run("first factor", func(t *testing.T) {
@@ -29,6 +32,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 	t.Run("multi factor", func(t *testing.T) {
 		for k, tc := range []struct {
 			in       map[identity.CredentialsType]identity.Credentials
+			config   []byte
 			expected int
 		}{
 			{
@@ -36,6 +40,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 					Type:   strategy.ID(),
 					Config: []byte{},
 				}},
+				config:   []byte(`{}`),
 				expected: 0,
 			},
 			{
@@ -43,6 +48,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 					Type:   strategy.ID(),
 					Config: []byte(`{"recovery_codes": []}`),
 				}},
+				config:   []byte(`{}`),
 				expected: 0,
 			},
 			{
@@ -51,6 +57,7 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 					Identifiers: []string{"foo"},
 					Config:      []byte(`{"recovery_codes": [{}]}`),
 				}},
+				config:   []byte(`{}`),
 				expected: 1,
 			},
 			{
@@ -58,14 +65,28 @@ func TestCountActiveFirstFactorCredentials(t *testing.T) {
 					Type:   strategy.ID(),
 					Config: []byte(`{}`),
 				}},
+				config:   []byte(`{}`),
 				expected: 0,
 			},
 			{
 				in:       nil,
+				config:   []byte(`{}`),
 				expected: 0,
 			},
+			// fandom-start
+			{
+				in: map[identity.CredentialsType]identity.Credentials{strategy.ID(): {
+					Type:        strategy.ID(),
+					Identifiers: []string{"foo"},
+					Config:      []byte(`{"recovery_codes": [{}]}`),
+				}},
+				config:   []byte(`{"enabled_only_in_2fa": true}`),
+				expected: 0,
+			},
+			// fandom-end
 		} {
 			t.Run(fmt.Sprintf("case=%d", k), func(t *testing.T) {
+				conf.MustSet(ctx, fmt.Sprintf("%s.%s.config", config.ViperKeySelfServiceStrategyConfig, strategy.ID()), tc.config)
 				actual, err := strategy.CountActiveMultiFactorCredentials(tc.in)
 				require.NoError(t, err)
 				assert.Equal(t, tc.expected, actual)

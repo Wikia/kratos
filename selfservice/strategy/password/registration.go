@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/ory/x/otelx"
+
 	"github.com/ory/kratos/text"
 
 	"github.com/pkg/errors"
@@ -56,13 +58,11 @@ type UpdateRegistrationFlowWithPasswordMethod struct {
 func (s *Strategy) RegisterRegistrationRoutes(*x.RouterPublic) {
 }
 
-func (s *Strategy) handleRegistrationError(_ http.ResponseWriter, r *http.Request, f *registration.Flow, p *UpdateRegistrationFlowWithPasswordMethod, err error) error {
+func (s *Strategy) handleRegistrationError(r *http.Request, f *registration.Flow, p UpdateRegistrationFlowWithPasswordMethod, err error) error {
 	if f != nil {
-		if p != nil {
-			for _, n := range container.NewFromJSON("", node.ProfileGroup, p.Traits, "traits").Nodes {
-				// we only set the value and not the whole field because we want to keep types from the initial form generation
-				f.UI.Nodes.SetValueAttribute(n.ID(), n.Attributes.GetValue())
-			}
+		for _, n := range container.NewFromJSON("", node.ProfileGroup, p.Traits, "traits").Nodes {
+			// we only set the value and not the whole field because we want to keep types from the initial form generation
+			f.UI.Nodes.SetValueAttribute(n.ID(), n.Attributes.GetValue())
 		}
 
 		if f.Type == flow.TypeBrowser {
@@ -73,28 +73,31 @@ func (s *Strategy) handleRegistrationError(_ http.ResponseWriter, r *http.Reques
 	return err
 }
 
-func (s *Strategy) decode(p *UpdateRegistrationFlowWithPasswordMethod, r *http.Request) error {
+func (s *Strategy) decode(p *UpdateRegistrationFlowWithPasswordMethod, r *http.Request) (err error) {
 	return registration.DecodeBody(p, r, s.hd, s.d.Config(), registrationSchema)
 }
 
-func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registration.Flow, i *identity.Identity) (err error) {
+func (s *Strategy) Register(_ http.ResponseWriter, r *http.Request, f *registration.Flow, i *identity.Identity) (err error) {
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.password.strategy.Register")
+	defer otelx.End(span, &err)
+
 	if err := flow.MethodEnabledAndAllowedFromRequest(r, f.GetFlowName(), s.ID().String(), s.d); err != nil {
 		return err
 	}
 
 	var p UpdateRegistrationFlowWithPasswordMethod
 	if err := s.decode(&p, r); err != nil {
-		return s.handleRegistrationError(w, r, f, &p, err)
+		return s.handleRegistrationError(r, f, p, err)
 	}
 
 	f.TransientPayload = p.TransientPayload
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
-		return s.handleRegistrationError(w, r, f, &p, err)
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+		return s.handleRegistrationError(r, f, p, err)
 	}
 
 	if len(p.Password) == 0 {
-		return s.handleRegistrationError(w, r, f, &p, schema.NewRequiredError("#/password", "password"))
+		return s.handleRegistrationError(r, f, p, schema.NewRequiredError("#/password", "password"))
 	}
 
 	if len(p.Traits) == 0 {
@@ -107,7 +110,7 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 		defer close(hpw)
 		defer close(errC)
 
-		h, err := s.d.Hasher(r.Context()).Generate(r.Context(), []byte(p.Password))
+		h, err := s.d.Hasher(ctx).Generate(ctx, []byte(p.Password))
 		if err != nil {
 			errC <- err
 			return
@@ -116,27 +119,27 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	}()
 
 	if err != nil {
-		return s.handleRegistrationError(w, r, f, &p, err)
+		return s.handleRegistrationError(r, f, p, err)
 	}
 
 	i.Traits = identity.Traits(p.Traits)
 	// We have to set the credential here, so the identity validator can populate the identifiers.
 	// The password hash is computed in parallel and set later.
 	if err := i.SetCredentialsWithConfig(s.ID(), identity.Credentials{Type: s.ID(), Identifiers: []string{}}, json.RawMessage("{}")); err != nil {
-		return s.handleRegistrationError(w, r, f, &p, err)
+		return s.handleRegistrationError(r, f, p, err)
 	}
 
-	if err := s.validateCredentials(r.Context(), i, p.Password); err != nil {
-		return s.handleRegistrationError(w, r, f, &p, err)
+	if err := s.validateCredentials(ctx, i, p.Password); err != nil {
+		return s.handleRegistrationError(r, f, p, err)
 	}
 
 	select {
 	case err := <-errC:
-		return s.handleRegistrationError(w, r, f, &p, err)
+		return s.handleRegistrationError(r, f, p, err)
 	case h := <-hpw:
 		co, err := json.Marshal(&identity.CredentialsPassword{HashedPassword: string(h)})
 		if err != nil {
-			return s.handleRegistrationError(w, r, f, &p, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode password options to JSON: %s", err)))
+			return s.handleRegistrationError(r, f, p, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode password options to JSON: %s", err)))
 		}
 		i.UpsertCredentialsConfig(s.ID(), co, 0)
 	}
@@ -144,7 +147,10 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, f *registrat
 	return nil
 }
 
-func (s *Strategy) validateCredentials(ctx context.Context, i *identity.Identity, pw string) error {
+func (s *Strategy) validateCredentials(ctx context.Context, i *identity.Identity, pw string) (err error) {
+	ctx, span := s.d.Tracer(ctx).Tracer().Start(ctx, "selfservice.strategy.password.strategy.validateCredentials")
+	defer otelx.End(span, &err)
+
 	if err := s.d.IdentityValidator().Validate(ctx, i); err != nil {
 		return err
 	}

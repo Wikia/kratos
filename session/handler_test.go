@@ -308,7 +308,7 @@ func TestSessionWhoAmI(t *testing.T) {
 
 				i := identity.Identity{Traits: []byte("{}"), State: identity.StateActive}
 				require.NoError(t, reg.PrivilegedIdentityPool().CreateIdentity(context.Background(), &i))
-				s, err := session.NewActiveSession(&i, conf, time.Now(), identity.CredentialsTypePassword)
+				s, err := testhelpers.NewActiveSession(&i, conf, time.Now(), identity.CredentialsTypePassword)
 				require.NoError(t, err)
 				require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), s))
 				require.NotEmpty(t, s.Token)
@@ -615,7 +615,7 @@ func TestHandlerAdminSessionManagement(t *testing.T) {
 		})
 
 		t.Run("should redirect to public for whoami", func(t *testing.T) {
-			client := testhelpers.NewHTTPClientWithSessionToken(t, reg, s)
+			client := testhelpers.NewHTTPClientWithSessionToken(t, ctx, reg, s)
 			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			}

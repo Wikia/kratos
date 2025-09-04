@@ -43,7 +43,7 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 	f.UI.
 		GetNodes().
 		Append(node.NewInputField("method", s.RecoveryStrategyID(), node.CodeGroup, node.InputAttributeTypeSubmit).
-			WithMetaLabel(text.NewInfoNodeLabelSubmit()))
+			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	return nil
 }
@@ -91,7 +91,7 @@ type updateRecoveryFlowWithCodeMethod struct {
 	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
 }
 
-func (s Strategy) isCodeFlow(f *recovery.Flow) bool {
+func (s *Strategy) isCodeFlow(f *recovery.Flow) bool {
 	value, err := f.Active.Value()
 	if err != nil {
 		return false
@@ -100,11 +100,12 @@ func (s Strategy) isCodeFlow(f *recovery.Flow) bool {
 }
 
 func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.Flow) (err error) {
-	ctx, span := s.deps.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.code.strategy.Recover")
+	ctx, span := s.deps.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.code.Strategy.Recover")
 	span.SetAttributes(attribute.String("selfservice_flows_recovery_use", s.deps.Config().SelfServiceFlowRecoveryUse(ctx)))
 	defer otelx.End(span, &err)
 
 	if !s.isCodeFlow(f) {
+		span.SetAttributes(attribute.String("not_responsible_reason", "not code flow"))
 		return errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
 
@@ -190,9 +191,9 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlow(w, r, f.Type, RetryWithError(err))
 	}
 
-	sess, err := session.NewActiveSession(r, id, s.deps.Config(), time.Now().UTC(),
-		identity.CredentialsTypeRecoveryCode, identity.AuthenticatorAssuranceLevel1)
-	if err != nil {
+	sess := session.NewInactiveSession()
+	sess.CompletedLoginFor(identity.CredentialsTypeRecoveryCode, identity.AuthenticatorAssuranceLevel1)
+	if err := s.deps.SessionManager().ActivateSession(r, sess, id, time.Now().UTC()); err != nil {
 		return s.retryRecoveryFlow(w, r, f.Type, RetryWithError(err))
 	}
 
@@ -235,12 +236,13 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 	}
 
 	if s.deps.Config().UseContinueWithTransitions(ctx) {
+		redirectTo := sf.AppendTo(s.deps.Config().SelfServiceFlowSettingsUI(r.Context())).String()
 		switch {
 		case f.Type.IsAPI(), x.IsJSONRequest(r):
-			f.ContinueWith = append(f.ContinueWith, flow.NewContinueWithSettingsUI(sf))
+			f.ContinueWith = append(f.ContinueWith, flow.NewContinueWithSettingsUI(sf, redirectTo))
 			s.deps.Writer().Write(w, r, f)
 		default:
-			http.Redirect(w, r, sf.AppendTo(s.deps.Config().SelfServiceFlowSettingsUI(r.Context())).String(), http.StatusSeeOther)
+			http.Redirect(w, r, redirectTo, http.StatusSeeOther)
 		}
 	} else {
 		if x.IsJSONRequest(r) {
@@ -405,6 +407,7 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 	f.UI.Nodes.Append(node.NewInputField("code", nil, node.CodeGroup, node.InputAttributeTypeText, node.WithInputAttributes(func(a *node.InputAttributes) {
 		a.Required = true
 		a.Pattern = "[0-9]+"
+		a.MaxLength = CodeLength
 	})).
 		WithMetaLabel(text.NewInfoNodeLabelRecoveryCode()),
 	)
@@ -413,7 +416,7 @@ func (s *Strategy) recoveryHandleFormSubmission(w http.ResponseWriter, r *http.R
 	f.UI.
 		GetNodes().
 		Append(node.NewInputField("method", s.RecoveryStrategyID(), node.CodeGroup, node.InputAttributeTypeSubmit).
-			WithMetaLabel(text.NewInfoNodeLabelSubmit()))
+			WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	f.UI.Nodes.Append(node.NewInputField("email", body.Email, node.CodeGroup, node.InputAttributeTypeSubmit).
 		WithMetaLabel(text.NewInfoNodeResendOTP()),

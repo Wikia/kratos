@@ -53,6 +53,7 @@ type (
 		config.Provider
 		hydra.Provider
 		identity.PrivilegedPoolProvider
+		identity.ManagementProvider
 		session.ManagementProvider
 		session.PersistenceProvider
 		x.CSRFTokenGeneratorProvider
@@ -141,7 +142,7 @@ func (e *HookExecutor) PostLoginHook(
 		return err
 	}
 
-	if err := s.Activate(r, i, e.d.Config(), time.Now().UTC()); err != nil {
+	if err := e.d.SessionManager().ActivateSession(r, s, i, time.Now().UTC()); err != nil {
 		return err
 	}
 
@@ -163,6 +164,10 @@ func (e *HookExecutor) PostLoginHook(
 		"flow_type":       string(flow.TypeBrowser),
 		"redirect_reason": "login successful",
 	})...)
+
+	if f.Type == flow.TypeBrowser && x.IsJSONRequest(r) {
+		f.AddContinueWith(flow.NewContinueWithRedirectBrowserTo(returnTo.String()))
+	}
 
 	classified := s
 	s = s.Declassified()
@@ -270,7 +275,7 @@ func (e *HookExecutor) PostLoginHook(
 		s.Token = ""
 
 		// If we detect that whoami would require a higher AAL, we redirect!
-		if _, err := e.requiresAAL2(r, s, f); err != nil {
+		if _, err := e.requiresAAL2(r, classified, f); err != nil {
 			if aalErr := new(session.ErrAALNotSatisfied); errors.As(err, &aalErr) {
 				span.SetAttributes(attribute.String("return_to", aalErr.RedirectTo), attribute.String("redirect_reason", "requires aal2"))
 				e.d.Writer().WriteError(w, r, flow.NewBrowserLocationChangeRequiredError(aalErr.RedirectTo))
@@ -306,7 +311,7 @@ func (e *HookExecutor) PostLoginHook(
 	}
 
 	// If we detect that whoami would require a higher AAL, we redirect!
-	if _, err := e.requiresAAL2(r, s, f); err != nil {
+	if _, err := e.requiresAAL2(r, classified, f); err != nil {
 		if aalErr := new(session.ErrAALNotSatisfied); errors.As(err, &aalErr) {
 			http.Redirect(w, r, aalErr.RedirectTo, http.StatusSeeOther)
 			return nil
@@ -384,7 +389,7 @@ func (e *HookExecutor) maybeLinkCredentials(ctx context.Context, sess *session.S
 		return err
 	}
 
-	method := strategy.CompletedAuthenticationMethod(ctx, sess.AMR)
+	method := strategy.CompletedAuthenticationMethod(ctx)
 	sess.CompletedLoginForMethod(method)
 
 	return nil

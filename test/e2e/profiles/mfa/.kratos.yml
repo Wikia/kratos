@@ -27,6 +27,8 @@ selfservice:
       ui_url: http://localhost:4455/recovery
 
   methods:
+    code:
+      mfa_enabled: true
     totp:
       enabled: true
       config:
@@ -44,7 +46,7 @@ selfservice:
 identity:
   schemas:
     - id: default
-      url: file://test/e2e/profiles/email/identity.traits.schema.json
+      url: file://test/e2e/profiles/mfa/identity.traits.schema.json
 
 session:
   whoami:

@@ -12,18 +12,15 @@ import (
 	"time"
 
 	"github.com/samber/lo"
-
+	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 
-	"github.com/tidwall/gjson"
-
-	"github.com/ory/kratos/cipher"
-
 	"github.com/ory/herodot"
+	"github.com/ory/kratos/cipher"
+	"github.com/ory/kratos/driver/config"
 	"github.com/ory/x/pagination/keysetpagination"
 	"github.com/ory/x/sqlxx"
 
-	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/x"
 
 	"github.com/gofrs/uuid"
@@ -69,9 +66,17 @@ type Identity struct {
 	// Credentials represents all credentials that can be used for authenticating this identity.
 	Credentials map[CredentialsType]Credentials `json:"credentials,omitempty" faker:"-" db:"-"`
 
-	// AvailableAAL defines the maximum available AAL for this identity. If the user has only a password
-	// configured, the AAL will be 1. If the user has a password and a TOTP configured, the AAL will be 2.
-	AvailableAAL NullableAuthenticatorAssuranceLevel `json:"-" faker:"-" db:"available_aal"`
+	// InternalAvailableAAL defines the maximum available AAL for this identity.
+	//
+	// - If the user has at least one two-factor authentication method configured, the AAL will be 2.
+	// - If the user has only a password configured, the AAL will be 1.
+	//
+	// This field is AAL2 as soon as a second factor credential is found. A first factor is not required for this
+	// field to return `aal2`.
+	//
+	// This field is primarily used to determine whether the user needs to upgrade to AAL2 without having to check
+	// all the credentials in the database. Use with caution!
+	InternalAvailableAAL NullableAuthenticatorAssuranceLevel `json:"-" faker:"-" db:"available_aal"`
 
 	// // IdentifierCredentials contains the access and refresh token for oidc identifier
 	// IdentifierCredentials []IdentifierCredential `json:"identifier_credentials,omitempty" faker:"-" db:"-"`
@@ -352,24 +357,27 @@ func (i *Identity) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// SetAvailableAAL sets the InternalAvailableAAL field based on the credentials stored in the identity.
+//
+// If a second factor is set up, the AAL will be set to 2. If only a first factor is set up, the AAL will be set to 1.
+//
+// A first factor is NOT required for the AAL to be set to 2 if a second factor is set up.
 func (i *Identity) SetAvailableAAL(ctx context.Context, m *Manager) (err error) {
-	i.AvailableAAL = NewNullableAuthenticatorAssuranceLevel(NoAuthenticatorAssuranceLevel)
-	if c, err := m.CountActiveFirstFactorCredentials(ctx, i); err != nil {
-		return err
-	} else if c == 0 {
-		// No first factor set up - AAL is 0
-		return nil
-	}
-
-	i.AvailableAAL = NewNullableAuthenticatorAssuranceLevel(AuthenticatorAssuranceLevel1)
 	if c, err := m.CountActiveMultiFactorCredentials(ctx, i); err != nil {
 		return err
-	} else if c == 0 {
-		// No second factor set up - AAL is 1
+	} else if c > 0 {
+		i.InternalAvailableAAL = NewNullableAuthenticatorAssuranceLevel(AuthenticatorAssuranceLevel2)
 		return nil
 	}
 
-	i.AvailableAAL = NewNullableAuthenticatorAssuranceLevel(AuthenticatorAssuranceLevel2)
+	if c, err := m.CountActiveFirstFactorCredentials(ctx, i); err != nil {
+		return err
+	} else if c > 0 {
+		i.InternalAvailableAAL = NewNullableAuthenticatorAssuranceLevel(AuthenticatorAssuranceLevel1)
+		return nil
+	}
+
+	i.InternalAvailableAAL = NewNullableAuthenticatorAssuranceLevel(NoAuthenticatorAssuranceLevel)
 	return nil
 }
 
@@ -514,6 +522,80 @@ func (i *Identity) WithDeclassifiedCredentials(ctx context.Context, c cipher.Pro
 	return &ii, nil
 }
 
+func (i *Identity) deleteCredentialWebAuthFromIdentity() error {
+	cred, ok := i.GetCredentials(CredentialsTypeWebAuthn)
+	if !ok {
+		// This should never happend as it's checked earlier in the code;
+		// But we never know...
+		return errors.WithStack(herodot.ErrNotFound.WithReasonf("You tried to remove a WebAuthn credential but this user has no such credential set up."))
+	}
+
+	var cc CredentialsWebAuthnConfig
+	if err := json.Unmarshal(cred.Config, &cc); err != nil {
+		// Database has been tampered or the json schema are incompatible (migration issue);
+		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to decode identity credentials.").WithDebug(err.Error()))
+	}
+
+	updated := make([]CredentialWebAuthn, 0)
+	for k, cred := range cc.Credentials {
+		if cred.IsPasswordless {
+			updated = append(updated, cc.Credentials[k])
+		}
+	}
+
+	if len(updated) == 0 {
+		i.DeleteCredentialsType(CredentialsTypeWebAuthn)
+		return nil
+	}
+
+	cc.Credentials = updated
+	message, err := json.Marshal(cc)
+	if err != nil {
+		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode identity credentials.").WithDebug(err.Error()))
+	}
+
+	cred.Config = message
+	i.SetCredentials(CredentialsTypeWebAuthn, *cred)
+	return nil
+}
+
+func (i *Identity) deleteCredentialOIDCFromIdentity(identifierToDelete string) error {
+	if identifierToDelete == "" {
+		return errors.WithStack(herodot.ErrBadRequest.WithReasonf("You must provide an identifier to delete this credential."))
+	}
+	_, hasOIDC := i.GetCredentials(CredentialsTypeOIDC)
+	if !hasOIDC {
+		return errors.WithStack(herodot.ErrNotFound.WithReasonf("You tried to remove an OIDC credential but this user has no such credential set up."))
+	}
+	var oidcConfig CredentialsOIDC
+	creds, err := i.ParseCredentials(CredentialsTypeOIDC, &oidcConfig)
+	if err != nil {
+		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to decode identity credentials.").WithDebug(err.Error()))
+	}
+
+	var updatedIdentifiers []string
+	var updatedProviders []CredentialsOIDCProvider
+	var found bool
+	for _, cfg := range oidcConfig.Providers {
+		if identifierToDelete == OIDCUniqueID(cfg.Provider, cfg.Subject) {
+			found = true
+			continue
+		}
+		updatedIdentifiers = append(updatedIdentifiers, OIDCUniqueID(cfg.Provider, cfg.Subject))
+		updatedProviders = append(updatedProviders, cfg)
+	}
+	if !found {
+		return errors.WithStack(herodot.ErrNotFound.WithReasonf("The identifier `%s` was not found among OIDC credentials.", identifierToDelete))
+	}
+	creds.Identifiers = updatedIdentifiers
+	creds.Config, err = json.Marshal(&CredentialsOIDC{Providers: updatedProviders})
+	if err != nil {
+		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to encode identity credentials.").WithDebug(err.Error()))
+	}
+	i.Credentials[CredentialsTypeOIDC] = *creds
+	return nil
+}
+
 // Patch Identities Parameters
 //
 // swagger:parameters batchPatchIdentities
@@ -567,6 +649,9 @@ const (
 	// Create this identity.
 	ActionCreate BatchPatchAction = "create"
 
+	// Error indicates that the patch failed.
+	ActionError BatchPatchAction = "error"
+
 	// Future actions:
 	//
 	// Delete this identity.
@@ -599,4 +684,7 @@ type BatchIdentityPatchResponse struct {
 
 	// The ID of this patch response, if an ID was specified in the patch.
 	PatchID *uuid.UUID `json:"patch_id,omitempty"`
+
+	// The error message, if the action was "error".
+	Error *herodot.DefaultError `json:"error,omitempty"`
 }

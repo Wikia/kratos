@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.11.0"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/maps"
 	grpccodes "google.golang.org/grpc/codes"
 
 	"github.com/ory/herodot"
@@ -514,6 +516,8 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 			attribute.Bool("webhook.response.parse", parseResponse),
 		)
 
+		removeDisallowedHeaders(data)
+
 		req, err := builder.BuildRequest(ctx, data)
 		if errors.Is(err, request.ErrCancel) {
 			span.SetAttributes(attribute.Bool("webhook.jsonnet.canceled", true))
@@ -580,6 +584,37 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 		_ = makeRequest()
 	}()
 	return nil
+}
+
+// RequestHeaderAllowList contains the allowed request headers that are forwarded
+// to the web hook target in canonical form (textproto.CanonicalMIMEHeaderKey).
+var RequestHeaderAllowList = map[string]struct{}{
+	"Accept":             {},
+	"Accept-Encoding":    {},
+	"Accept-Language":    {},
+	"Content-Length":     {},
+	"Content-Type":       {},
+	"Origin":             {},
+	"Priority":           {},
+	"Referer":            {},
+	"Sec-Ch-Ua":          {},
+	"Sec-Ch-Ua-Mobile":   {},
+	"Sec-Ch-Ua-Platform": {},
+	"Sec-Fetch-Dest":     {},
+	"Sec-Fetch-Mode":     {},
+	"Sec-Fetch-Site":     {},
+	"Sec-Fetch-User":     {},
+	"True-Client-Ip":     {},
+	"User-Agent":         {},
+}
+
+func removeDisallowedHeaders(data *templateContext) {
+	headers := maps.Clone(data.RequestHeaders)
+	maps.DeleteFunc(headers, func(key string, _ []string) bool {
+		_, found := RequestHeaderAllowList[textproto.CanonicalMIMEHeaderKey(key)]
+		return !found
+	})
+	data.RequestHeaders = headers
 }
 
 func (e *WebHook) parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error) {

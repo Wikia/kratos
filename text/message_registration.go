@@ -16,13 +16,14 @@ func NewInfoRegistration() *Message {
 	}
 }
 
-func NewInfoRegistrationWith(provider string) *Message {
+func NewInfoRegistrationWith(provider string, providerID string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceRegistrationWith,
 		Text: fmt.Sprintf("Sign up with %s", provider),
 		Type: Info,
 		Context: context(map[string]any{
-			"provider": provider,
+			"provider":    provider,
+			"provider_id": providerID,
 		}),
 	}
 }
@@ -106,7 +107,7 @@ func NewErrorValidationRegistrationRetrySuccessful() *Message {
 func NewInfoSelfServiceRegistrationRegisterCode() *Message {
 	return &Message{
 		ID:   InfoSelfServiceRegistrationRegisterCode,
-		Text: "Sign up with code",
+		Text: "Send sign up code",
 		Type: Info,
 	}
 }

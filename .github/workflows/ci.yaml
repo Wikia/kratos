@@ -28,7 +28,7 @@ jobs:
       - sdk-generate
     services:
       postgres:
-        image: postgres:11.8
+        image: postgres:14
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: test
@@ -79,7 +79,7 @@ jobs:
           fetch-depth: 2
       - uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.23"
       - run: go list -json > go.list
       - name: Run nancy
         uses: sonatype-nexus-community/nancy-github-action@v1.0.2
@@ -88,13 +88,12 @@ jobs:
       - run: npm install
         name: Install node deps
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         env:
           GOGC: 100
         with:
           args: --timeout 10m0s
-          version: v1.56.2
-          skip-pkg-cache: true
+          version: v1.61.0
       - name: Build Kratos
         run: make install
       - name: Run go-acc (tests)
@@ -113,7 +112,7 @@ jobs:
       - sdk-generate
     services:
       postgres:
-        image: postgres:11.8
+        image: postgres:14
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: test
@@ -121,7 +120,7 @@ jobs:
         ports:
           - 5432:5432
       mysql:
-        image: mysql:5.7
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test
         ports:
@@ -171,7 +170,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.23"
 
       - name: Install selfservice-ui-react-native
         uses: actions/checkout@v3
@@ -212,9 +211,9 @@ jobs:
           REACT_UI_PATH: react-ui
           CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
       - if: failure()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: logs
+          name: cypress-${{ matrix.database }}-logs
           path: test/e2e/*.e2e.log
 
   test-e2e-playwright:
@@ -225,7 +224,7 @@ jobs:
       - sdk-generate
     services:
       postgres:
-        image: postgres:11.8
+        image: postgres:14
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: test
@@ -233,7 +232,7 @@ jobs:
         ports:
           - 5432:5432
       mysql:
-        image: mysql:5.7
+        image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: test
         ports:
@@ -276,7 +275,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.23"
       - run: go build -tags sqlite,json1 .
 
       - name: Install selfservice-ui-react-native
@@ -323,14 +322,14 @@ jobs:
           NODE_UI_PATH: node-ui
           REACT_UI_PATH: react-ui
       - if: failure()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: logs
+          name: playwright-${{ matrix.database }}-logs
           path: test/e2e/*.e2e.log
       - if: failure()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: playwright-test-results-${{ github.sha }}
+          name: playwright-test-results-${{ matrix.database }}-${{ github.sha }}
           path: |
             test/e2e/test-results/
             test/e2e/playwright-report/

@@ -1,7 +1,7 @@
 // Copyright © 2023 Ory Corp
 // SPDX-License-Identifier: Apache-2.0
 
-import { OryKratosConfiguration } from "./config"
+import { OryKratosConfiguration } from "../../shared/config"
 
 export class ConfigBuilder {
   constructor(readonly config: OryKratosConfiguration) {}
@@ -22,6 +22,11 @@ export class ConfigBuilder {
 
   public disableVerification() {
     this.config.selfservice.flows.verification.enabled = false
+    return this
+  }
+
+  public disableCodeMfa() {
+    this.config.selfservice.methods.code.mfa_enabled = false
     return this
   }
 
@@ -132,6 +137,13 @@ export class ConfigBuilder {
     this.config.session.whoami.required_aal = "aal1"
     return this
   }
+
+  public useHighestAvailable() {
+    this.config.selfservice.flows.settings.required_aal = "highest_available"
+    this.config.session.whoami.required_aal = "highest_available"
+    return this
+  }
+
   public enableCode() {
     this.config.selfservice.methods.code.enabled = true
     return this

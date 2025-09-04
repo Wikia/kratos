@@ -257,6 +257,14 @@ func NewErrorValidationInvalidCredentials() *Message {
 	}
 }
 
+func NewErrorValidationAccountNotFound() *Message {
+	return &Message{
+		ID:   ErrorValidationAccountNotFound,
+		Text: "This account does not exist or has no login method configured.",
+		Type: Error,
+	}
+}
+
 func NewErrorValidationDuplicateCredentials() *Message {
 	return &Message{
 		ID:   ErrorValidationDuplicateCredentials,
@@ -413,6 +421,14 @@ func NewErrorValidationTraitsMismatch() *Message {
 	return &Message{
 		ID:   ErrorValidationTraitsMismatch,
 		Text: "The provided traits do not match the traits previously associated with this flow.",
+		Type: Error,
+	}
+}
+
+func NewErrorCaptchaFailed() *Message {
+	return &Message{
+		ID:   ErrorValidationCaptchaError,
+		Text: "Captcha verification failed, please try again.",
 		Type: Error,
 	}
 }

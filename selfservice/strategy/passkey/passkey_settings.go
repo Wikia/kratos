@@ -4,12 +4,19 @@
 package passkey
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ory/x/otelx"
+
+	"github.com/ory/kratos/x/webauthnx/js"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -114,7 +121,9 @@ func (s *Strategy) PopulateSettingsMethod(r *http.Request, id *identity.Identity
 		node.PasskeyGroup,
 		node.InputAttributeTypeButton,
 		node.WithInputAttributes(func(a *node.InputAttributes) {
-			a.OnClick = "window.__oryPasskeySettingsRegistration()"
+			//nolint:staticcheck
+			a.OnClick = js.WebAuthnTriggersPasskeySettingsRegistration.String() + "()"
+			a.OnClickTrigger = js.WebAuthnTriggersPasskeySettingsRegistration
 		}),
 	).WithMetaLabel(text.NewInfoSelfServiceSettingsRegisterPasskey()))
 
@@ -156,36 +165,41 @@ func (s *Strategy) identityListWebAuthn(id *identity.Identity) (*identity.Creden
 	return &cc, nil
 }
 
-func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (*settings.UpdateContext, error) {
+func (s *Strategy) Settings(w http.ResponseWriter, r *http.Request, f *settings.Flow, ss *session.Session) (_ *settings.UpdateContext, err error) {
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.passkey.strategy.Settings")
+	defer otelx.End(span, &err)
+
 	if f.Type != flow.TypeBrowser {
+		span.SetAttributes(attribute.String("not_responsible_reason", "not a browser flow"))
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
 	var p updateSettingsFlowWithPasskeyMethod
 	ctxUpdate, err := settings.PrepareUpdate(s.d, w, r, f, ss, settings.ContinuityKey(s.SettingsStrategyID()), &p)
 	if errors.Is(err, settings.ErrContinuePreviousAction) {
-		return ctxUpdate, s.continueSettingsFlow(w, r, ctxUpdate, &p)
+		return ctxUpdate, s.continueSettingsFlow(ctx, w, r, ctxUpdate, p)
 	} else if err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		return ctxUpdate, s.handleSettingsError(ctx, w, r, ctxUpdate, p, err)
 	}
 
 	if err := s.decodeSettingsFlow(r, &p); err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		return ctxUpdate, s.handleSettingsError(ctx, w, r, ctxUpdate, p, err)
 	}
 
-	if len(p.Register+p.Remove) > 0 {
+	if len(p.Register)+len(p.Remove) > 0 {
 		// This method has only two submit buttons
 		p.Method = s.SettingsStrategyID()
-		if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
-			return nil, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+		if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
+			return nil, s.handleSettingsError(ctx, w, r, ctxUpdate, p, err)
 		}
 	} else {
+		span.SetAttributes(attribute.String("not_responsible_reason", "neither register nor remove provided"))
 		return nil, errors.WithStack(flow.ErrStrategyNotResponsible)
 	}
 
 	// This does not come from the payload!
 	p.Flow = ctxUpdate.Flow.ID.String()
-	if err := s.continueSettingsFlow(w, r, ctxUpdate, &p); err != nil {
-		return ctxUpdate, s.handleSettingsError(w, r, ctxUpdate, &p, err)
+	if err := s.continueSettingsFlow(ctx, w, r, ctxUpdate, p); err != nil {
+		return ctxUpdate, s.handleSettingsError(ctx, w, r, ctxUpdate, p, err)
 	}
 
 	return ctxUpdate, nil
@@ -231,19 +245,20 @@ func (p *updateSettingsFlowWithPasskeyMethod) SetFlowID(rid uuid.UUID) {
 }
 
 func (s *Strategy) continueSettingsFlow(
+	ctx context.Context,
 	w http.ResponseWriter, r *http.Request,
-	ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithPasskeyMethod,
+	ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithPasskeyMethod,
 ) error {
 	if len(p.Register+p.Remove) > 0 {
-		if err := flow.MethodEnabledAndAllowed(r.Context(), flow.SettingsFlow, s.SettingsStrategyID(), s.SettingsStrategyID(), s.d); err != nil {
+		if err := flow.MethodEnabledAndAllowed(ctx, flow.SettingsFlow, s.SettingsStrategyID(), s.SettingsStrategyID(), s.d); err != nil {
 			return err
 		}
 
-		if err := flow.EnsureCSRF(s.d, r, ctxUpdate.Flow.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+		if err := flow.EnsureCSRF(s.d, r, ctxUpdate.Flow.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 			return err
 		}
 
-		if ctxUpdate.Session.AuthenticatedAt.Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(r.Context())).Before(time.Now()) {
+		if ctxUpdate.Session.AuthenticatedAt.Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(ctx)).Before(time.Now()) {
 			return errors.WithStack(settings.NewFlowNeedsReAuth())
 		}
 	} else {
@@ -252,16 +267,16 @@ func (s *Strategy) continueSettingsFlow(
 
 	switch {
 	case len(p.Remove) > 0:
-		return s.continueSettingsFlowRemove(w, r, ctxUpdate, p)
+		return s.continueSettingsFlowRemove(ctx, w, r, ctxUpdate, p)
 	case len(p.Register) > 0:
-		return s.continueSettingsFlowAdd(r, ctxUpdate, p)
+		return s.continueSettingsFlowAdd(ctx, ctxUpdate, p)
 	default:
 		return errors.New("ended up in unexpected state")
 	}
 }
 
-func (s *Strategy) continueSettingsFlowRemove(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithPasskeyMethod) error {
-	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), ctxUpdate.Session.IdentityID)
+func (s *Strategy) continueSettingsFlowRemove(ctx context.Context, w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithPasskeyMethod) error {
+	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.IdentityID)
 	if err != nil {
 		return err
 	}
@@ -287,13 +302,13 @@ func (s *Strategy) continueSettingsFlowRemove(w http.ResponseWriter, r *http.Req
 		return errors.WithStack(herodot.ErrBadRequest.WithReasonf("You tried to remove a passkey which does not exist."))
 	}
 
-	count, err := s.d.IdentityManager().CountActiveFirstFactorCredentials(r.Context(), i)
+	count, err := s.d.IdentityManager().CountActiveFirstFactorCredentials(ctx, i)
 	if err != nil {
 		return err
 	}
 
 	if count < 2 {
-		return s.handleSettingsError(w, r, ctxUpdate, p, errors.WithStack(webauthnx.ErrNotEnoughCredentials))
+		return s.handleSettingsError(ctx, w, r, ctxUpdate, p, errors.WithStack(webauthnx.ErrNotEnoughCredentials))
 	}
 
 	if len(updated) == 0 {
@@ -313,7 +328,7 @@ func (s *Strategy) continueSettingsFlowRemove(w http.ResponseWriter, r *http.Req
 	return nil
 }
 
-func (s *Strategy) continueSettingsFlowAdd(r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithPasskeyMethod) error {
+func (s *Strategy) continueSettingsFlowAdd(ctx context.Context, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithPasskeyMethod) error {
 	webAuthnSession := gjson.GetBytes(ctxUpdate.Flow.InternalContext, flow.PrefixInternalContextKey(s.ID(), InternalContextKeySessionData))
 	if !webAuthnSession.IsObject() {
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Expected WebAuthN in internal context to be an object."))
@@ -329,7 +344,7 @@ func (s *Strategy) continueSettingsFlowAdd(r *http.Request, ctxUpdate *settings.
 		return errors.WithStack(herodot.ErrBadRequest.WithReasonf("Unable to parse WebAuthn response: %s", err))
 	}
 
-	web, err := webauthn.New(s.d.Config().PasskeyConfig(r.Context()))
+	web, err := webauthn.New(s.d.Config().PasskeyConfig(ctx))
 	if err != nil {
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to get webAuthn config.").WithDebug(err.Error()))
 	}
@@ -342,7 +357,7 @@ func (s *Strategy) continueSettingsFlowAdd(r *http.Request, ctxUpdate *settings.
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to create WebAuthn credential: %s", err))
 	}
 
-	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), ctxUpdate.Session.IdentityID)
+	i, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, ctxUpdate.Session.IdentityID)
 	if err != nil {
 		return err
 	}
@@ -363,7 +378,7 @@ func (s *Strategy) continueSettingsFlowAdd(r *http.Request, ctxUpdate *settings.
 	}
 
 	i.UpsertCredentialsConfig(s.ID(), credentialsConfig, 1, identity.WithAdditionalIdentifier(string(webAuthnSess.UserID)))
-	if err := s.validateCredentials(r.Context(), i); err != nil {
+	if err := s.validateCredentials(ctx, i); err != nil {
 		return err
 	}
 
@@ -373,14 +388,14 @@ func (s *Strategy) continueSettingsFlowAdd(r *http.Request, ctxUpdate *settings.
 		return err
 	}
 
-	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(r.Context(), ctxUpdate.Flow); err != nil {
+	if err := s.d.SettingsFlowPersister().UpdateSettingsFlow(ctx, ctxUpdate.Flow); err != nil {
 		return err
 	}
 
 	aal := identity.AuthenticatorAssuranceLevel1
 
 	// Since we added the method, it also means that we have authenticated it
-	if err := s.d.SessionManager().SessionAddAuthenticationMethods(r.Context(), ctxUpdate.Session.ID, session.AuthenticationMethod{
+	if err := s.d.SessionManager().SessionAddAuthenticationMethods(ctx, ctxUpdate.Session.ID, session.AuthenticationMethod{
 		Method: s.ID(),
 		AAL:    aal,
 	}); err != nil {
@@ -398,16 +413,17 @@ func (s *Strategy) decodeSettingsFlow(r *http.Request, dest interface{}) error {
 	}
 
 	return decoderx.NewHTTP().Decode(r, dest, compiler,
+		decoderx.HTTPKeepRequestBody(true),
 		decoderx.HTTPDecoderAllowedMethods("POST", "GET"),
 		decoderx.HTTPDecoderSetValidatePayloads(true),
 		decoderx.HTTPDecoderJSONFollowsFormFormat(),
 	)
 }
 
-func (s *Strategy) handleSettingsError(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithPasskeyMethod, err error) error {
+func (s *Strategy) handleSettingsError(ctx context.Context, w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p updateSettingsFlowWithPasskeyMethod, err error) error {
 	// Do not pause flow if the flow type is an API flow as we can't save cookies in those flows.
 	if e := new(settings.FlowNeedsReAuth); errors.As(err, &e) && ctxUpdate.Flow != nil && ctxUpdate.Flow.Type == flow.TypeBrowser {
-		if err := s.d.ContinuityManager().Pause(r.Context(), w, r, settings.ContinuityKey(s.SettingsStrategyID()), settings.ContinuityOptions(p, ctxUpdate.GetSessionIdentity())...); err != nil {
+		if err := s.d.ContinuityManager().Pause(ctx, w, r, settings.ContinuityKey(s.SettingsStrategyID()), settings.ContinuityOptions(p, ctxUpdate.GetSessionIdentity())...); err != nil {
 			return err
 		}
 	}

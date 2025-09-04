@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/selfservice/strategy/idfirst"
+
 	"github.com/cenkalti/backoff"
 	"github.com/dgraph-io/ristretto"
 	"github.com/gobuffalo/pop/v6"
@@ -332,6 +334,7 @@ func (m *RegistryDefault) selfServiceStrategies() []any {
 				passkey.NewStrategy(m),
 				webauthn.NewStrategy(m),
 				lookup.NewStrategy(m),
+				idfirst.NewStrategy(m),
 			}
 		}
 	}
@@ -387,6 +390,7 @@ nextStrategy:
 					continue nextStrategy
 				}
 			}
+
 			if m.strategyLoginEnabled(ctx, s.ID().String()) {
 				loginStrategies = append(loginStrategies, s)
 			}
@@ -490,11 +494,11 @@ func (m *RegistryDefault) Cipher(ctx context.Context) cipher.Cipher {
 	if m.crypter == nil {
 		switch m.c.CipherAlgorithm(ctx) {
 		case "xchacha20-poly1305":
-			m.crypter = cipher.NewCryptChaCha20(m)
+			m.crypter = cipher.NewCryptChaCha20(m.Config())
 		case "aes":
-			m.crypter = cipher.NewCryptAES(m)
+			m.crypter = cipher.NewCryptAES(m.Config())
 		default:
-			m.crypter = cipher.NewNoop(m)
+			m.crypter = cipher.NewNoop()
 			m.l.Logger.Warning("No encryption configuration found. The default algorithm (noop) will be used, resulting in sensitive data being stored in plaintext")
 		}
 	}
@@ -808,6 +812,10 @@ func (m *RegistryDefault) RegistrationCodePersister() code.RegistrationCodePersi
 }
 
 func (m *RegistryDefault) LoginCodePersister() code.LoginCodePersister {
+	return m.Persister()
+}
+
+func (m *RegistryDefault) TransactionalPersisterProvider() x.TransactionalPersister {
 	return m.Persister()
 }
 

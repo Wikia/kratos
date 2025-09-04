@@ -11,6 +11,12 @@ import (
 	"net/url"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/ory/x/otelx"
+
+	"github.com/ory/kratos/x/webauthnx/js"
+
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pkg/errors"
@@ -95,9 +101,11 @@ func (s *Strategy) decode(r *http.Request) (*updateRegistrationFlowWithPasskeyMe
 }
 
 func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, regFlow *registration.Flow, ident *identity.Identity) (err error) {
-	ctx := r.Context()
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.passkey.strategy.Register")
+	defer otelx.End(span, &err)
 
 	if regFlow.Type != flow.TypeBrowser {
+		span.SetAttributes(attribute.String("not_responsible_reason", "flow type is not browser"))
 		return flow.ErrStrategyNotResponsible
 	}
 
@@ -110,6 +118,7 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, regFlow *reg
 
 	if params.Register == "" ||
 		params.Register == "true" { // The React SDK sends "true" on empty values, so we ignore these.
+		span.SetAttributes(attribute.String("not_responsible_reason", "register is empty"))
 		return flow.ErrStrategyNotResponsible
 	}
 
@@ -138,7 +147,7 @@ func (s *Strategy) Register(w http.ResponseWriter, r *http.Request, regFlow *reg
 			herodot.ErrInternalServerError.WithReasonf("Expected WebAuthN in internal context to be an object but got: %s", err)))
 	}
 
-	if webAuthnSess.UserID == nil || len(webAuthnSess.UserID) == 0 {
+	if len(webAuthnSess.UserID) == 0 {
 		return s.handleRegistrationError(w, r, regFlow, params, errors.WithStack(
 			herodot.ErrInternalServerError.WithReasonf("Expected WebAuthN session data to contain a user ID")))
 	}
@@ -280,9 +289,10 @@ func (s *Strategy) PopulateRegistrationMethod(r *http.Request, regFlow *registra
 		Group: node.PasskeyGroup,
 		Meta:  &node.Meta{Label: text.NewInfoSelfServiceRegistrationRegisterPasskey()},
 		Attributes: &node.InputAttributes{
-			Name:    node.PasskeyRegisterTrigger,
-			Type:    node.InputAttributeTypeButton,
-			OnClick: "window.__oryPasskeyRegistration()", // defined in webauthn.js
+			Name:           node.PasskeyRegisterTrigger,
+			Type:           node.InputAttributeTypeButton,
+			OnClick:        js.WebAuthnTriggersPasskeyRegistration.String() + "()", // defined in webauthn.js
+			OnClickTrigger: js.WebAuthnTriggersPasskeyRegistration,
 		}})
 
 	// Passkey nodes end

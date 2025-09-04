@@ -4,10 +4,20 @@
 package passkey
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ory/x/otelx"
+
+	"github.com/ory/kratos/selfservice/strategy/idfirst"
+
+	"github.com/ory/kratos/x/webauthnx/js"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -29,23 +39,13 @@ import (
 	"github.com/ory/x/decoderx"
 )
 
+var _ login.FormHydrator = new(Strategy)
+
 func (s *Strategy) RegisterLoginRoutes(r *x.RouterPublic) {
 	webauthnx.RegisterWebauthnRoute(r)
 }
 
-func (s *Strategy) PopulateLoginMethod(r *http.Request, aal identity.AuthenticatorAssuranceLevel, sr *login.Flow) error {
-	if sr.Type != flow.TypeBrowser || aal != identity.AuthenticatorAssuranceLevel1 {
-		return nil
-	}
-
-	return s.populateLoginMethodForPasskeys(r, sr)
-}
-
 func (s *Strategy) populateLoginMethodForPasskeys(r *http.Request, loginFlow *login.Flow) error {
-	if loginFlow.IsForced() {
-		return s.populateLoginMethodForRefresh(r, loginFlow)
-	}
-
 	ctx := r.Context()
 
 	loginFlow.UI.SetCSRF(s.d.GenerateCSRFToken(r))
@@ -100,7 +100,8 @@ func (s *Strategy) populateLoginMethodForPasskeys(r *http.Request, loginFlow *lo
 			Name:       node.PasskeyChallenge,
 			Type:       node.InputAttributeTypeHidden,
 			FieldValue: string(injectWebAuthnOptions),
-		}})
+		},
+	})
 
 	loginFlow.UI.Nodes.Upsert(webauthnx.NewWebAuthnScript(s.d.Config().SelfPublicURL(ctx)))
 
@@ -109,122 +110,12 @@ func (s *Strategy) populateLoginMethodForPasskeys(r *http.Request, loginFlow *lo
 		Group: node.PasskeyGroup,
 		Meta:  &node.Meta{},
 		Attributes: &node.InputAttributes{
-			Name: node.PasskeyLogin,
-			Type: node.InputAttributeTypeHidden,
-		}})
-
-	loginFlow.UI.Nodes.Append(node.NewInputField(
-		node.PasskeyLoginTrigger,
-		"",
-		node.PasskeyGroup,
-		node.InputAttributeTypeButton,
-		node.WithInputAttributes(func(attr *node.InputAttributes) {
-			attr.OnClick = "window.__oryPasskeyLogin()"                // this function is defined in webauthn.js
-			attr.OnLoad = "window.__oryPasskeyLoginAutocompleteInit()" // same here
-		}),
-	).WithMetaLabel(text.NewInfoSelfServiceLoginPasskey()))
-
-	return nil
-}
-
-func (s *Strategy) populateLoginMethodForRefresh(r *http.Request, loginFlow *login.Flow) error {
-	ctx := r.Context()
-
-	identifier, id, _ := flowhelpers.GuessForcedLoginIdentifier(r, s.d, loginFlow, s.ID())
-	if identifier == "" {
-		return nil
-	}
-
-	id, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(r.Context(), id.ID)
-	if err != nil {
-		return err
-	}
-
-	cred, ok := id.GetCredentials(s.ID())
-	if !ok {
-		// Identity has no passkey
-		return nil
-	}
-
-	var conf identity.CredentialsWebAuthnConfig
-	if err := json.Unmarshal(cred.Config, &conf); err != nil {
-		return errors.WithStack(err)
-	}
-
-	webAuthCreds := conf.Credentials.ToWebAuthn()
-	if len(webAuthCreds) == 0 {
-		// Identity has no webauthn
-		return nil
-	}
-
-	passkeyIdentifier := s.PasskeyDisplayNameFromIdentity(ctx, id)
-
-	webAuthn, err := webauthn.New(s.d.Config().PasskeyConfig(ctx))
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	option, sessionData, err := webAuthn.BeginLogin(&webauthnx.User{
-		Name:        passkeyIdentifier,
-		ID:          conf.UserHandle,
-		Credentials: webAuthCreds,
-		Config:      webAuthn.Config,
+			Name:          node.PasskeyLogin,
+			Type:          node.InputAttributeTypeHidden,
+			OnLoad:        js.WebAuthnTriggersPasskeyLoginAutocompleteInit.String() + "()",
+			OnLoadTrigger: js.WebAuthnTriggersPasskeyLoginAutocompleteInit,
+		},
 	})
-	if err != nil {
-		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to initiate passkey login.").WithDebug(err.Error()))
-	}
-
-	loginFlow.InternalContext, err = sjson.SetBytes(
-		loginFlow.InternalContext,
-		flow.PrefixInternalContextKey(s.ID(), InternalContextKeySessionData),
-		sessionData,
-	)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	injectWebAuthnOptions, err := json.Marshal(option)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	loginFlow.UI.Nodes.Upsert(&node.Node{
-		Type:  node.Input,
-		Group: node.PasskeyGroup,
-		Meta:  &node.Meta{},
-		Attributes: &node.InputAttributes{
-			Name:       node.PasskeyChallenge,
-			Type:       node.InputAttributeTypeHidden,
-			FieldValue: string(injectWebAuthnOptions),
-		}})
-
-	loginFlow.UI.Nodes.Append(webauthnx.NewWebAuthnScript(s.d.Config().SelfPublicURL(ctx)))
-
-	loginFlow.UI.Nodes.Upsert(&node.Node{
-		Type:  node.Input,
-		Group: node.PasskeyGroup,
-		Meta:  &node.Meta{},
-		Attributes: &node.InputAttributes{
-			Name: node.PasskeyLogin,
-			Type: node.InputAttributeTypeHidden,
-		}})
-
-	loginFlow.UI.Nodes.Append(node.NewInputField(
-		node.PasskeyLoginTrigger,
-		"",
-		node.PasskeyGroup,
-		node.InputAttributeTypeButton,
-		node.WithInputAttributes(func(attr *node.InputAttributes) {
-			attr.OnClick = "window.__oryPasskeyLogin()" // this function is defined in webauthn.js
-		}),
-	).WithMetaLabel(text.NewInfoSelfServiceLoginPasskey()))
-
-	loginFlow.UI.SetCSRF(s.d.GenerateCSRFToken(r))
-	loginFlow.UI.SetNode(node.NewInputField(
-		"identifier",
-		passkeyIdentifier,
-		node.DefaultGroup,
-		node.InputAttributeTypeHidden,
-	))
 
 	return nil
 }
@@ -259,12 +150,17 @@ type updateLoginFlowWithPasskeyMethod struct {
 }
 
 func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, _ *session.Session) (i *identity.Identity, err error) {
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.passkey.strategy.Login")
+	defer otelx.End(span, &err)
+
 	if f.Type != flow.TypeBrowser {
+		span.SetAttributes(attribute.String("not_responsible_reason", "flow type is not browser"))
 		return nil, flow.ErrStrategyNotResponsible
 	}
 
 	var p updateLoginFlowWithPasskeyMethod
 	if err := s.hd.Decode(r, &p,
+		decoderx.HTTPKeepRequestBody(true),
 		decoderx.HTTPDecoderSetValidatePayloads(true),
 		decoderx.MustHTTPRawJSONSchemaCompiler(loginSchema),
 		decoderx.HTTPDecoderJSONFollowsFormFormat()); err != nil {
@@ -275,26 +171,28 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		// This method has only two submit buttons
 		p.Method = s.SettingsStrategyID()
 	} else {
+		span.SetAttributes(attribute.String("not_responsible_reason", "no login value and mismatched method"))
 		return nil, flow.ErrStrategyNotResponsible
 	}
 
-	if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
+	if err := flow.MethodEnabledAndAllowed(ctx, f.GetFlowName(), s.SettingsStrategyID(), p.Method, s.d); err != nil {
 		return nil, s.handleLoginError(r, f, err)
 	}
 
-	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return nil, s.handleLoginError(r, f, err)
 	}
 
-	return s.loginPasswordless(w, r, f, &p)
+	return s.loginPasswordless(ctx, w, r, f, &p)
 }
 
-func (s *Strategy) loginPasswordless(w http.ResponseWriter, r *http.Request, f *login.Flow, p *updateLoginFlowWithPasskeyMethod) (i *identity.Identity, err error) {
-	if err = login.CheckAAL(f, identity.AuthenticatorAssuranceLevel1); err != nil {
+func (s *Strategy) loginPasswordless(ctx context.Context, w http.ResponseWriter, r *http.Request, f *login.Flow, p *updateLoginFlowWithPasskeyMethod) (i *identity.Identity, err error) {
+	if err := login.CheckAAL(f, identity.AuthenticatorAssuranceLevel1); err != nil {
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("not_responsible_reason", "requested AAL is not AAL1"))
 		return nil, s.handleLoginError(r, f, err)
 	}
 
-	if err = flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(r.Context()), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
+	if err := flow.EnsureCSRF(s.d, r, f.Type, s.d.Config().DisableAPIFlowEnforcement(ctx), s.d.GenerateCSRFToken, p.CSRFToken); err != nil {
 		return nil, s.handleLoginError(r, f, err)
 	}
 
@@ -302,11 +200,11 @@ func (s *Strategy) loginPasswordless(w http.ResponseWriter, r *http.Request, f *
 		// Reset all nodes to not confuse users.
 		f.UI.Nodes = node.Nodes{}
 
-		if err = s.populateLoginMethodForPasskeys(r, f); err != nil {
+		if err := s.populateLoginMethodForPasskeys(r, f); err != nil {
 			return nil, s.handleLoginError(r, f, err)
 		}
 
-		redirectTo := f.AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context())).String()
+		redirectTo := f.AppendTo(s.d.Config().SelfServiceFlowLoginUI(ctx)).String()
 		if x.IsJSONRequest(r) {
 			s.d.Writer().WriteError(w, r, flow.NewBrowserLocationChangeRequiredError(redirectTo))
 		} else {
@@ -316,12 +214,10 @@ func (s *Strategy) loginPasswordless(w http.ResponseWriter, r *http.Request, f *
 		return nil, errors.WithStack(flow.ErrCompletedByStrategy)
 	}
 
-	return s.loginAuthenticate(w, r, f, p, identity.AuthenticatorAssuranceLevel1)
+	return s.loginAuthenticate(ctx, r, f, p, identity.AuthenticatorAssuranceLevel1)
 }
 
-func (s *Strategy) loginAuthenticate(_ http.ResponseWriter, r *http.Request, f *login.Flow, p *updateLoginFlowWithPasskeyMethod, _ identity.AuthenticatorAssuranceLevel) (*identity.Identity, error) {
-	ctx := r.Context()
-
+func (s *Strategy) loginAuthenticate(ctx context.Context, r *http.Request, f *login.Flow, p *updateLoginFlowWithPasskeyMethod, _ identity.AuthenticatorAssuranceLevel) (*identity.Identity, error) {
 	web, err := webauthn.New(s.d.Config().PasskeyConfig(ctx))
 	if err != nil {
 		return nil, s.handleLoginError(r, f, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to get webAuthn config.").WithDebug(err.Error())))
@@ -370,8 +266,7 @@ func (s *Strategy) loginAuthenticate(_ http.ResponseWriter, r *http.Request, f *
 			WithWrap(err)))
 	}
 
-	webAuthCreds := o.Credentials.PasswordlessOnly()
-
+	webAuthCreds := o.Credentials.PasswordlessOnly(&webAuthnResponse.Response.AuthenticatorData.Flags)
 	_, err = web.ValidateDiscoverableLogin(
 		func(rawID, userHandle []byte) (user webauthn.User, err error) {
 			return webauthnx.NewUser(userHandle, webAuthCreds, web.Config), nil
@@ -392,4 +287,202 @@ func (s *Strategy) loginAuthenticate(_ http.ResponseWriter, r *http.Request, f *
 	}
 
 	return i, nil
+}
+
+func (s *Strategy) PopulateLoginMethodFirstFactorRefresh(r *http.Request, f *login.Flow) error {
+	if f.Type != flow.TypeBrowser {
+		return nil
+	}
+
+	ctx := r.Context()
+
+	identifier, id, _ := flowhelpers.GuessForcedLoginIdentifier(r, s.d, f, s.ID())
+	if identifier == "" {
+		return nil
+	}
+
+	id, err := s.d.PrivilegedIdentityPool().GetIdentityConfidential(ctx, id.ID)
+	if err != nil {
+		return err
+	}
+
+	cred, ok := id.GetCredentials(s.ID())
+	if !ok {
+		// Identity has no passkey
+		return nil
+	}
+
+	var conf identity.CredentialsWebAuthnConfig
+	if err := json.Unmarshal(cred.Config, &conf); err != nil {
+		return errors.WithStack(err)
+	}
+
+	webAuthCreds := conf.Credentials.ToWebAuthn()
+	if len(webAuthCreds) == 0 {
+		// Identity has no webauthn
+		return nil
+	}
+
+	passkeyIdentifier := s.PasskeyDisplayNameFromIdentity(ctx, id)
+
+	webAuthn, err := webauthn.New(s.d.Config().PasskeyConfig(ctx))
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	option, sessionData, err := webAuthn.BeginLogin(&webauthnx.User{
+		Name:        passkeyIdentifier,
+		ID:          conf.UserHandle,
+		Credentials: webAuthCreds,
+		Config:      webAuthn.Config,
+	})
+	if err != nil {
+		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to initiate passkey login.").WithDebug(err.Error()))
+	}
+
+	f.InternalContext, err = sjson.SetBytes(
+		f.InternalContext,
+		flow.PrefixInternalContextKey(s.ID(), InternalContextKeySessionData),
+		sessionData,
+	)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	injectWebAuthnOptions, err := json.Marshal(option)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	f.UI.Nodes.Upsert(&node.Node{
+		Type:  node.Input,
+		Group: node.PasskeyGroup,
+		Meta:  &node.Meta{},
+		Attributes: &node.InputAttributes{
+			Name:       node.PasskeyChallenge,
+			Type:       node.InputAttributeTypeHidden,
+			FieldValue: string(injectWebAuthnOptions),
+		},
+	})
+
+	f.UI.Nodes.Append(webauthnx.NewWebAuthnScript(s.d.Config().SelfPublicURL(ctx)))
+
+	f.UI.Nodes.Upsert(&node.Node{
+		Type:  node.Input,
+		Group: node.PasskeyGroup,
+		Meta:  &node.Meta{},
+		Attributes: &node.InputAttributes{
+			Name: node.PasskeyLogin,
+			Type: node.InputAttributeTypeHidden,
+		},
+	})
+
+	f.UI.Nodes.Append(node.NewInputField(
+		node.PasskeyLoginTrigger,
+		"",
+		node.PasskeyGroup,
+		node.InputAttributeTypeButton,
+		node.WithInputAttributes(func(attr *node.InputAttributes) {
+			//nolint:staticcheck
+			attr.OnClick = js.WebAuthnTriggersPasskeyLogin.String() + "()" // this function is defined in webauthn.js
+			attr.OnClickTrigger = js.WebAuthnTriggersPasskeyLogin
+		}),
+	).WithMetaLabel(text.NewInfoSelfServiceLoginPasskey()))
+
+	f.UI.SetCSRF(s.d.GenerateCSRFToken(r))
+	f.UI.SetNode(node.NewInputField(
+		"identifier",
+		passkeyIdentifier,
+		node.DefaultGroup,
+		node.InputAttributeTypeHidden,
+	))
+
+	return nil
+}
+
+func (s *Strategy) PopulateLoginMethodFirstFactor(r *http.Request, f *login.Flow) error {
+	if f.Type != flow.TypeBrowser {
+		return nil
+	}
+
+	if err := s.populateLoginMethodForPasskeys(r, f); err != nil {
+		return err
+	}
+
+	f.UI.Nodes.Append(node.NewInputField(
+		node.PasskeyLoginTrigger,
+		"",
+		node.PasskeyGroup,
+		node.InputAttributeTypeButton,
+		node.WithInputAttributes(func(attr *node.InputAttributes) {
+			//nolint:staticcheck
+			attr.OnClick = js.WebAuthnTriggersPasskeyLogin.String() + "()" // this function is defined in webauthn.js
+			attr.OnClickTrigger = js.WebAuthnTriggersPasskeyLogin
+
+			//nolint:staticcheck
+			attr.OnLoad = js.WebAuthnTriggersPasskeyLoginAutocompleteInit.String() + "()" // same here
+			attr.OnLoadTrigger = js.WebAuthnTriggersPasskeyLoginAutocompleteInit
+		}),
+	).WithMetaLabel(text.NewInfoSelfServiceLoginPasskey()))
+
+	return nil
+}
+
+func (s *Strategy) PopulateLoginMethodSecondFactor(r *http.Request, sr *login.Flow) error {
+	return nil
+}
+
+func (s *Strategy) PopulateLoginMethodSecondFactorRefresh(r *http.Request, sr *login.Flow) error {
+	return nil
+}
+
+func (s *Strategy) PopulateLoginMethodIdentifierFirstCredentials(r *http.Request, sr *login.Flow, opts ...login.FormHydratorModifier) error {
+	if sr.Type != flow.TypeBrowser {
+		return errors.WithStack(idfirst.ErrNoCredentialsFound)
+	}
+
+	ctx := r.Context()
+	o := login.NewFormHydratorOptions(opts)
+
+	var count int
+	if o.IdentityHint != nil {
+		var err error
+		// If we have an identity hint we can perform identity credentials discovery and
+		// hide this credential if it should not be included.
+		count, err = s.CountActiveFirstFactorCredentials(ctx, o.IdentityHint.Credentials)
+		if err != nil {
+			return err
+		}
+	}
+
+	if count > 0 || s.d.Config().SecurityAccountEnumerationMitigate(ctx) {
+		sr.UI.Nodes.Append(node.NewInputField(
+			node.PasskeyLoginTrigger,
+			"",
+			node.PasskeyGroup,
+			node.InputAttributeTypeButton,
+			node.WithInputAttributes(func(attr *node.InputAttributes) {
+				//nolint:staticcheck
+				attr.OnClick = js.WebAuthnTriggersPasskeyLogin.String() + "()" // this function is defined in webauthn.js
+				attr.OnClickTrigger = js.WebAuthnTriggersPasskeyLogin
+			}),
+		).WithMetaLabel(text.NewInfoSelfServiceLoginPasskey()))
+	}
+
+	if count == 0 {
+		return errors.WithStack(idfirst.ErrNoCredentialsFound)
+	}
+
+	return nil
+}
+
+func (s *Strategy) PopulateLoginMethodIdentifierFirstIdentification(r *http.Request, sr *login.Flow) error {
+	if sr.Type != flow.TypeBrowser {
+		return nil
+	}
+
+	if err := s.populateLoginMethodForPasskeys(r, sr); err != nil {
+		return err
+	}
+
+	return nil
 }

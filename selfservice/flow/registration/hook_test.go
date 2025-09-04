@@ -65,7 +65,7 @@ func TestRegistrationExecutor(t *testing.T) {
 					for _, callback := range flowCallbacks {
 						callback(regFlow)
 					}
-					_ = handleErr(t, w, r, reg.RegistrationHookExecutor().PostRegistrationHook(w, r, identity.CredentialsType(strategy), "", regFlow, i))
+					_ = handleErr(t, w, r, reg.RegistrationHookExecutor().PostRegistrationHook(w, r, identity.CredentialsType(strategy), "", "", regFlow, i))
 				})
 
 				ts := httptest.NewServer(router)
@@ -85,6 +85,21 @@ func TestRegistrationExecutor(t *testing.T) {
 					res, _ := makeRequestPost(t, ts, false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
 					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
+
+					actual, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID, identity.ExpandNothing)
+					require.NoError(t, err)
+					assert.Equal(t, actual.Traits, i.Traits)
+				})
+
+				t.Run("case=pass without hooks if ajax client", func(t *testing.T) {
+					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
+					i := testhelpers.SelfServiceHookFakeIdentity(t)
+
+					ts := newServer(t, i, flow.TypeBrowser)
+					res, body := makeRequestPost(t, ts, true, url.Values{})
+					assert.EqualValues(t, http.StatusOK, res.StatusCode)
+					assert.Contains(t, res.Request.URL.String(), ts.URL)
+					assert.EqualValues(t, gjson.Get(body, "continue_with").Raw, `[{"action":"redirect_browser_to","redirect_browser_to":"https://www.ory.sh/"}]`)
 
 					actual, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID, identity.ExpandNothing)
 					require.NoError(t, err)

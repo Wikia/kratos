@@ -121,11 +121,11 @@ func init() {
 		"NewInfoLoginLookupLabel":                                 text.NewInfoLoginLookupLabel(),
 		"NewInfoLogin":                                            text.NewInfoLogin(),
 		"NewInfoLoginAndLink":                                     text.NewInfoLoginAndLink(),
-		"NewInfoLoginLinkMessage":                                 text.NewInfoLoginLinkMessage("{duplicteIdentifier}", "{provider}", "{newLoginUrl}"),
+		"NewInfoLoginLinkMessage":                                 text.NewInfoLoginLinkMessage("{duplicateIdentifier}", "{provider}", "{newLoginUrl}", []string{"{available_credential_types_list}"}, []string{"{available_oidc_providers_list}"}),
 		"NewInfoLoginTOTP":                                        text.NewInfoLoginTOTP(),
 		"NewInfoLoginLookup":                                      text.NewInfoLoginLookup(),
 		"NewInfoLoginVerify":                                      text.NewInfoLoginVerify(),
-		"NewInfoLoginWith":                                        text.NewInfoLoginWith("{provider}"),
+		"NewInfoLoginWith":                                        text.NewInfoLoginWith("{provider}", "{providerID}"),
 		"NewInfoLoginWithAndLink":                                 text.NewInfoLoginWithAndLink("{provider}"),
 		"NewErrorValidationLoginFlowExpired":                      text.NewErrorValidationLoginFlowExpired(aSecondAgo),
 		"NewErrorValidationLoginNoStrategyFound":                  text.NewErrorValidationLoginNoStrategyFound(),
@@ -135,7 +135,7 @@ func init() {
 		"NewErrorValidationVerificationNoStrategyFound":           text.NewErrorValidationVerificationNoStrategyFound(),
 		"NewInfoSelfServiceLoginWebAuthn":                         text.NewInfoSelfServiceLoginWebAuthn(),
 		"NewInfoRegistration":                                     text.NewInfoRegistration(),
-		"NewInfoRegistrationWith":                                 text.NewInfoRegistrationWith("{provider}"),
+		"NewInfoRegistrationWith":                                 text.NewInfoRegistrationWith("{provider}", "{providerID}"),
 		"NewInfoRegistrationContinue":                             text.NewInfoRegistrationContinue(),
 		"NewInfoRegistrationBack":                                 text.NewInfoRegistrationBack(),
 		"NewInfoSelfServiceChooseCredentials":                     text.NewInfoSelfServiceChooseCredentials(),
@@ -176,7 +176,11 @@ func init() {
 		"NewErrorValidationLoginLinkedCredentialsDoNotMatch":      text.NewErrorValidationLoginLinkedCredentialsDoNotMatch(),
 		"NewErrorValidationAddressUnknown":                        text.NewErrorValidationAddressUnknown(),
 		"NewInfoSelfServiceLoginCodeMFA":                          text.NewInfoSelfServiceLoginCodeMFA(),
-		"NewInfoSelfServiceLoginCodeMFAHint":                      text.NewInfoSelfServiceLoginCodeMFAHint("{maskedIdentifier}"),
+		"NewInfoLoginPassword":                                    text.NewInfoLoginPassword(),
+		"NewErrorValidationAccountNotFound":                       text.NewErrorValidationAccountNotFound(),
+		"NewInfoSelfServiceLoginAAL2CodeAddress":                  text.NewInfoSelfServiceLoginAAL2CodeAddress("{channel}", "{address}"),
+		"NewErrorCaptchaFailed":                                   text.NewErrorCaptchaFailed(),
+		"NewCaptchaContainerMessage":                              text.NewCaptchaContainerMessage(),
 	}
 }
 
@@ -305,6 +309,8 @@ func validateAllMessages(path string) error {
 	info := &types.Info{
 		Defs: make(map[*ast.Ident]types.Object),
 	}
+
+	//nolint:staticcheck
 	var pack *ast.Package
 	for _, p := range packs {
 		if p.Name == "text" {

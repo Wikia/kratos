@@ -14,8 +14,8 @@ func NewPasswordNode(name string, autocomplete node.UiNodeInputAttributeAutocomp
 		node.InputAttributeTypePassword,
 		node.WithRequiredInputAttribute,
 		node.WithInputAttributes(func(a *node.InputAttributes) {
-			a.MinLength = passwordPolicy.MinPasswordLength
-			a.MaxLength = passwordPolicy.MaxPasswordLength
+			a.MinLength = int(passwordPolicy.MinPasswordLength)
+			a.MaxLength = int(passwordPolicy.MaxPasswordLength)
 			a.Autocomplete = autocomplete
 		})).
 		WithMetaLabel(text.NewInfoNodeInputPassword())

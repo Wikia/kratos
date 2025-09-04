@@ -185,6 +185,7 @@ func NewPostHookFlow(conf *config.Config, exp time.Duration, csrf string, r *htt
 	if err != nil {
 		return nil, err
 	}
+	f.TransientPayload = original.GetTransientPayload()
 	requestURL, err := url.ParseRequestURI(original.GetRequestURL())
 	if err != nil {
 		requestURL = new(url.URL)
@@ -296,4 +297,19 @@ func (f *Flow) SetState(state State) {
 
 func (t *Flow) GetTransientPayload() json.RawMessage {
 	return t.TransientPayload
+}
+
+func (f *Flow) ToLoggerField() map[string]interface{} {
+	if f == nil {
+		return map[string]interface{}{}
+	}
+	return map[string]interface{}{
+		"id":          f.ID.String(),
+		"return_to":   f.ReturnTo,
+		"request_url": f.RequestURL,
+		"active":      f.Active,
+		"Type":        f.Type,
+		"nid":         f.NID,
+		"state":       f.State,
+	}
 }

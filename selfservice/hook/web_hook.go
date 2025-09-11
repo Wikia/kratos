@@ -606,6 +606,12 @@ var RequestHeaderAllowList = map[string]struct{}{
 	"Sec-Fetch-User":     {},
 	"True-Client-Ip":     {},
 	"User-Agent":         {},
+	// fandom change
+	"Fastly-Client-Ip":     {},
+	"X-Geoip-Country-Code": {},
+	"X-Geoip-Region":       {},
+	"X-Skip-Ratelimit":     {},
+	// fandom change end
 }
 
 func removeDisallowedHeaders(data *templateContext) {

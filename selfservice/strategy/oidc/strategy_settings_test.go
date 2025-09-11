@@ -294,11 +294,9 @@ func TestSettingsStrategy(t *testing.T) {
 				t.Run("flow=fetch", func(t *testing.T) {
 					snapshotx.SnapshotT(t, req.Ui.Nodes, snapshotx.ExceptPaths("0.attributes.value", "1.attributes.value"))
 				})
-
 				t.Run("flow=json", func(t *testing.T) {
 					snapshotx.SnapshotT(t, json.RawMessage(gjson.GetBytes(body, `ui.nodes`).Raw), snapshotx.ExceptPaths("0.attributes.value", "1.attributes.value"))
 				})
-
 				assert.Contains(t, gjson.GetBytes(body, "ui.action").String(), publicTS.URL+settings.RouteSubmitFlow+"?flow=")
 				assert.Contains(t, gjson.GetBytes(body, `ui.messages.0.text`).String(), errorMessage)
 			}
@@ -391,7 +389,7 @@ func TestSettingsStrategy(t *testing.T) {
 				assert.Contains(t, gjson.GetBytes(body, "ui.action").String(), publicTS.URL+settings.RouteSubmitFlow+"?flow=")
 
 				// The original options to link google and github are still there
-				snapshotx.SnapshotTExcept(t, json.RawMessage(gjson.GetBytes(body, `ui.nodes`).Raw), []string{"0.attributes.value", "1.attributes.value"})
+				snapshotx.SnapshotT(t, json.RawMessage(gjson.GetBytes(body, `ui.nodes`).Raw), snapshotx.ExceptPaths("0.attributes.value", "1.attributes.value"))
 
 				assert.Contains(t, gjson.GetBytes(body, `ui.messages.0.text`).String(),
 					"can not link unknown or already existing OpenID Connect connection")

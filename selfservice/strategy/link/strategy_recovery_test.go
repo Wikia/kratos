@@ -24,10 +24,6 @@ import (
 	"github.com/ory/kratos/selfservice/strategy/link"
 	"github.com/ory/kratos/ui/node"
 
-	kratos "github.com/ory/kratos/internal/httpclient"
-
-	"github.com/ory/kratos/corpx"
-
 	"github.com/ory/x/ioutilx"
 
 	"github.com/stretchr/testify/assert"
@@ -41,15 +37,11 @@ import (
 	"github.com/ory/kratos/internal"
 	kratos "github.com/ory/kratos/internal/httpclient"
 	"github.com/ory/kratos/internal/testhelpers"
-	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/recovery"
-	"github.com/ory/kratos/selfservice/strategy/link"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
-	"github.com/ory/kratos/ui/node"
 	"github.com/ory/kratos/x"
 	"github.com/ory/x/assertx"
-	"github.com/ory/x/ioutilx"
 	"github.com/ory/x/pointerx"
 	"github.com/ory/x/sqlxx"
 	"github.com/ory/x/urlx"

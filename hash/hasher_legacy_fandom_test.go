@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ory/x/contextx"
+
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 
@@ -47,6 +49,7 @@ func TestComparatorLegacyFandomSuccess(t *testing.T) {
 
 func TestComparatorLegacyFandomFail(t *testing.T) {
 	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+		&contextx.Default{},
 		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	for k, pw := range [][]byte{
@@ -72,6 +75,7 @@ func TestComparatorLegacyFandomFail(t *testing.T) {
 
 func TestLegacyFandomCompare(t *testing.T) {
 	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+		&contextx.Default{},
 		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	for _, testData := range [][3][]byte{

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	confighelpers "github.com/ory/kratos/driver/config/testhelpers"
+
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/pop/v6/logging"
@@ -223,9 +225,11 @@ func TestPersister(t *testing.T) {
 			t.Run("contract=identity.TestPool (case sensitive)", func(t *testing.T) {
 				pop.SetLogger(pl(t))
 
-				caseConf := reg.Config()
-				caseConf.MustSet(ctx, config.ViperKeyIdentityCaseSensitiveIdentifier, true)
-				identity.TestPool(ctx, caseConf, p, reg.IdentityManager(), name)(t)
+				// fandom-start
+				ctx := confighelpers.WithConfigValues(ctx, map[string]any{
+					config.ViperKeyIdentityCaseSensitiveIdentifier: true})
+				// fandom-end
+				identity.TestPool(ctx, p, reg.IdentityManager(), name)(t)
 			})
 			t.Run("contract=registration.TestFlowPersister", func(t *testing.T) {
 				t.Parallel()

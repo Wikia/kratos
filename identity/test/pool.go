@@ -446,7 +446,7 @@ func TestPool(ctx context.Context, p persistence.Persister, m *identity.Manager,
 
 			// fandom-start
 			cases := []string{"foo@bar.com"}
-			if !conf.IdentityCaseSensitiveIdentifier() {
+			if v, ok := ctx.Value(config.ViperKeyIdentityCaseSensitiveIdentifier).(bool); !ok || !v {
 				cases = append(cases, "fOo@bar.com", "FOO@bar.com", "foo@Bar.com")
 			}
 			// fandom-end
@@ -946,7 +946,8 @@ func TestPool(ctx context.Context, p persistence.Persister, m *identity.Manager,
 			require.NoError(t, p.CreateIdentity(ctx, expected))
 			createdIDs = append(createdIDs, expected.ID)
 			// fandom-start
-			conf.MustSet(ctx, config.ViperKeyIdentityCaseSensitiveIdentifier, false)
+			ctx := confighelpers.WithConfigValues(ctx, map[string]any{
+				config.ViperKeyIdentityCaseSensitiveIdentifier: false})
 			// fandom-end
 
 			actual, err := p.FindIdentityByCredentialIdentifier(ctx, "find-credentials-IDENTIFIER-only@ory.sh", false)
@@ -1009,7 +1010,7 @@ func TestPool(ctx context.Context, p persistence.Persister, m *identity.Manager,
 					identity.CredentialsTypeLookup,
 				}
 
-				if conf.IdentityCaseSensitiveIdentifier() {
+				if v, ok := ctx.Value(config.ViperKeyIdentityCaseSensitiveIdentifier).(bool); ok && v {
 					caseSensitiveCred = append(caseSensitiveCred, identity.CredentialsTypePassword)
 				}
 
@@ -1030,8 +1031,7 @@ func TestPool(ctx context.Context, p persistence.Persister, m *identity.Manager,
 				caseInsensitiveCred := []identity.CredentialsType{
 					identity.CredentialsTypeWebAuthn,
 				}
-
-				if !conf.IdentityCaseSensitiveIdentifier() {
+				if v, ok := ctx.Value(config.ViperKeyIdentityCaseSensitiveIdentifier).(bool); !ok || !v {
 					caseInsensitiveCred = append(caseInsensitiveCred, identity.CredentialsTypePassword)
 				}
 				for _, ct := range caseInsensitiveCred {
@@ -1064,7 +1064,7 @@ func TestPool(ctx context.Context, p persistence.Persister, m *identity.Manager,
 			require.NoError(t, err)
 
 			// fandom-start
-			if !conf.IdentityCaseSensitiveIdentifier() {
+			if v, ok := ctx.Value(config.ViperKeyIdentityCaseSensitiveIdentifier).(bool); !ok || !v {
 				identifier = strings.ToLower(identifier)
 			}
 			// fandom-end

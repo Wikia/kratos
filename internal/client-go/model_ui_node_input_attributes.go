@@ -23,9 +23,9 @@ type UiNodeInputAttributes struct {
 	Disabled bool    `json:"disabled"`
 	Label    *UiText `json:"label,omitempty"`
 	// The maxlength attribute for the input.
-	Maxlength *int32 `json:"maxlength,omitempty"`
+	Maxlength *int64 `json:"maxlength,omitempty"`
 	// The minlength attribute for the input.
-	Minlength *int32 `json:"minlength,omitempty"`
+	Minlength *int64 `json:"minlength,omitempty"`
 	// The input's element name.
 	Name string `json:"name"`
 	// NodeType represents this node's types. It is a mirror of `node.type` and is primarily used to allow compatibility with OpenAPI 3.0.  In this struct it technically always is \"input\". text Text input Input img Image a Anchor script Script
@@ -190,9 +190,9 @@ func (o *UiNodeInputAttributes) SetMaxlength(v int64) {
 }
 
 // GetMinlength returns the Minlength field value if set, zero value otherwise.
-func (o *UiNodeInputAttributes) GetMinlength() int32 {
+func (o *UiNodeInputAttributes) GetMinlength() int64 {
 	if o == nil || o.Minlength == nil {
-		var ret int32
+		var ret int64
 		return ret
 	}
 	return *o.Minlength
@@ -201,7 +201,7 @@ func (o *UiNodeInputAttributes) GetMinlength() int32 {
 // Fandom change
 // GetMinlengthOk returns a tuple with the Minlength field value if set, nil otherwise
 // and a boolean to check if the value has been set.
-func (o *UiNodeInputAttributes) GetMinlengthOk() (*int32, bool) {
+func (o *UiNodeInputAttributes) GetMinlengthOk() (*int64, bool) {
 	if o == nil || o.Minlength == nil {
 		return nil, false
 	}
@@ -218,7 +218,7 @@ func (o *UiNodeInputAttributes) HasMinlength() bool {
 }
 
 // SetMinlength gets a reference to the given int32 and assigns it to the Minlength field.
-func (o *UiNodeInputAttributes) SetMinlength(v int32) {
+func (o *UiNodeInputAttributes) SetMinlength(v int64) {
 	o.Minlength = &v
 }
 

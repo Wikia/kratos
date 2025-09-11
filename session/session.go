@@ -290,7 +290,7 @@ func (s *Session) Activate(r *http.Request, i *identity.Identity, c lifespanProv
 	return nil
 }
 
-//fandom change end
+// fandom change end
 
 func NewInactiveSession() *Session {
 	return &Session{

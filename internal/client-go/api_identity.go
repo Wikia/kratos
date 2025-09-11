@@ -313,6 +313,16 @@ type IdentityAPI interface {
 	 * @return Identity
 	 */
 	UpdateIdentityExecute(r IdentityAPIApiUpdateIdentityRequest) (*Identity, *http.Response, error)
+
+	// Fandom Change
+	AdminCurrentSessionExtendExecute(r IdentityApiApiAdminCurrentSessionExtendRequest) (*Session, *http.Response, error)
+
+	AdminIdentitySessionExecute(r IdentityApiApiAdminIdentitySessionRequest) (*SuccessfulAdminIdentitySession, *http.Response, error)
+
+	AdminUpdateCredentialsExecute(r IdentityApiApiAdminUpdateCredentialsRequest) (*http.Response, error)
+
+	AdminUpdateIdentityBodyExecute(r IdentityApiApiAdminUpdateIdentityBodyRequest) (*Identity, *http.Response, error)
+	// Fandom CHange - end
 }
 
 // IdentityAPIService IdentityAPI service
@@ -320,7 +330,7 @@ type IdentityAPIService service
 
 type IdentityApiApiAdminCurrentSessionExtendRequest struct {
 	ctx        context.Context
-	ApiService IdentityApi
+	ApiService IdentityAPI
 }
 
 func (r IdentityApiApiAdminCurrentSessionExtendRequest) Execute() (*Session, *http.Response, error) {
@@ -335,7 +345,7 @@ Session refresh
   - @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
   - @return IdentityApiApiAdminCurrentSessionExtendRequest
 */
-func (a *IdentityApiService) AdminCurrentSessionExtend(ctx context.Context) IdentityApiApiAdminCurrentSessionExtendRequest {
+func (a *IdentityAPIService) AdminCurrentSessionExtend(ctx context.Context) IdentityApiApiAdminCurrentSessionExtendRequest {
 	return IdentityApiApiAdminCurrentSessionExtendRequest{
 		ApiService: a,
 		ctx:        ctx,
@@ -346,7 +356,7 @@ func (a *IdentityApiService) AdminCurrentSessionExtend(ctx context.Context) Iden
  * Execute executes the request
  * @return Session
  */
-func (a *IdentityApiService) AdminCurrentSessionExtendExecute(r IdentityApiApiAdminCurrentSessionExtendRequest) (*Session, *http.Response, error) {
+func (a *IdentityAPIService) AdminCurrentSessionExtendExecute(r IdentityApiApiAdminCurrentSessionExtendRequest) (*Session, *http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodGet
 		localVarPostBody     interface{}
@@ -456,7 +466,7 @@ func (a *IdentityApiService) AdminCurrentSessionExtendExecute(r IdentityApiApiAd
 
 type IdentityApiApiAdminIdentitySessionRequest struct {
 	ctx        context.Context
-	ApiService IdentityApi
+	ApiService IdentityAPI
 	id         string
 	upgrade    *bool
 }
@@ -479,7 +489,7 @@ Issuing session or session token for a given identity without authenticating
   - @param id ID is the identity's ID.
   - @return IdentityApiApiAdminIdentitySessionRequest
 */
-func (a *IdentityApiService) AdminIdentitySession(ctx context.Context, id string) IdentityApiApiAdminIdentitySessionRequest {
+func (a *IdentityAPIService) AdminIdentitySession(ctx context.Context, id string) IdentityApiApiAdminIdentitySessionRequest {
 	return IdentityApiApiAdminIdentitySessionRequest{
 		ApiService: a,
 		ctx:        ctx,
@@ -491,7 +501,7 @@ func (a *IdentityApiService) AdminIdentitySession(ctx context.Context, id string
  * Execute executes the request
  * @return SuccessfulAdminIdentitySession
  */
-func (a *IdentityApiService) AdminIdentitySessionExecute(r IdentityApiApiAdminIdentitySessionRequest) (*SuccessfulAdminIdentitySession, *http.Response, error) {
+func (a *IdentityAPIService) AdminIdentitySessionExecute(r IdentityApiApiAdminIdentitySessionRequest) (*SuccessfulAdminIdentitySession, *http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodGet
 		localVarPostBody     interface{}
@@ -605,7 +615,7 @@ func (a *IdentityApiService) AdminIdentitySessionExecute(r IdentityApiApiAdminId
 
 type IdentityApiApiAdminUpdateCredentialsRequest struct {
 	ctx        context.Context
-	ApiService IdentityApi
+	ApiService IdentityAPI
 	id         string
 }
 
@@ -622,7 +632,7 @@ Learn how identities work in [Ory Kratos' User And Identity Model Documentation]
   - @param id ID is the identity's ID.
   - @return IdentityApiApiAdminUpdateCredentialsRequest
 */
-func (a *IdentityApiService) AdminUpdateCredentials(ctx context.Context, id string) IdentityApiApiAdminUpdateCredentialsRequest {
+func (a *IdentityAPIService) AdminUpdateCredentials(ctx context.Context, id string) IdentityApiApiAdminUpdateCredentialsRequest {
 	return IdentityApiApiAdminUpdateCredentialsRequest{
 		ApiService: a,
 		ctx:        ctx,
@@ -633,7 +643,7 @@ func (a *IdentityApiService) AdminUpdateCredentials(ctx context.Context, id stri
 /*
  * Execute executes the request
  */
-func (a *IdentityApiService) AdminUpdateCredentialsExecute(r IdentityApiApiAdminUpdateCredentialsRequest) (*http.Response, error) {
+func (a *IdentityAPIService) AdminUpdateCredentialsExecute(r IdentityApiApiAdminUpdateCredentialsRequest) (*http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodPut
 		localVarPostBody     interface{}
@@ -720,7 +730,7 @@ func (a *IdentityApiService) AdminUpdateCredentialsExecute(r IdentityApiApiAdmin
 
 type IdentityApiApiAdminUpdateIdentityBodyRequest struct {
 	ctx        context.Context
-	ApiService IdentityApi
+	ApiService IdentityAPI
 }
 
 func (r IdentityApiApiAdminUpdateIdentityBodyRequest) Execute() (*Identity, *http.Response, error) {
@@ -737,7 +747,7 @@ Learn how identities work in [Ory Kratos' User And Identity Model Documentation]
   - @param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
   - @return IdentityApiApiAdminUpdateIdentityBodyRequest
 */
-func (a *IdentityApiService) AdminUpdateIdentityBody(ctx context.Context) IdentityApiApiAdminUpdateIdentityBodyRequest {
+func (a *IdentityAPIService) AdminUpdateIdentityBody(ctx context.Context) IdentityApiApiAdminUpdateIdentityBodyRequest {
 	return IdentityApiApiAdminUpdateIdentityBodyRequest{
 		ApiService: a,
 		ctx:        ctx,
@@ -748,7 +758,7 @@ func (a *IdentityApiService) AdminUpdateIdentityBody(ctx context.Context) Identi
  * Execute executes the request
  * @return Identity
  */
-func (a *IdentityApiService) AdminUpdateIdentityBodyExecute(r IdentityApiApiAdminUpdateIdentityBodyRequest) (*Identity, *http.Response, error) {
+func (a *IdentityAPIService) AdminUpdateIdentityBodyExecute(r IdentityApiApiAdminUpdateIdentityBodyRequest) (*Identity, *http.Response, error) {
 	var (
 		localVarHTTPMethod   = http.MethodPost
 		localVarPostBody     interface{}

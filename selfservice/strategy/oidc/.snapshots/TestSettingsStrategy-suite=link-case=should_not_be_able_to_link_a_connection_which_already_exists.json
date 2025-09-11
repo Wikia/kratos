@@ -65,9 +65,9 @@
       "type": "password",
       "required": true,
       "autocomplete": "new-password",
-      "minlength": 8,
-      "maxlength": 1024,
       "disabled": false,
+      "maxlength": 1024,
+      "minlength": 8,
       "node_type": "input"
     },
     "messages": [],

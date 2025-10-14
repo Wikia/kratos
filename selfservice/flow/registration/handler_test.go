@@ -118,9 +118,10 @@ func TestInitFlow(t *testing.T) {
 	router := x.NewRouterPublic()
 	publicTS, _ := testhelpers.NewKratosServerWithRouters(t, reg, router, x.NewRouterAdmin())
 	registrationTS := testhelpers.NewRegistrationUIFlowEchoServer(t, reg)
+	returnToTS := testhelpers.NewRedirTS(t, "return_to", conf)
 
 	conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationEnabled, true)
-	conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh")
+	conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, returnToTS.URL)
 	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/login.schema.json")
 
 	assertion := func(body []byte, isForced, isApi bool) {
@@ -219,12 +220,12 @@ func TestInitFlow(t *testing.T) {
 
 		t.Run("case=redirects when already authenticated", func(t *testing.T) {
 			res, _ := initAuthenticatedFlow(t, false, false)
-			assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+			assert.Contains(t, res.Request.URL.String(), returnToTS.URL)
 		})
 
 		t.Run("case=responds with error if already authenticated and SPA", func(t *testing.T) {
 			res, body := initAuthenticatedFlow(t, false, true)
-			assert.NotContains(t, res.Request.URL.String(), "https://www.ory.sh")
+			assert.NotContains(t, res.Request.URL.String(), returnToTS.URL)
 			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 			assertx.EqualAsJSON(t, registration.ErrAlreadyLoggedIn, json.RawMessage(gjson.GetBytes(body, "error").Raw), "%s", body)
 		})
@@ -320,7 +321,15 @@ func TestGetFlow(t *testing.T) {
 	ctx := context.Background()
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationEnabled, true)
-	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
+	returnToTS := testhelpers.NewRedirTS(t, "return_to", conf)
+
+	conf.MustSet(ctx, config.ViperKeyIdentitySchemas, config.Schemas{
+		{ID: "email", URL: "file://./stub/registration.schema.json", SelfserviceSelectable: true},
+		{ID: "phone", URL: "file://./stub/registration.phone.schema.json", SelfserviceSelectable: true},
+		{ID: "not-allowed", URL: "file://./stub/registration.schema.json"},
+	})
+	conf.MustSet(ctx, config.ViperKeyDefaultIdentitySchemaID, "email")
+
 	conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword),
 		map[string]interface{}{"enabled": true})
 
@@ -375,7 +384,7 @@ func TestGetFlow(t *testing.T) {
 	})
 
 	t.Run("case=expired with return_to", func(t *testing.T) {
-		returnTo := "https://www.ory.sh"
+		returnTo := returnToTS.URL
 		conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo})
 
 		client := testhelpers.NewClientWithCookies(t)

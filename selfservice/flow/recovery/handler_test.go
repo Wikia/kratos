@@ -73,9 +73,8 @@ func TestInitFlow(t *testing.T) {
 	router := x.NewRouterPublic()
 	publicTS, _ := testhelpers.NewKratosServerWithRouters(t, reg, router, x.NewRouterAdmin())
 	recoveryTS := testhelpers.NewRecoveryUIFlowEchoServer(t, reg)
-	returnToTS := testhelpers.NewRedirTS(t, "", conf)
 
-	conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, returnToTS.URL)
+	conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh")
 	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/identity.schema.json")
 
 	assertion := func(body []byte, isForced, isApi bool) {
@@ -168,7 +167,7 @@ func TestInitFlow(t *testing.T) {
 
 		t.Run("case=fails on authenticated request", func(t *testing.T) {
 			res, _ := initAuthenticatedFlow(t, false, false)
-			assert.Contains(t, res.Request.URL.String(), returnToTS.URL)
+			assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
 		})
 
 		t.Run("case=relative redirect when self-service recovery ui is a relative URL", func(t *testing.T) {
@@ -210,7 +209,6 @@ func TestGetFlow(t *testing.T) {
 		map[string]interface{}{"enabled": true})
 	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/identity.schema.json")
 
-	returnToTS := testhelpers.NewRedirTS(t, "", conf)
 	public, _ := testhelpers.NewKratosServerWithCSRF(t, reg)
 	_ = testhelpers.NewErrorTestServer(t, reg)
 	_ = testhelpers.NewRedirTS(t, "", conf)
@@ -261,7 +259,7 @@ func TestGetFlow(t *testing.T) {
 	})
 
 	t.Run("case=expired with return_to", func(t *testing.T) {
-		returnTo := returnToTS.URL
+		returnTo := "https://www.ory.sh"
 		conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo})
 		client := testhelpers.NewClientWithCookies(t)
 		setupRecoveryTS(t, client)

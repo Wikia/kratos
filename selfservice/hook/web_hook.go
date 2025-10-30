@@ -611,6 +611,7 @@ var RequestHeaderAllowList = map[string]struct{}{
 	"X-Geoip-Country-Code": {},
 	"X-Geoip-Region":       {},
 	"X-Skip-Ratelimit":     {},
+	"X-Fandom-Request":     {},
 	// fandom change end
 }
 

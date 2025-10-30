@@ -324,8 +324,8 @@ func TestGetFlow(t *testing.T) {
 	returnToTS := testhelpers.NewRedirTS(t, "return_to", conf)
 
 	conf.MustSet(ctx, config.ViperKeyIdentitySchemas, config.Schemas{
-		{ID: "email", URL: "file://./stub/registration.schema.json"},
-		{ID: "phone", URL: "file://./stub/registration.phone.schema.json"},
+		{ID: "email", URL: "file://./stub/registration.schema.json", SelfserviceSelectable: true},
+		{ID: "phone", URL: "file://./stub/registration.phone.schema.json", SelfserviceSelectable: true},
 		{ID: "not-allowed", URL: "file://./stub/registration.schema.json"},
 	})
 	conf.MustSet(ctx, config.ViperKeyDefaultIdentitySchemaID, "email")

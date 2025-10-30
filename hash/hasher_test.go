@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ory/x/contextx"
+
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/x/configx"
 	"github.com/ory/x/logrusx"
@@ -208,6 +210,7 @@ func TestPbkdf2Hasher(t *testing.T) {
 
 func TestCompare(t *testing.T) {
 	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+		&contextx.Default{},
 		configx.WithConfigFiles("../driver/config/stub/.kratos.yaml"))
 
 	identityId, _ := uuid.NewV4()

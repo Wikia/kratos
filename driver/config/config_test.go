@@ -15,9 +15,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/ory/x/contextx"
 
 	"github.com/ory/x/httpx"
 	"github.com/ory/x/randx"
@@ -52,6 +53,7 @@ func TestViperProvider(t *testing.T) {
 
 	t.Run("suite=loaders", func(t *testing.T) {
 		p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+			&contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.yaml"),
 			configx.WithContext(ctx),
 		)
@@ -90,6 +92,7 @@ func TestViperProvider(t *testing.T) {
 
 			pWithFragments := config.MustNew(t, logrusx.New("", ""),
 				os.Stderr,
+				&contextx.Default{},
 				configx.WithValues(map[string]interface{}{
 					config.ViperKeySelfServiceLoginUI:        "http://test.kratos.ory.sh/#/login",
 					config.ViperKeySelfServiceSettingsURL:    "http://test.kratos.ory.sh/#/settings",
@@ -106,6 +109,7 @@ func TestViperProvider(t *testing.T) {
 
 			pWithRelativeFragments := config.MustNew(t, logrusx.New("", ""),
 				os.Stderr,
+				&contextx.Default{},
 				configx.WithValues(map[string]interface{}{
 					config.ViperKeySelfServiceLoginUI:        "/login",
 					config.ViperKeySelfServiceSettingsURL:    "/settings",
@@ -131,6 +135,7 @@ func TestViperProvider(t *testing.T) {
 
 				pWithIncorrectUrls := config.MustNew(t, logger,
 					os.Stderr,
+					&contextx.Default{},
 					configx.WithValues(map[string]interface{}{
 						config.ViperKeySelfServiceLoginUI: v,
 					}),
@@ -162,6 +167,7 @@ func TestViperProvider(t *testing.T) {
 
 		t.Run("group=identity", func(t *testing.T) {
 			c := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+				&contextx.Default{},
 				configx.WithConfigFiles("stub/.kratos.mock.identities.yaml"),
 				configx.SkipValidation())
 
@@ -199,7 +205,7 @@ func TestViperProvider(t *testing.T) {
 			}, p.SecretsSession(ctx))
 			var cipherExpected [32]byte
 			for k, v := range []byte("secret-thirty-two-character-long") {
-				cipherExpected[k] = byte(v)
+				cipherExpected[k] = v
 			}
 			assert.Equal(t, [][32]byte{
 				cipherExpected,
@@ -212,7 +218,7 @@ func TestViperProvider(t *testing.T) {
 				config  string
 				enabled bool
 			}{
-				{id: "password", enabled: true, config: `{"haveibeenpwned_host":"api.pwnedpasswords.com","haveibeenpwned_enabled":true,"ignore_network_errors":true,"max_breaches":0,"min_password_length":8,"max_password_length":1024,"identifier_similarity_check_enabled":true}`},
+				{id: "password", enabled: true, config: `{"haveibeenpwned_host":"api.pwnedpasswords.com","haveibeenpwned_enabled":true,"ignore_network_errors":true,"max_breaches":0,"migrate_hook":{"config":{"emit_analytics_event":true,"method":"POST"},"enabled":false},"min_password_length":8,"max_password_length":1024,"identifier_similarity_check_enabled":true}`},
 				{id: "oidc", enabled: true, config: `{"providers":[{"client_id":"a","client_secret":"b","id":"github","provider":"github","mapper_url":"http://test.kratos.ory.sh/default-identity.schema.json"}]}`},
 				{id: "totp", enabled: true, config: `{"issuer":"issuer.ory.sh"}`},
 			} {
@@ -228,12 +234,12 @@ func TestViperProvider(t *testing.T) {
 
 			t.Run("hook=before", func(t *testing.T) {
 				expHooks := []config.SelfServiceHook{
-					{Name: "web_hook", Config: json.RawMessage(`{"method":"GET","url":"https://test.kratos.ory.sh/before_registration_hook"}`)},
+					{Name: "web_hook", Config: json.RawMessage(`{"headers":{"X-Custom-Header":"test"},"method":"GET","url":"https://test.kratos.ory.sh/before_registration_hook"}`)},
+					{Name: "two_step_registration", PersistencePhase: "post-persist", Config: json.RawMessage(`{}`)},
 				}
 
 				hooks := p.SelfServiceFlowRegistrationBeforeHooks(ctx)
 
-				require.Len(t, hooks, 1)
 				assert.Equal(t, expHooks, hooks)
 				// assert.EqualValues(t, "redirect", hook.Name)
 				// assert.JSONEq(t, `{"allow_user_defined_redirect":false,"default_redirect_url":"http://test.kratos.ory.sh:4000/"}`, string(hook.Config))
@@ -247,7 +253,7 @@ func TestViperProvider(t *testing.T) {
 					strategy: "password",
 					hooks: []config.SelfServiceHook{
 						{Name: "session", Config: json.RawMessage(`{}`)},
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_registration_password_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_registration_password_hook"}`)},
 						// {Name: "verify", Config: json.RawMessage(`{}`)},
 						// {Name: "redirect", Config: json.RawMessage(`{"allow_user_defined_redirect":false,"default_redirect_url":"http://test.kratos.ory.sh:4000/"}`)},
 					},
@@ -256,7 +262,7 @@ func TestViperProvider(t *testing.T) {
 					strategy: "oidc",
 					hooks: []config.SelfServiceHook{
 						// {Name: "verify", Config: json.RawMessage(`{}`)},
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"GET","url":"https://test.kratos.ory.sh/after_registration_oidc_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"GET","url":"https://test.kratos.ory.sh/after_registration_oidc_hook"}`)},
 						{Name: "session", Config: json.RawMessage(`{}`)},
 						// {Name: "redirect", Config: json.RawMessage(`{"allow_user_defined_redirect":false,"default_redirect_url":"http://test.kratos.ory.sh:4000/"}`)},
 					},
@@ -264,7 +270,7 @@ func TestViperProvider(t *testing.T) {
 				{
 					strategy: config.HookGlobal,
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"auth":{"config":{"in":"header","name":"My-Key","value":"My-Key-Value"},"type":"api_key"},"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_registration_global_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"auth":{"config":{"in":"header","name":"My-Key","value":"My-Key-Value"},"type":"api_key"},"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_registration_global_hook"}`)},
 					},
 				},
 			} {
@@ -284,7 +290,7 @@ func TestViperProvider(t *testing.T) {
 
 			t.Run("hook=before", func(t *testing.T) {
 				expHooks := []config.SelfServiceHook{
-					{Name: "web_hook", Config: json.RawMessage(`{"method":"POST","url":"https://test.kratos.ory.sh/before_login_hook"}`)},
+					{Name: "web_hook", Config: json.RawMessage(`{"headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/before_login_hook"}`)},
 				}
 
 				hooks := p.SelfServiceFlowLoginBeforeHooks(ctx)
@@ -304,20 +310,20 @@ func TestViperProvider(t *testing.T) {
 					hooks: []config.SelfServiceHook{
 						{Name: "revoke_active_sessions", Config: json.RawMessage(`{}`)},
 						{Name: "require_verified_address", Config: json.RawMessage(`{}`)},
-						{Name: "web_hook", Config: json.RawMessage(`{"auth":{"config":{"password":"super-secret","user":"test-user"},"type":"basic_auth"},"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_login_password_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"auth":{"config":{"password":"super-secret","user":"test-user"},"type":"basic_auth"},"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_login_password_hook"}`)},
 					},
 				},
 				{
 					strategy: "oidc",
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"GET","url":"https://test.kratos.ory.sh/after_login_oidc_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"GET","url":"https://test.kratos.ory.sh/after_login_oidc_hook"}`)},
 						{Name: "revoke_active_sessions", Config: json.RawMessage(`{}`)},
 					},
 				},
 				{
 					strategy: config.HookGlobal,
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_login_global_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_login_global_hook"}`)},
 					},
 				},
 			} {
@@ -339,19 +345,19 @@ func TestViperProvider(t *testing.T) {
 				{
 					strategy: "password",
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_settings_password_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_settings_password_hook"}`)},
 					},
 				},
 				{
 					strategy: "profile",
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_settings_profile_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_settings_profile_hook"}`)},
 					},
 				},
 				{
 					strategy: config.HookGlobal,
 					hooks: []config.SelfServiceHook{
-						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"POST","url":"https://test.kratos.ory.sh/after_settings_global_hook"}`)},
+						{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"POST","url":"https://test.kratos.ory.sh/after_settings_global_hook"}`)},
 					},
 				},
 			} {
@@ -368,7 +374,7 @@ func TestViperProvider(t *testing.T) {
 			assert.Equal(t, "http://test.kratos.ory.sh/recovery", p.SelfServiceFlowRecoveryUI(ctx).String())
 
 			hooks := p.SelfServiceFlowRecoveryAfterHooks(ctx, config.HookGlobal)
-			assert.Equal(t, []config.SelfServiceHook{{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"GET","url":"https://test.kratos.ory.sh/after_recovery_hook"}`)}}, hooks)
+			assert.Equal(t, []config.SelfServiceHook{{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"GET","url":"https://test.kratos.ory.sh/after_recovery_hook"}`)}}, hooks)
 		})
 
 		t.Run("method=verification", func(t *testing.T) {
@@ -376,7 +382,7 @@ func TestViperProvider(t *testing.T) {
 			assert.Equal(t, "http://test.kratos.ory.sh/verification", p.SelfServiceFlowVerificationUI(ctx).String())
 
 			hooks := p.SelfServiceFlowVerificationAfterHooks(ctx, config.HookGlobal)
-			assert.Equal(t, []config.SelfServiceHook{{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","method":"GET","url":"https://test.kratos.ory.sh/after_verification_hook"}`)}}, hooks)
+			assert.Equal(t, []config.SelfServiceHook{{Name: "web_hook", Config: json.RawMessage(`{"body":"/path/to/template.jsonnet","headers":{"X-Custom-Header":"test"},"method":"GET","url":"https://test.kratos.ory.sh/after_verification_hook"}`)}}, hooks)
 		})
 
 		t.Run("group=hashers", func(t *testing.T) {
@@ -401,7 +407,7 @@ func TestViperProvider(t *testing.T) {
 func TestBcrypt(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 	require.NoError(t, p.Set(ctx, config.ViperKeyHasherBcryptCost, 4))
 	require.NoError(t, p.Set(ctx, "dev", false))
@@ -419,7 +425,7 @@ func TestProviderBaseURLs(t *testing.T) {
 		machineHostname = "127.0.0.1"
 	}
 
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 	assert.Equal(t, "https://"+machineHostname+":4433/", p.SelfPublicURL(ctx).String())
 	assert.Equal(t, "https://"+machineHostname+":4434/", p.SelfAdminURL(ctx).String())
 
@@ -447,7 +453,7 @@ func TestProviderSelfServiceLinkMethodBaseURL(t *testing.T) {
 		machineHostname = "127.0.0.1"
 	}
 
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 	assert.Equal(t, "https://"+machineHostname+":4433/", p.SelfServiceLinkMethodBaseURL(ctx).String())
 
 	p.MustSet(ctx, config.ViperKeyLinkBaseURL, "https://example.org/bar")
@@ -457,7 +463,7 @@ func TestProviderSelfServiceLinkMethodBaseURL(t *testing.T) {
 func TestViperProvider_Secrets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 	def := p.SecretsDefault(ctx)
 	assert.NotEmpty(t, def)
@@ -480,24 +486,25 @@ func TestViperProvider_Defaults(t *testing.T) {
 	}{
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 			},
 		},
 		{
 			init: func() *config.Config {
 				return config.MustNew(t, l,
 					os.Stderr,
+					&contextx.Default{},
 					configx.WithConfigFiles("stub/.defaults.yml"), configx.SkipValidation())
 			},
 		},
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.WithConfigFiles("stub/.defaults-password.yml"), configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles("stub/.defaults-password.yml"), configx.SkipValidation())
 			},
 		},
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.WithConfigFiles("../../test/e2e/profiles/recovery/.kratos.yml"), configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles("../../test/e2e/profiles/recovery/.kratos.yml"), configx.SkipValidation())
 			},
 			expect: func(t *testing.T, p *config.Config) {
 				assert.True(t, p.SelfServiceFlowRecoveryEnabled(ctx))
@@ -513,7 +520,7 @@ func TestViperProvider_Defaults(t *testing.T) {
 		},
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.WithConfigFiles("../../test/e2e/profiles/verification/.kratos.yml"), configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles("../../test/e2e/profiles/verification/.kratos.yml"), configx.SkipValidation())
 			},
 			expect: func(t *testing.T, p *config.Config) {
 				assert.False(t, p.SelfServiceFlowRecoveryEnabled(ctx))
@@ -529,7 +536,7 @@ func TestViperProvider_Defaults(t *testing.T) {
 		},
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.WithConfigFiles("../../test/e2e/profiles/oidc/.kratos.yml"), configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles("../../test/e2e/profiles/oidc/.kratos.yml"), configx.SkipValidation())
 			},
 			expect: func(t *testing.T, p *config.Config) {
 				assert.False(t, p.SelfServiceFlowRecoveryEnabled(ctx))
@@ -544,7 +551,7 @@ func TestViperProvider_Defaults(t *testing.T) {
 		},
 		{
 			init: func() *config.Config {
-				return config.MustNew(t, l, os.Stderr, configx.WithConfigFiles("stub/.kratos.notify-unknown-recipients.yml"), configx.SkipValidation())
+				return config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles("stub/.kratos.notify-unknown-recipients.yml"), configx.SkipValidation())
 			},
 			expect: func(t *testing.T, p *config.Config) {
 				assert.True(t, p.SelfServiceFlowRecoveryNotifyUnknownRecipients(ctx))
@@ -573,7 +580,7 @@ func TestViperProvider_Defaults(t *testing.T) {
 	}
 
 	t.Run("suite=ui_url", func(t *testing.T) {
-		p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+		p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 		assert.Equal(t, "https://www.ory.sh/kratos/docs/fallback/login", p.SelfServiceFlowLoginUI(ctx).String())
 		assert.Equal(t, "https://www.ory.sh/kratos/docs/fallback/settings", p.SelfServiceFlowSettingsUI(ctx).String())
 		assert.Equal(t, "https://www.ory.sh/kratos/docs/fallback/registration", p.SelfServiceFlowRegistrationUI(ctx).String())
@@ -586,7 +593,7 @@ func TestViperProvider_ReturnTo(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	l := logrusx.New("", "")
-	p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 	p.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh/")
 	assert.Equal(t, "https://www.ory.sh/", p.SelfServiceFlowVerificationReturnTo(ctx, urlx.ParseOrPanic("https://www.ory.sh/")).String())
@@ -603,7 +610,7 @@ func TestSession(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	l := logrusx.New("", "")
-	p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 	assert.Equal(t, "ory_kratos_session", p.SessionName(ctx))
 	p.MustSet(ctx, config.ViperKeySessionName, "ory_session")
@@ -634,7 +641,7 @@ func TestCookies(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	l := logrusx.New("", "")
-	p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 	t.Run("path", func(t *testing.T) {
 		assert.Equal(t, "/", p.CookiePath(ctx))
@@ -681,14 +688,14 @@ func TestViperProvider_DSN(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=dsn: memory", func(t *testing.T) {
-		p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 		p.MustSet(ctx, config.ViperKeyDSN, "memory")
 
 		assert.Equal(t, config.DefaultSQLiteMemoryDSN, p.DSN(ctx))
 	})
 
 	t.Run("case=dsn: not memory", func(t *testing.T) {
-		p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 		dsn := "sqlite://foo.db?_fk=true"
 		p.MustSet(ctx, config.ViperKeyDSN, dsn)
@@ -703,7 +710,7 @@ func TestViperProvider_DSN(t *testing.T) {
 		l := logrusx.New("", "", logrusx.WithExitFunc(func(i int) {
 			exitCode = i
 		}))
-		p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+		p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 		assert.Equal(t, dsn, p.DSN(ctx))
 		assert.NotEqual(t, 0, exitCode)
@@ -719,7 +726,7 @@ func TestViperProvider_ParseURIOrFail(t *testing.T) {
 	l := logrusx.New("", "", logrusx.WithExitFunc(func(i int) {
 		exitCode = i
 	}))
-	p := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 	require.Zero(t, exitCode)
 
 	const testKey = "testKeyNotUsedInTheRealSchema"
@@ -773,7 +780,7 @@ func TestViperProvider_HaveIBeenPwned(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 	t.Run("case=hipb: host", func(t *testing.T) {
 		p.MustSet(ctx, config.ViperKeyPasswordHaveIBeenPwnedHost, "foo.bar")
 		assert.Equal(t, "foo.bar", p.PasswordPolicyConfig(ctx).HaveIBeenPwnedHost)
@@ -811,7 +818,7 @@ func newTestConfig(t *testing.T) (_ *config.Config, _ *test.Hook, exited *bool) 
 	exited = new(bool)
 	l.Logger.Hooks.Add(h)
 	l.Logger.ExitFunc = func(code int) { *exited = true }
-	config := config.MustNew(t, l, os.Stderr, configx.SkipValidation())
+	config := config.MustNew(t, l, os.Stderr, &contextx.Default{}, configx.SkipValidation())
 	return config, h, exited
 }
 
@@ -977,7 +984,7 @@ func TestIdentitySchemaValidation(t *testing.T) {
 		l := logrusx.New("kratos-"+tmpConfig.Name(), "test")
 		hook := test.NewLocal(l.Logger)
 
-		conf, err := config.New(ctx, l, os.Stderr, configx.WithConfigFiles(tmpConfig.Name()))
+		conf, err := config.New(ctx, l, os.Stderr, &contextx.Default{}, configx.WithConfigFiles(tmpConfig.Name()))
 		assert.NoError(t, err)
 
 		// clean the hooks since it will throw an event on first boot
@@ -990,17 +997,15 @@ func TestIdentitySchemaValidation(t *testing.T) {
 	}
 
 	t.Run("case=skip invalid schema validation", func(t *testing.T) {
-		ctx := ctx
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.invalid.identities.yaml"),
 			configx.SkipValidation())
 		assert.NoError(t, err)
 	})
 
 	t.Run("case=invalid schema should throw error", func(t *testing.T) {
-		ctx := ctx
 		var stdErr bytes.Buffer
-		_, err := config.New(ctx, logrusx.New("", ""), &stdErr,
+		_, err := config.New(ctx, logrusx.New("", ""), &stdErr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.invalid.identities.yaml"))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "minimum 1 properties allowed, but found 0")
@@ -1008,27 +1013,24 @@ func TestIdentitySchemaValidation(t *testing.T) {
 	})
 
 	t.Run("case=must fail on loading unreachable schemas", func(t *testing.T) {
-		ctx = config.SetValidateIdentitySchemaResilientClientOptions(ctx, []httpx.ResilientOptions{
+		// we make sure that the test runs into DNS issues instead of the context being canceled
+		ctx := config.SetValidateIdentitySchemaResilientClientOptions(ctx, []httpx.ResilientOptions{
 			httpx.ResilientClientWithMaxRetry(0),
-			httpx.ResilientClientWithConnectionTimeout(time.Nanosecond),
+			httpx.ResilientClientWithConnectionTimeout(5 * time.Second),
 		})
 
-		ctx, cancel := context.WithTimeout(ctx, time.Second*30)
-		t.Cleanup(cancel)
-
-		err := make(chan error, 1)
+		err := make(chan error)
 		go func(err chan error) {
-			_, e := config.New(ctx, logrusx.New("", ""), os.Stderr,
+			_, e := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 				configx.WithConfigFiles("stub/.kratos.mock.identities.yaml"))
 			err <- e
 		}(err)
 
 		select {
-		case <-ctx.Done():
-			panic("the test could not complete as the context timed out before the identity schema loader timed out")
+		case <-time.After(5 * time.Second):
+			t.Fatal("the test could not complete as the context timed out before the identity schema loader timed out")
 		case e := <-err:
-			assert.Error(t, e)
-			assert.Contains(t, e.Error(), "Client.Timeout")
+			assert.ErrorContains(t, e, "no such host")
 		}
 	})
 
@@ -1047,35 +1049,23 @@ func TestIdentitySchemaValidation(t *testing.T) {
 				t.Cleanup(cancel)
 
 				_, hook, writeSchema := testWatch(t, ctx, &cobra.Command{}, identity)
-
-				var wg sync.WaitGroup
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					// Change the identity config to an invalid file
-					writeSchema(invalidIdentity.Identity.Schemas)
-				}()
+				writeSchema(invalidIdentity.Identity.Schemas)
 
 				// There are a bunch of log messages beeing logged. We are looking for a specific one.
-				timeout := time.After(time.Millisecond * 500)
-				success := false
-				for !success {
+				for {
 					for _, v := range hook.AllEntries() {
 						s, err := v.String()
 						require.NoError(t, err)
-						success = success || strings.Contains(s, "The changed identity schema configuration is invalid and could not be loaded.")
+						if strings.Contains(s, "The changed identity schema configuration is invalid and could not be loaded.") {
+							return
+						}
 					}
-
 					select {
 					case <-ctx.Done():
 						t.Fatal("the test could not complete as the context timed out before the file watcher updated")
-					case <-timeout:
-						t.Fatal("Expected log line was not encountered within specified timeout")
 					default: // nothing
 					}
 				}
-
-				wg.Wait()
 			})
 		}
 	})
@@ -1085,7 +1075,7 @@ func TestPasswordless(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+	conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 		configx.SkipValidation(),
 		configx.WithValue(config.ViperKeyWebAuthnPasswordless, true))
 	require.NoError(t, err)
@@ -1100,7 +1090,7 @@ func TestPasswordlessCode(t *testing.T) {
 
 	ctx := context.Background()
 
-	conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+	conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 		configx.SkipValidation(),
 		configx.WithValue(config.ViperKeySelfServiceStrategyConfig+".code", map[string]interface{}{
 			"passwordless_enabled":                true,
@@ -1117,7 +1107,7 @@ func TestChangeMinPasswordLength(t *testing.T) {
 	t.Run("case=must fail on minimum password length below enforced minimum", func(t *testing.T) {
 		ctx := context.Background()
 
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.yaml"),
 			configx.WithValue(config.ViperKeyPasswordMinLength, 5))
 
@@ -1127,7 +1117,7 @@ func TestChangeMinPasswordLength(t *testing.T) {
 	t.Run("case=must not fail on minimum password length above enforced minimum", func(t *testing.T) {
 		ctx := context.Background()
 
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.yaml"),
 			configx.WithValue(config.ViperKeyPasswordMinLength, 9))
 
@@ -1140,14 +1130,14 @@ func TestCourierEmailHTTP(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=configs set", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.courier.email.http.yaml"), configx.SkipValidation())
 		assert.Equal(t, "http", conf.CourierEmailStrategy(ctx))
 		snapshotx.SnapshotT(t, conf.CourierEmailRequestConfig(ctx))
 	})
 
 	t.Run("case=defaults", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 		assert.Equal(t, "smtp", conf.CourierEmailStrategy(ctx))
 	})
@@ -1157,17 +1147,19 @@ func TestCourierChannels(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	t.Run("case=configs set", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.WithConfigFiles("stub/.kratos.courier.channels.yaml"), configx.SkipValidation())
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.WithConfigFiles("stub/.kratos.courier.channels.yaml"), configx.SkipValidation())
 
 		channelConfig, err := conf.CourierChannels(ctx)
 		require.NoError(t, err)
-		require.Len(t, channelConfig, 1)
+		require.Len(t, channelConfig, 2)
 		assert.Equal(t, channelConfig[0].ID, "phone")
 		assert.NotEmpty(t, channelConfig[0].RequestConfig)
+		assert.Equal(t, channelConfig[1].ID, "email")
+		assert.NotEmpty(t, channelConfig[1].SMTPConfig)
 	})
 
 	t.Run("case=defaults", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 
 		channelConfig, err := conf.CourierChannels(ctx)
 		require.NoError(t, err)
@@ -1186,7 +1178,7 @@ func TestCourierChannels(t *testing.T) {
 			"smtp://username:pass%2Fword@email-smtp.eu-west-3.amazonaws.com:587/",
 		} {
 			t.Run("case="+tc, func(t *testing.T) {
-				conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.WithValue(config.ViperKeyCourierSMTPURL, tc), configx.SkipValidation())
+				conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.WithValue(config.ViperKeyCourierSMTPURL, tc), configx.SkipValidation())
 				require.NoError(t, err)
 				cs, err := conf.CourierChannels(ctx)
 				require.NoError(t, err)
@@ -1202,13 +1194,13 @@ func TestCourierMessageTTL(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=configs set", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.courier.message_retries.yaml"), configx.SkipValidation())
 		assert.Equal(t, conf.CourierMessageRetries(ctx), 10)
 	})
 
 	t.Run("case=defaults", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 		assert.Equal(t, conf.CourierMessageRetries(ctx), 5)
 	})
 }
@@ -1218,7 +1210,7 @@ func TestOAuth2Provider(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=configs set", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.oauth2_provider.yaml"), configx.SkipValidation())
 		assert.Equal(t, "https://oauth2_provider/", conf.OAuth2ProviderURL(ctx).String())
 		assert.Equal(t, http.Header{"Authorization": {"Basic"}}, conf.OAuth2ProviderHeader(ctx))
@@ -1226,7 +1218,7 @@ func TestOAuth2Provider(t *testing.T) {
 	})
 
 	t.Run("case=defaults", func(t *testing.T) {
-		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, configx.SkipValidation())
+		conf, _ := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{}, configx.SkipValidation())
 		assert.Empty(t, conf.OAuth2ProviderURL(ctx))
 		assert.Empty(t, conf.OAuth2ProviderHeader(ctx))
 		assert.False(t, conf.OAuth2ProviderOverrideReturnTo(ctx))
@@ -1238,7 +1230,7 @@ func TestWebauthn(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=multiple origins", func(t *testing.T) {
-		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.webauthn.origins.yaml"))
 		require.NoError(t, err)
 		webAuthnConfig := conf.WebAuthnConfig(ctx)
@@ -1251,7 +1243,7 @@ func TestWebauthn(t *testing.T) {
 	})
 
 	t.Run("case=one origin", func(t *testing.T) {
-		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.webauthn.origin.yaml"))
 		require.NoError(t, err)
 		webAuthnConfig := conf.WebAuthnConfig(ctx)
@@ -1262,7 +1254,7 @@ func TestWebauthn(t *testing.T) {
 	})
 
 	t.Run("case=id as origin", func(t *testing.T) {
-		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		conf, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.yaml"))
 		require.NoError(t, err)
 		webAuthnConfig := conf.WebAuthnConfig(ctx)
@@ -1273,7 +1265,7 @@ func TestWebauthn(t *testing.T) {
 	})
 
 	t.Run("case=invalid", func(t *testing.T) {
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.webauthn.invalid.yaml"))
 		assert.Error(t, err)
 	})
@@ -1284,19 +1276,19 @@ func TestCourierTemplatesConfig(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("case=partial template update allowed", func(t *testing.T) {
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.courier.remote.partial.templates.yaml"))
 		assert.NoError(t, err)
 	})
 
 	t.Run("case=load remote template with fallback template overrides path", func(t *testing.T) {
-		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		_, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.courier.remote.templates.yaml"))
 		assert.NoError(t, err)
 	})
 
 	t.Run("case=courier template helper", func(t *testing.T) {
-		c, err := config.New(ctx, logrusx.New("", ""), os.Stderr,
+		c, err := config.New(ctx, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 			configx.WithConfigFiles("stub/.kratos.courier.remote.templates.yaml"))
 
 		assert.NoError(t, err)
@@ -1338,7 +1330,7 @@ func TestCleanup(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	p := config.MustNew(t, logrusx.New("", ""), os.Stderr,
+	p := config.MustNew(t, logrusx.New("", ""), os.Stderr, &contextx.Default{},
 		configx.WithConfigFiles("stub/.kratos.yaml"))
 
 	t.Run("group=cleanup config", func(t *testing.T) {

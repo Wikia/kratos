@@ -28,6 +28,7 @@ type Configuration struct {
 	// - gitlab
 	// - microsoft
 	// - discord
+	// - salesforce
 	// - slack
 	// - facebook
 	// - auth0
@@ -71,7 +72,7 @@ type Configuration struct {
 
 	// SubjectSource is a flag which controls from which endpoint the subject identifier is taken by microsoft provider.
 	// Can be either `userinfo` or `me`.
-	// If the value is `uerinfo` then the subject identifier is taken from sub field of uderifo standard endpoint response.
+	// If the value is `userinfo` then the subject identifier is taken from sub field of userinfo standard endpoint response.
 	// If the value is `me` then the `id` field of https://graph.microsoft.com/v1.0/me response is taken as subject.
 	// The default is `userinfo`.
 	SubjectSource string `json:"subject_source"`
@@ -118,9 +119,23 @@ type Configuration struct {
 	// endpoint to get the claims) or `id_token` (takes the claims from the id
 	// token). It defaults to `id_token`.
 	ClaimsSource string `json:"claims_source"`
+
+	// PKCE controls if the OpenID Connect OAuth2 flow should use PKCE (Proof Key for Code Exchange).
+	// Possible values are: `auto` (default), `never`, `force`.
+	// - `auto`: PKCE is used if the provider supports it. Requires setting `issuer_url`.
+	// - `never`: Disable PKCE entirely for this provider, even if the provider advertises support for it.
+	// - `force`: Always use PKCE, even if the provider does not advertise support for it. OAuth2 flows will fail if the provider does not support PKCE.
+	// IMPORTANT: If you set this to `force`, you must whitelist a different return URL for your OAuth2 client in the provider's configuration.
+	// Instead of <base-url>/self-service/methods/oidc/callback/<provider>, you must use <base-url>/self-service/methods/oidc/callback
+	// (Note the missing <provider> path segment and no trailing slash).
+	PKCE string `json:"pkce"`
 }
 
 func (p Configuration) Redir(public *url.URL) string {
+	if p.PKCE == "force" {
+		return urlx.AppendPaths(public, RouteCallbackGeneric).String()
+	}
+
 	if p.OrganizationID != "" {
 		route := RouteOrganizationCallback
 		route = strings.Replace(route, ":provider", p.ID, 1)
@@ -141,25 +156,28 @@ type ConfigurationCollection struct {
 // If you add a provider here, please also add a test to
 // provider_private_net_test.go
 var supportedProviders = map[string]func(config *Configuration, reg Dependencies) Provider{
-	"generic":    NewProviderGenericOIDC,
-	"google":     NewProviderGoogle,
-	"github":     NewProviderGitHub,
-	"github-app": NewProviderGitHubApp,
-	"gitlab":     NewProviderGitLab,
-	"microsoft":  NewProviderMicrosoft,
-	"discord":    NewProviderDiscord,
-	"slack":      NewProviderSlack,
-	"facebook":   NewProviderFacebook,
-	"auth0":      NewProviderAuth0,
-	"vk":         NewProviderVK,
-	"yandex":     NewProviderYandex,
-	"apple":      NewProviderApple,
-	"spotify":    NewProviderSpotify,
-	"netid":      NewProviderNetID,
-	"dingtalk":   NewProviderDingTalk,
-	"linkedin":   NewProviderLinkedIn,
-	"patreon":    NewProviderPatreon,
-	"lark":       NewProviderLark,
+	"generic":     NewProviderGenericOIDC,
+	"google":      NewProviderGoogle,
+	"github":      NewProviderGitHub,
+	"github-app":  NewProviderGitHubApp,
+	"gitlab":      NewProviderGitLab,
+	"microsoft":   NewProviderMicrosoft,
+	"discord":     NewProviderDiscord,
+	"salesforce":  NewProviderSalesforce,
+	"slack":       NewProviderSlack,
+	"facebook":    NewProviderFacebook,
+	"auth0":       NewProviderAuth0,
+	"vk":          NewProviderVK,
+	"yandex":      NewProviderYandex,
+	"apple":       NewProviderApple,
+	"spotify":     NewProviderSpotify,
+	"netid":       NewProviderNetID,
+	"dingtalk":    NewProviderDingTalk,
+	"linkedin":    NewProviderLinkedIn,
+	"linkedin_v2": NewProviderLinkedInV2,
+	"patreon":     NewProviderPatreon,
+	"lark":        NewProviderLark,
+	"x":           NewProviderX,
 }
 
 func (c ConfigurationCollection) Provider(id string, reg Dependencies) (Provider, error) {

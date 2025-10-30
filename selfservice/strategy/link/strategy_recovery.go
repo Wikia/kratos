@@ -4,6 +4,7 @@
 package link
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"time"
@@ -55,7 +56,7 @@ func (s *Strategy) PopulateRecoveryMethod(r *http.Request, f *recovery.Flow) err
 		// v0.5: form.Field{Name: "email", Type: "email", Required: true},
 		node.NewInputField("email", nil, node.LinkGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 	)
-	f.UI.GetNodes().Append(node.NewInputField("method", s.RecoveryStrategyID(), node.LinkGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelSubmit()))
+	f.UI.GetNodes().Append(node.NewInputField("method", s.RecoveryStrategyID(), node.LinkGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoNodeLabelContinue()))
 
 	return nil
 }
@@ -232,10 +233,15 @@ type updateRecoveryFlowWithLinkMethod struct {
 	//
 	// required: true
 	Method recovery.RecoveryMethod `json:"method"`
+
+	// Transient data to pass along to any webhooks
+	//
+	// required: false
+	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
 }
 
 func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.Flow) (err error) {
-	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.link.strategy.Recover")
+	ctx, span := s.d.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.link.Strategy.Recover")
 	span.SetAttributes(attribute.String("selfservice_flows_recovery_use", s.d.Config().SelfServiceFlowRecoveryUse(ctx)))
 	defer otelx.End(span, &err)
 
@@ -243,6 +249,8 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 	if err != nil {
 		return s.HandleRecoveryError(w, r, nil, body, err)
 	}
+
+	f.TransientPayload = body.TransientPayload
 
 	if len(body.Token) > 0 {
 		if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.RecoveryStrategyID(), s.RecoveryStrategyID(), s.d); err != nil {
@@ -275,9 +283,8 @@ func (s *Strategy) Recover(w http.ResponseWriter, r *http.Request, f *recovery.F
 	}
 
 	switch req.State {
-	case flow.StateChooseMethod:
-		fallthrough
-	case flow.StateEmailSent:
+	case flow.StateChooseMethod,
+		flow.StateEmailSent:
 		return s.recoveryHandleFormSubmission(w, r, req)
 	case flow.StatePassedChallenge:
 		// was already handled, do not allow retry
@@ -299,8 +306,9 @@ func (s *Strategy) recoveryIssueSession(w http.ResponseWriter, r *http.Request, 
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
-	sess, err := session.NewActiveSession(r, id, s.d.Config(), time.Now().UTC(), identity.CredentialsTypeRecoveryLink, identity.AuthenticatorAssuranceLevel1)
-	if err != nil {
+	sess := session.NewInactiveSession()
+	sess.CompletedLoginFor(identity.CredentialsTypeRecoveryLink, identity.AuthenticatorAssuranceLevel1)
+	if err := s.d.SessionManager().ActivateSession(r, sess, id, time.Now().UTC()); err != nil {
 		return s.retryRecoveryFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
@@ -514,11 +522,12 @@ func (s *Strategy) HandleRecoveryError(w http.ResponseWriter, r *http.Request, r
 }
 
 type recoverySubmitPayload struct {
-	Method    string `json:"method" form:"method"`
-	Token     string `json:"token" form:"token"`
-	CSRFToken string `json:"csrf_token" form:"csrf_token"`
-	Flow      string `json:"flow" form:"flow"`
-	Email     string `json:"email" form:"email"`
+	Method           string          `json:"method" form:"method"`
+	Token            string          `json:"token" form:"token"`
+	CSRFToken        string          `json:"csrf_token" form:"csrf_token"`
+	Flow             string          `json:"flow" form:"flow"`
+	Email            string          `json:"email" form:"email"`
+	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
 }
 
 func (s *Strategy) decodeRecovery(r *http.Request) (*recoverySubmitPayload, error) {

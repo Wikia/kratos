@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/selfservice/strategy/idfirst"
+
 	"github.com/cenkalti/backoff"
 	"github.com/dgraph-io/ristretto"
 	"github.com/gobuffalo/pop/v6"
@@ -45,6 +47,7 @@ import (
 	"github.com/ory/kratos/selfservice/strategy/link"
 	"github.com/ory/kratos/selfservice/strategy/lookup"
 	"github.com/ory/kratos/selfservice/strategy/oidc"
+	"github.com/ory/kratos/selfservice/strategy/passkey"
 	"github.com/ory/kratos/selfservice/strategy/password"
 	"github.com/ory/kratos/selfservice/strategy/profile"
 	"github.com/ory/kratos/selfservice/strategy/totp"
@@ -92,13 +95,15 @@ type RegistryDefault struct {
 	hookAddressVerifier      *hook.AddressVerifier
 	hookShowVerificationUI   *hook.ShowVerificationUIHook
 	hookCodeAddressVerifier  *hook.CodeAddressVerifier
+	hookTwoStepRegistration  *hook.TwoStepRegistration
 	hookTotpSecretsDestroyer *hook.TotpSecretsDestroyer
 
 	credentialsHandler *credentials.Handler
 
-	identityHandler   *identity.Handler
-	identityValidator *identity.Validator
-	identityManager   *identity.Manager
+	identityHandler        *identity.Handler
+	identityValidator      *identity.Validator
+	identityManager        *identity.Manager
+	identitySchemaProvider schema.IdentitySchemaProvider
 
 	courierHandler *courier.Handler
 
@@ -326,8 +331,10 @@ func (m *RegistryDefault) selfServiceStrategies() []any {
 				code.NewStrategy(m),
 				link.NewStrategy(m),
 				totp.NewStrategy(m),
+				passkey.NewStrategy(m),
 				webauthn.NewStrategy(m),
 				lookup.NewStrategy(m),
+				idfirst.NewStrategy(m),
 			}
 		}
 	}
@@ -336,6 +343,9 @@ func (m *RegistryDefault) selfServiceStrategies() []any {
 }
 
 func (m *RegistryDefault) strategyRegistrationEnabled(ctx context.Context, id string) bool {
+	if id == "profile" {
+		return m.Config().SelfServiceFlowRegistrationTwoSteps(ctx)
+	}
 	return m.Config().SelfServiceStrategy(ctx, id).Enabled
 }
 
@@ -380,6 +390,7 @@ nextStrategy:
 					continue nextStrategy
 				}
 			}
+
 			if m.strategyLoginEnabled(ctx, s.ID().String()) {
 				loginStrategies = append(loginStrategies, s)
 			}
@@ -483,12 +494,12 @@ func (m *RegistryDefault) Cipher(ctx context.Context) cipher.Cipher {
 	if m.crypter == nil {
 		switch m.c.CipherAlgorithm(ctx) {
 		case "xchacha20-poly1305":
-			m.crypter = cipher.NewCryptChaCha20(m)
+			m.crypter = cipher.NewCryptChaCha20(m.Config())
 		case "aes":
-			m.crypter = cipher.NewCryptAES(m)
+			m.crypter = cipher.NewCryptAES(m.Config())
 		default:
-			m.crypter = cipher.NewNoop(m)
-			m.l.Logger.Warning("No encryption configuration found. Default algorithm (noop) will be use that mean sensitive data will be recorded in plaintext")
+			m.crypter = cipher.NewNoop()
+			m.l.Logger.Warning("No encryption configuration found. The default algorithm (noop) will be used, resulting in sensitive data being stored in plaintext")
 		}
 	}
 	return m.crypter
@@ -633,6 +644,7 @@ func (m *RegistryDefault) Init(ctx context.Context, ctxer contextx.Contextualize
 			instrumentedsql.WithOmitArgs(), // don't risk leaking PII or secrets
 		}
 	}
+
 	if o.replaceTracer != nil {
 		m.trc = o.replaceTracer(m.trc)
 	}
@@ -643,6 +655,10 @@ func (m *RegistryDefault) Init(ctx context.Context, ctxer contextx.Contextualize
 
 	if o.extraHooks != nil {
 		m.WithHooks(o.extraHooks)
+	}
+
+	if o.replaceIdentitySchemaProvider != nil {
+		m.identitySchemaProvider = o.replaceIdentitySchemaProvider(m)
 	}
 
 	bc := backoff.NewExponentialBackOff()
@@ -796,6 +812,10 @@ func (m *RegistryDefault) RegistrationCodePersister() code.RegistrationCodePersi
 }
 
 func (m *RegistryDefault) LoginCodePersister() code.LoginCodePersister {
+	return m.Persister()
+}
+
+func (m *RegistryDefault) TransactionalPersisterProvider() x.TransactionalPersister {
 	return m.Persister()
 }
 

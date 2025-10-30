@@ -9,10 +9,12 @@ selfservice:
         default_browser_return_url: http://localhost:4455/login
 
     registration:
+      enable_legacy_one_step: true
       ui_url: http://localhost:4455/registration
       after:
         code:
           hooks:
+            - hook: show_verification_ui
             - hook: session
 
     login:
@@ -36,7 +38,6 @@ selfservice:
       enabled: true
     code:
       passwordless_enabled: true
-      passwordless_login_fallback_enabled: false
       enabled: true
       config:
         lifespan: 1h

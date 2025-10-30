@@ -89,13 +89,19 @@ func TestStrategyTraits(t *testing.T) {
 
 	browserIdentity1 := newIdentityWithPassword("john-browser@doe.com")
 	apiIdentity1 := newIdentityWithPassword("john-api@doe.com")
-	browserIdentity2 := &identity.Identity{ID: x.NewUUID(), Traits: identity.Traits(`{}`), State: identity.StateActive}
-	apiIdentity2 := &identity.Identity{ID: x.NewUUID(), Traits: identity.Traits(`{}`), State: identity.StateActive}
+	browserID2 := x.NewUUID()
+	browserIdentity2 := &identity.Identity{ID: browserID2, Traits: identity.Traits(`{}`), State: identity.StateActive, Credentials: map[identity.CredentialsType]identity.Credentials{
+		identity.CredentialsTypePassword: {Type: "password", Identifiers: []string{browserID2.String()}, Config: []byte(`{"hashed_password":"$2a$04$zvZz1zV"}`)},
+	}}
+	apiID2 := x.NewUUID()
+	apiIdentity2 := &identity.Identity{ID: apiID2, Traits: identity.Traits(`{}`), State: identity.StateActive, Credentials: map[identity.CredentialsType]identity.Credentials{
+		identity.CredentialsTypePassword: {Type: "password", Identifiers: []string{apiID2.String()}, Config: []byte(`{"hashed_password":"$2a$04$zvZz1zV"}`)},
+	}}
 
-	browserUser1 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, reg, browserIdentity1)
-	browserUser2 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, reg, browserIdentity2)
-	apiUser1 := testhelpers.NewHTTPClientWithIdentitySessionToken(t, reg, apiIdentity1)
-	apiUser2 := testhelpers.NewHTTPClientWithIdentitySessionToken(t, reg, apiIdentity2)
+	browserUser1 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, ctx, reg, browserIdentity1)
+	browserUser2 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, ctx, reg, browserIdentity2)
+	apiUser1 := testhelpers.NewHTTPClientWithIdentitySessionToken(t, ctx, reg, apiIdentity1)
+	apiUser2 := testhelpers.NewHTTPClientWithIdentitySessionToken(t, ctx, reg, apiIdentity2)
 
 	t.Run("description=not authorized to call endpoints without a session", func(t *testing.T) {
 		setUnprivileged(t)
@@ -205,13 +211,13 @@ func TestStrategyTraits(t *testing.T) {
 		}
 
 		t.Run("type=api", func(t *testing.T) {
-			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, apiUser1).FrontendApi.CreateNativeSettingsFlow(context.Background()).Execute()
+			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, apiUser1).FrontendAPI.CreateNativeSettingsFlow(context.Background()).Execute()
 			require.NoError(t, err)
 			run(t, apiIdentity1, pr, settings.RouteInitAPIFlow)
 		})
 
-		t.Run("type=api", func(t *testing.T) {
-			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, browserUser1).FrontendApi.CreateBrowserSettingsFlow(context.Background()).Execute()
+		t.Run("type=spa", func(t *testing.T) {
+			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, browserUser1).FrontendAPI.CreateBrowserSettingsFlow(context.Background()).Execute()
 			require.NoError(t, err)
 			run(t, browserIdentity1, pr, settings.RouteInitBrowserFlow)
 		})
@@ -224,7 +230,7 @@ func TestStrategyTraits(t *testing.T) {
 			rid := res.Request.URL.Query().Get("flow")
 			require.NotEmpty(t, rid)
 
-			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, browserUser1).FrontendApi.GetSettingsFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+			pr, _, err := testhelpers.NewSDKCustomClient(publicTS, browserUser1).FrontendAPI.GetSettingsFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 			require.NoError(t, err, "%s", rid)
 
 			run(t, browserIdentity1, pr, settings.RouteInitBrowserFlow)
@@ -275,8 +281,8 @@ func TestStrategyTraits(t *testing.T) {
 
 			values := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 			actual, res := testhelpers.SettingsMakeRequest(t, true, false, f, apiUser2, testhelpers.EncodeFormAsJSON(t, true, values))
-			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "ui.messages.0.text").String(), "initiated by another person", "%s", actual)
+			assert.Equal(t, http.StatusForbidden, res.StatusCode)
+			assert.Contains(t, gjson.Get(actual, "error.reason").String(), "initiated by someone else", "%s", actual)
 		})
 
 		t.Run("type=spa", func(t *testing.T) {
@@ -284,8 +290,8 @@ func TestStrategyTraits(t *testing.T) {
 
 			values := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 			actual, res := testhelpers.SettingsMakeRequest(t, false, true, f, browserUser2, testhelpers.EncodeFormAsJSON(t, true, values))
-			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "ui.messages.0.text").String(), "initiated by another person", "%s", actual)
+			assert.Equal(t, http.StatusForbidden, res.StatusCode)
+			assert.Contains(t, gjson.Get(actual, "error.reason").String(), "initiated by someone else", "%s", actual)
 		})
 
 		t.Run("type=browser", func(t *testing.T) {
@@ -294,7 +300,7 @@ func TestStrategyTraits(t *testing.T) {
 			values := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 			actual, res := testhelpers.SettingsMakeRequest(t, false, false, f, browserUser2, values.Encode())
 			assert.Equal(t, http.StatusOK, res.StatusCode)
-			assert.Contains(t, gjson.Get(actual, "ui.messages.0.text").String(), "initiated by another person", "%s", actual)
+			assert.Contains(t, gjson.Get(actual, "reason").String(), "initiated by someone else", "%s", actual)
 		})
 	})
 
@@ -449,15 +455,20 @@ func TestStrategyTraits(t *testing.T) {
 		t.Run("type=api", func(t *testing.T) {
 			actual := expectSuccess(t, true, false, apiUser1, payload("not-john-doe-api@mail.com"))
 			check(t, actual)
+			assert.Empty(t, gjson.Get(actual, "continue_with").Array(), "%s", actual)
 		})
 
 		t.Run("type=sqa", func(t *testing.T) {
 			actual := expectSuccess(t, false, true, browserUser1, payload("not-john-doe-browser@mail.com"))
 			check(t, actual)
+			assert.EqualValues(t, flow.ContinueWithActionRedirectBrowserToString, gjson.Get(actual, "continue_with.0.action").String(), "%s", actual)
+			assert.Contains(t, gjson.Get(actual, "continue_with.0.redirect_browser_to").String(), ui.URL, "%s", actual)
 		})
 
 		t.Run("type=browser", func(t *testing.T) {
-			check(t, expectSuccess(t, false, false, browserUser1, payload("not-john-doe-browser@mail.com")))
+			actual := expectSuccess(t, false, false, browserUser1, payload("not-john-doe-browser@mail.com"))
+			check(t, actual)
+			assert.Empty(t, gjson.Get(actual, "continue_with").Array(), "%s", actual)
 		})
 	})
 
@@ -612,7 +623,7 @@ func TestDisabledEndpoint(t *testing.T) {
 
 	publicTS, _ := testhelpers.NewKratosServer(t, reg)
 	browserIdentity1 := newIdentityWithPassword("john-browser@doe.com")
-	browserUser1 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, reg, browserIdentity1)
+	browserUser1 := testhelpers.NewHTTPClientWithIdentitySessionCookie(t, context.Background(), reg, browserIdentity1)
 
 	t.Run("case=should not submit when profile method is disabled", func(t *testing.T) {
 		t.Run("method=GET", func(t *testing.T) {

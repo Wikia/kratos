@@ -6,13 +6,12 @@ package identity
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/ory/kratos/schema"
-	"github.com/ory/kratos/x/events"
 	"github.com/ory/x/sqlcon"
 
 	"github.com/ory/x/otelx"
@@ -28,8 +27,6 @@ import (
 
 	"github.com/ory/herodot"
 	"github.com/ory/jsonschema/v3"
-	"github.com/ory/x/errorsx"
-
 	"github.com/ory/kratos/courier"
 )
 
@@ -95,10 +92,6 @@ func (m *Manager) Create(ctx context.Context, i *Identity, opts ...ManagerOption
 		return err
 	}
 
-	if err := i.SetAvailableAAL(ctx, m); err != nil {
-		return err
-	}
-
 	if err := m.r.PrivilegedIdentityPool().CreateIdentity(ctx, i); err != nil {
 		if errors.Is(err, sqlcon.ErrUniqueViolation) {
 			return m.findExistingAuthMethod(ctx, err, i)
@@ -106,7 +99,6 @@ func (m *Manager) Create(ctx context.Context, i *Identity, opts ...ManagerOption
 		return err
 	}
 
-	trace.SpanFromContext(ctx).AddEvent(events.NewIdentityCreated(ctx, i.ID))
 	return nil
 }
 
@@ -188,6 +180,8 @@ func (m *Manager) findExistingAuthMethod(ctx context.Context, e error, i *Identi
 		return creds[i].Type < creds[j].Type
 	})
 
+	duplicateCredErr := &ErrDuplicateCredentials{error: e}
+
 	for _, cred := range creds {
 		if cred.Config == nil {
 			continue
@@ -202,11 +196,28 @@ func (m *Manager) findExistingAuthMethod(ctx context.Context, e error, i *Identi
 			if len(cred.Identifiers) > 0 {
 				identifierHint = cred.Identifiers[0]
 			}
-			return &ErrDuplicateCredentials{
-				error:                e,
-				availableCredentials: []CredentialsType{cred.Type},
-				identifierHint:       identifierHint,
+			duplicateCredErr.SetIdentifierHint(identifierHint)
+
+			var cfg CredentialsPassword
+			if err := json.Unmarshal(cred.Config, &cfg); err != nil {
+				// just ignore this credential if the config is invalid
+				continue
 			}
+			if cfg.HashedPassword == "" {
+				// just ignore this credential if the hashed password is empty
+				continue
+			}
+
+			duplicateCredErr.AddCredentialsType(cred.Type)
+
+		case CredentialsTypeCodeAuth:
+			identifierHint := foundConflictAddress
+			if len(cred.Identifiers) > 0 {
+				identifierHint = cred.Identifiers[0]
+			}
+
+			duplicateCredErr.SetIdentifierHint(identifierHint)
+			duplicateCredErr.AddCredentialsType(cred.Type)
 		case CredentialsTypeOIDC:
 			var cfg CredentialsOIDC
 			if err := json.Unmarshal(cred.Config, &cfg); err != nil {
@@ -218,12 +229,9 @@ func (m *Manager) findExistingAuthMethod(ctx context.Context, e error, i *Identi
 				available = append(available, provider.Provider)
 			}
 
-			return &ErrDuplicateCredentials{
-				error:                  e,
-				availableCredentials:   []CredentialsType{cred.Type},
-				availableOIDCProviders: available,
-				identifierHint:         foundConflictAddress,
-			}
+			duplicateCredErr.AddCredentialsType(cred.Type)
+			duplicateCredErr.SetIdentifierHint(foundConflictAddress)
+			duplicateCredErr.availableOIDCProviders = available
 		case CredentialsTypeWebAuthn:
 			var cfg CredentialsWebAuthnConfig
 			if err := json.Unmarshal(cred.Config, &cfg); err != nil {
@@ -237,18 +245,33 @@ func (m *Manager) findExistingAuthMethod(ctx context.Context, e error, i *Identi
 
 			for _, webauthn := range cfg.Credentials {
 				if webauthn.IsPasswordless {
-					return &ErrDuplicateCredentials{
-						error:                e,
-						availableCredentials: []CredentialsType{cred.Type},
-						identifierHint:       identifierHint,
-					}
+					duplicateCredErr.AddCredentialsType(cred.Type)
+					duplicateCredErr.SetIdentifierHint(identifierHint)
+					break
+				}
+			}
+		case CredentialsTypePasskey:
+			var cfg CredentialsWebAuthnConfig
+			if err := json.Unmarshal(cred.Config, &cfg); err != nil {
+				return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("Unable to JSON decode identity credentials %s for identity %s.", cred.Type, found.ID))
+			}
+
+			identifierHint := foundConflictAddress
+			if len(cred.Identifiers) > 0 {
+				identifierHint = cred.Identifiers[0]
+			}
+
+			for _, webauthn := range cfg.Credentials {
+				if webauthn.IsPasswordless {
+					duplicateCredErr.AddCredentialsType(cred.Type)
+					duplicateCredErr.SetIdentifierHint(identifierHint)
+					break
 				}
 			}
 		}
 	}
 
-	// Still not found? Return generic error.
-	return &ErrDuplicateCredentials{error: e}
+	return duplicateCredErr
 }
 
 type ErrDuplicateCredentials struct {
@@ -265,53 +288,127 @@ func (e *ErrDuplicateCredentials) Unwrap() error {
 	return e.error
 }
 
+func (e *ErrDuplicateCredentials) AddCredentialsType(ct CredentialsType) {
+	e.availableCredentials = append(e.availableCredentials, ct)
+}
+
+func (e *ErrDuplicateCredentials) SetIdentifierHint(hint string) {
+	if hint != "" {
+		e.identifierHint = hint
+	}
+}
+
 func (e *ErrDuplicateCredentials) AvailableCredentials() []string {
 	res := make([]string, len(e.availableCredentials))
 	for k, v := range e.availableCredentials {
 		res[k] = string(v)
 	}
+	slices.Sort(res)
+
 	return res
 }
 
 func (e *ErrDuplicateCredentials) AvailableOIDCProviders() []string {
+	if e.availableOIDCProviders == nil {
+		return []string{}
+	}
+	slices.Sort(e.availableOIDCProviders)
 	return e.availableOIDCProviders
 }
 
 func (e *ErrDuplicateCredentials) IdentifierHint() string {
 	return e.identifierHint
 }
+
 func (e *ErrDuplicateCredentials) HasHints() bool {
 	return len(e.availableCredentials) > 0 || len(e.availableOIDCProviders) > 0 || len(e.identifierHint) > 0
+}
+
+type FailedIdentity struct {
+	Identity *Identity
+	Error    *herodot.DefaultError
+}
+
+type CreateIdentitiesError struct {
+	failedIdentities map[*Identity]*herodot.DefaultError
+}
+
+func (e *CreateIdentitiesError) Error() string {
+	e.init()
+	return fmt.Sprintf("create identities error: %d identities failed", len(e.failedIdentities))
+}
+func (e *CreateIdentitiesError) Unwrap() []error {
+	e.init()
+	var errs []error
+	for _, err := range e.failedIdentities {
+		errs = append(errs, err)
+	}
+	return errs
+}
+
+func (e *CreateIdentitiesError) AddFailedIdentity(ident *Identity, err *herodot.DefaultError) {
+	e.init()
+	e.failedIdentities[ident] = err
+}
+func (e *CreateIdentitiesError) Merge(other *CreateIdentitiesError) {
+	e.init()
+	for k, v := range other.failedIdentities {
+		e.failedIdentities[k] = v
+	}
+}
+func (e *CreateIdentitiesError) Contains(ident *Identity) bool {
+	e.init()
+	_, found := e.failedIdentities[ident]
+	return found
+}
+func (e *CreateIdentitiesError) Find(ident *Identity) *FailedIdentity {
+	e.init()
+	if err, found := e.failedIdentities[ident]; found {
+		return &FailedIdentity{Identity: ident, Error: err}
+	}
+
+	return nil
+}
+func (e *CreateIdentitiesError) ErrOrNil() error {
+	if len(e.failedIdentities) == 0 {
+		return nil
+	}
+	return e
+}
+func (e *CreateIdentitiesError) init() {
+	if e.failedIdentities == nil {
+		e.failedIdentities = map[*Identity]*herodot.DefaultError{}
+	}
 }
 
 func (m *Manager) CreateIdentities(ctx context.Context, identities []*Identity, opts ...ManagerOption) (err error) {
 	ctx, span := m.r.Tracer(ctx).Tracer().Start(ctx, "identity.Manager.CreateIdentities")
 	defer otelx.End(span, &err)
 
-	for _, i := range identities {
-		if i.SchemaID == "" {
-			i.SchemaID = m.r.Config().DefaultIdentityTraitsSchemaID(ctx)
-		}
-
-		if err := i.SetAvailableAAL(ctx, m); err != nil {
-			return err
+	createIdentitiesError := &CreateIdentitiesError{}
+	validIdentities := make([]*Identity, 0, len(identities))
+	for _, ident := range identities {
+		if ident.SchemaID == "" {
+			ident.SchemaID = m.r.Config().DefaultIdentityTraitsSchemaID(ctx)
 		}
 
 		o := newManagerOptions(opts)
-		if err := m.ValidateIdentity(ctx, i, o); err != nil {
+		if err := m.ValidateIdentity(ctx, ident, o); err != nil {
+			createIdentitiesError.AddFailedIdentity(ident, herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err))
+			continue
+		}
+		validIdentities = append(validIdentities, ident)
+	}
+
+	if err := m.r.PrivilegedIdentityPool().CreateIdentities(ctx, validIdentities...); err != nil {
+		if partialErr := new(CreateIdentitiesError); errors.As(err, &partialErr) {
+			createIdentitiesError.Merge(partialErr)
+		} else {
 			return err
 		}
 	}
 
-	if err := m.r.PrivilegedIdentityPool().CreateIdentities(ctx, identities...); err != nil {
-		return err
-	}
-
-	for _, i := range identities {
-		trace.SpanFromContext(ctx).AddEvent(events.NewIdentityCreated(ctx, i.ID))
-	}
-
-	return nil
+	return createIdentitiesError.ErrOrNil()
 }
 
 func (m *Manager) requiresPrivilegedAccess(ctx context.Context, original, updated *Identity, o *ManagerOptions) (err error) {
@@ -322,6 +419,7 @@ func (m *Manager) requiresPrivilegedAccess(ctx context.Context, original, update
 		if !CredentialsEqual(updated.Credentials, original.Credentials) {
 			// reset the identity
 			*updated = *original
+
 			return errors.WithStack(ErrProtectedFieldModified)
 		}
 
@@ -354,10 +452,6 @@ func (m *Manager) Update(ctx context.Context, updated *Identity, opts ...Manager
 		return err
 	}
 
-	if err := updated.SetAvailableAAL(ctx, m); err != nil {
-		return err
-	}
-
 	return m.r.PrivilegedIdentityPool().UpdateIdentity(ctx, updated)
 }
 
@@ -380,7 +474,6 @@ func (m *Manager) UpdateSchemaID(ctx context.Context, id uuid.UUID, schemaID str
 		return err
 	}
 
-	trace.SpanFromContext(ctx).AddEvent(events.NewIdentityUpdated(ctx, id))
 	return m.r.PrivilegedIdentityPool().UpdateIdentity(ctx, original)
 }
 
@@ -408,6 +501,30 @@ func (m *Manager) SetTraits(ctx context.Context, id uuid.UUID, traits Traits, op
 	return updated, nil
 }
 
+// RefreshAvailableAAL refreshes the available AAL for the identity.
+//
+// This method is a no-op if everything is up-to date.
+//
+// Please make sure to load all credentials before using this method.
+func (m *Manager) RefreshAvailableAAL(ctx context.Context, i *Identity) (err error) {
+	if len(i.Credentials) == 0 {
+		if err := m.r.PrivilegedIdentityPool().HydrateIdentityAssociations(ctx, i, ExpandCredentials); err != nil {
+			return err
+		}
+	}
+
+	aalBefore := i.InternalAvailableAAL
+	if err := i.SetAvailableAAL(ctx, m); err != nil {
+		return err
+	}
+
+	if aalBefore.String != i.InternalAvailableAAL.String || aalBefore.Valid != i.InternalAvailableAAL.Valid {
+		return m.r.PrivilegedIdentityPool().UpdateIdentityColumns(ctx, i, "available_aal")
+	}
+
+	return nil
+}
+
 func (m *Manager) UpdateTraits(ctx context.Context, id uuid.UUID, traits Traits, opts ...ManagerOption) (err error) {
 	ctx, span := m.r.Tracer(ctx).Tracer().Start(ctx, "identity.Manager.UpdateTraits")
 	defer otelx.End(span, &err)
@@ -417,19 +534,19 @@ func (m *Manager) UpdateTraits(ctx context.Context, id uuid.UUID, traits Traits,
 		return err
 	}
 
-	trace.SpanFromContext(ctx).AddEvent(events.NewIdentityUpdated(ctx, id))
 	return m.r.PrivilegedIdentityPool().UpdateIdentity(ctx, updated)
 }
 
 func (m *Manager) ValidateIdentity(ctx context.Context, i *Identity, o *ManagerOptions) (err error) {
-	// This trace is more noisy than it's worth in diagnostic power.
-	// ctx, span := m.r.Tracer(ctx).Tracer().Start(ctx, "identity.Manager.validate")
-	// defer otelx.End(span, &err)
-
 	if err := m.r.IdentityValidator().Validate(ctx, i); err != nil {
-		if _, ok := errorsx.Cause(err).(*jsonschema.ValidationError); ok && !o.ExposeValidationErrors {
+		var validationErr *jsonschema.ValidationError
+		if errors.As(err, &validationErr) && !o.ExposeValidationErrors {
 			return herodot.ErrBadRequest.WithReasonf("%s", err).WithWrap(err)
 		}
+		return err
+	}
+
+	if err := i.SetAvailableAAL(ctx, m); err != nil {
 		return err
 	}
 
@@ -442,7 +559,7 @@ func (m *Manager) CountActiveFirstFactorCredentials(ctx context.Context, i *Iden
 	// defer otelx.End(span, &err)
 
 	for _, strategy := range m.r.ActiveCredentialsCounterStrategies(ctx) {
-		current, err := strategy.CountActiveFirstFactorCredentials(i.Credentials)
+		current, err := strategy.CountActiveFirstFactorCredentials(ctx, i.Credentials)
 		if err != nil {
 			return 0, err
 		}
@@ -458,7 +575,7 @@ func (m *Manager) CountActiveMultiFactorCredentials(ctx context.Context, i *Iden
 	// defer otelx.End(span, &err)
 
 	for _, strategy := range m.r.ActiveCredentialsCounterStrategies(ctx) {
-		current, err := strategy.CountActiveMultiFactorCredentials(i.Credentials)
+		current, err := strategy.CountActiveMultiFactorCredentials(ctx, i.Credentials)
 		if err != nil {
 			return 0, err
 		}

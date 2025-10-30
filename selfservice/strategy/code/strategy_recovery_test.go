@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	confighelpers "github.com/ory/kratos/driver/config/testhelpers"
+
 	"github.com/davecgh/go-spew/spew"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +32,7 @@ import (
 	"github.com/ory/kratos/internal/testhelpers"
 	"github.com/ory/kratos/selfservice/flow"
 	"github.com/ory/kratos/selfservice/flow/recovery"
+	"github.com/ory/kratos/selfservice/hook/hooktest"
 	"github.com/ory/kratos/selfservice/strategy/code"
 	"github.com/ory/kratos/session"
 	"github.com/ory/kratos/text"
@@ -293,9 +296,52 @@ func TestRecovery(t *testing.T) {
 			assert.Contains(t, gjson.Get(body, "redirect_browser_to").String(), "settings-ts?")
 		})
 
+		t.Run("description=should pass transient data to email template and webhooks", func(t *testing.T) {
+			webhookTS := hooktest.NewServer()
+			t.Cleanup(webhookTS.Close)
+
+			conf.MustSet(ctx, "selfservice.flows.recovery.after.hooks", []config.SelfServiceHook{webhookTS.HookConfig()})
+			t.Cleanup(func() { conf.MustSet(ctx, "selfservice.flows.recovery.after.hooks", nil) })
+
+			client := testhelpers.NewClientWithCookies(t)
+			email := testhelpers.RandomEmail()
+			createIdentityToRecover(t, reg, email)
+			templatePayload := `{"payload":"template data"}`
+			webhookPayload := `{"payload":"webhook data"}`
+
+			f := testhelpers.InitializeRecoveryFlowViaBrowser(t, client, false, public, nil)
+
+			formPayload := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
+			formPayload.Set("email", email)
+			formPayload.Set("transient_payload", templatePayload)
+
+			body, _ := testhelpers.RecoveryMakeRequest(t, false, f, client, formPayload.Encode())
+			message := testhelpers.CourierExpectMessage(ctx, t, reg, email, "Recover access to your account")
+			assert.Equal(t, templatePayload, gjson.GetBytes(message.TemplateData, "transient_payload").String(),
+				"should pass transient payload to email template")
+
+			recoveryCode := testhelpers.CourierExpectCodeInMessage(t, message, 1)
+			assert.NotEmpty(t, recoveryCode)
+
+			action := gjson.Get(body, "ui.action").String()
+			assert.NotEmpty(t, action)
+
+			_, err := client.Post(action, "application/x-www-form-urlencoded", bytes.NewBufferString(
+				withCSRFToken(t, RecoveryClientTypeBrowser, body, url.Values{
+					"code":              {recoveryCode},
+					"method":            {"code"},
+					"transient_payload": {webhookPayload},
+				})))
+			require.NoError(t, err)
+
+			assert.JSONEq(t, webhookPayload, gjson.GetBytes(webhookTS.LastBody, "flow.transient_payload").String(),
+				"should pass transient payload to webhook")
+		})
+
 		t.Run("description=should return browser to return url", func(t *testing.T) {
 			returnTo := public.URL + "/return-to"
-			conf.Set(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo})
+			conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo})
+
 			for _, tc := range []struct {
 				desc        string
 				returnTo    string
@@ -313,9 +359,9 @@ func TestRecovery(t *testing.T) {
 					desc:     "should use return_to from config",
 					returnTo: returnTo,
 					f: func(t *testing.T, client *http.Client, identity *identity.Identity) *kratos.RecoveryFlow {
-						conf.Set(ctx, config.ViperKeySelfServiceRecoveryBrowserDefaultReturnTo, returnTo)
+						conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryBrowserDefaultReturnTo, returnTo)
 						t.Cleanup(func() {
-							conf.Set(ctx, config.ViperKeySelfServiceRecoveryBrowserDefaultReturnTo, "")
+							conf.MustSet(ctx, config.ViperKeySelfServiceRecoveryBrowserDefaultReturnTo, "")
 						})
 						return testhelpers.InitializeRecoveryFlowViaBrowser(t, client, false, public, nil)
 					},
@@ -331,10 +377,10 @@ func TestRecovery(t *testing.T) {
 					desc:     "should use return_to with an account that has 2fa enabled",
 					returnTo: returnTo,
 					f: func(t *testing.T, client *http.Client, id *identity.Identity) *kratos.RecoveryFlow {
-						conf.Set(ctx, config.ViperKeySelfServiceSettingsRequiredAAL, config.HighestAvailableAAL)
-						conf.Set(ctx, config.ViperKeySessionWhoAmIAAL, config.HighestAvailableAAL)
-						conf.Set(ctx, config.ViperKeyWebAuthnRPDisplayName, "Kratos")
-						conf.Set(ctx, config.ViperKeyWebAuthnRPID, "ory.sh")
+						conf.MustSet(ctx, config.ViperKeySelfServiceSettingsRequiredAAL, config.HighestAvailableAAL)
+						conf.MustSet(ctx, config.ViperKeySessionWhoAmIAAL, config.HighestAvailableAAL)
+						conf.MustSet(ctx, config.ViperKeyWebAuthnRPDisplayName, "Kratos")
+						conf.MustSet(ctx, config.ViperKeyWebAuthnRPID, "ory.sh")
 
 						t.Cleanup(func() {
 							conf.MustSet(ctx, config.ViperKeySessionWhoAmIAAL, identity.AuthenticatorAssuranceLevel1)
@@ -476,10 +522,10 @@ func TestRecovery(t *testing.T) {
 				}
 				req := httptest.NewRequest("GET", "/sessions/whoami", nil)
 
-				session, err := session.NewActiveSession(
-					req,
-					&identity.Identity{ID: x.NewUUID(), State: identity.StateActive},
-					testhelpers.NewSessionLifespanProvider(time.Hour),
+				req.WithContext(confighelpers.WithConfigValue(ctx, config.ViperKeySessionLifespan, time.Hour))
+				session, err := testhelpers.NewActiveSession(req,
+					reg,
+					&identity.Identity{ID: x.NewUUID(), State: identity.StateActive, NID: x.NewUUID()},
 					time.Now(),
 					identity.CredentialsTypePassword,
 					identity.AuthenticatorAssuranceLevel1,
@@ -488,7 +534,7 @@ func TestRecovery(t *testing.T) {
 				require.NoError(t, err)
 
 				// Add the authentication to the request
-				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, reg, session), t).RoundTripper
+				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, ctx, reg, session), t).RoundTripper
 
 				v := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 				v.Set("email", "some-email@example.org")
@@ -588,7 +634,7 @@ func TestRecovery(t *testing.T) {
 		id := createIdentityToRecover(t, reg, email)
 
 		req := httptest.NewRequest("GET", "/sessions/whoami", nil)
-		sess, err := session.NewActiveSession(req, id, conf, time.Now(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+		sess, err := testhelpers.NewActiveSession(req, reg, id, time.Now(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 		require.NoError(t, err)
 		require.NoError(t, reg.SessionPersister().UpsertSession(context.Background(), sess))
 
@@ -680,7 +726,7 @@ func TestRecovery(t *testing.T) {
 
 				rs, res, err := testhelpers.
 					NewSDKCustomClient(public, c).
-					FrontendApi.GetRecoveryFlow(context.Background()).
+					FrontendAPI.GetRecoveryFlow(context.Background()).
 					Id(flowId).
 					Execute()
 
@@ -1316,11 +1362,12 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 					f = testhelpers.InitializeRecoveryFlowViaBrowser(t, client, isSPA, public, nil)
 				}
 				req := httptest.NewRequest("GET", "/sessions/whoami", nil)
+				req.WithContext(confighelpers.WithConfigValue(ctx, config.ViperKeySessionLifespan, time.Hour))
 
-				session, err := session.NewActiveSession(
+				session, err := testhelpers.NewActiveSession(
 					req,
-					&identity.Identity{ID: x.NewUUID(), State: identity.StateActive},
-					testhelpers.NewSessionLifespanProvider(time.Hour),
+					reg,
+					&identity.Identity{ID: x.NewUUID(), State: identity.StateActive, NID: x.NewUUID()},
 					time.Now(),
 					identity.CredentialsTypePassword,
 					identity.AuthenticatorAssuranceLevel1,
@@ -1329,7 +1376,7 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 				require.NoError(t, err)
 
 				// Add the authentication to the request
-				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, reg, session), t).RoundTripper
+				client.Transport = testhelpers.NewTransportWithLogger(testhelpers.NewAuthorizedTransport(t, ctx, reg, session), t).RoundTripper
 
 				v := testhelpers.SDKFormFieldsToURLValues(f.Ui.Nodes)
 				v.Set("email", "some-email@example.org")
@@ -1419,7 +1466,7 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 				email := testhelpers.RandomEmail()
 				id := createIdentityToRecover(t, reg, email)
 
-				otherSession, err := session.NewActiveSession(httptest.NewRequest("GET", "/sessions/whoami", nil), id, conf, time.Now(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
+				otherSession, err := testhelpers.NewActiveSession(httptest.NewRequest("GET", "/sessions/whoami", nil), reg, id, time.Now(), identity.CredentialsTypePassword, identity.AuthenticatorAssuranceLevel1)
 				require.NoError(t, err)
 				require.NoError(t, reg.SessionPersister().UpsertSession(ctx, otherSession))
 
@@ -1527,7 +1574,7 @@ func TestRecovery_WithContinueWith(t *testing.T) {
 
 				rs, res, err := testhelpers.
 					NewSDKCustomClient(public, c).
-					FrontendApi.GetRecoveryFlow(context.Background()).
+					FrontendAPI.GetRecoveryFlow(context.Background()).
 					Id(flowId).
 					Execute()
 
@@ -1928,7 +1975,7 @@ func TestDisabledStrategy(t *testing.T) {
 			require.NoError(t, reg.IdentityManager().Create(context.Background(),
 				&id, identity.ManagerAllowWriteProtectedTraits))
 
-			rl, _, err := adminSDK.IdentityApi.
+			rl, _, err := adminSDK.IdentityAPI.
 				CreateRecoveryLinkForIdentity(context.Background()).
 				CreateRecoveryLinkForIdentityBody(kratos.CreateRecoveryLinkForIdentityBody{IdentityId: id.ID.String()}).
 				Execute()

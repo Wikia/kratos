@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ory/kratos/selfservice/flow"
+
 	"github.com/ory/kratos/driver"
 	"github.com/ory/kratos/internal/registrationhelpers"
 
@@ -45,6 +47,8 @@ func newRegistrationRegistry(t *testing.T) *driver.RegistryDefault {
 	conf, reg := internal.NewFastRegistryWithMocks(t)
 	conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword), map[string]interface{}{"enabled": true})
 	conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationLoginHints, true)
+	conf.MustSet(ctx, config.ViperKeySelfServiceRegistrationEnableLegacyOneStep, true)
+
 	return reg
 }
 
@@ -54,6 +58,7 @@ func TestRegistration(t *testing.T) {
 	t.Run("case=registration", func(t *testing.T) {
 		reg := newRegistrationRegistry(t)
 		conf := reg.Config()
+		conf.MustSet(ctx, "selfservice.flows.registration.enable_legacy_one_step", true)
 
 		router := x.NewRouterPublic()
 		admin := x.NewRouterAdmin()
@@ -103,7 +108,7 @@ func TestRegistration(t *testing.T) {
 			})
 		})
 
-		var expectLoginBody = func(t *testing.T, browserRedirTS *httptest.Server, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
+		var expectRegistrationBody = func(t *testing.T, browserRedirTS *httptest.Server, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
 			if isAPI {
 				return testhelpers.SubmitRegistrationForm(t, isAPI, hc, publicTS, values,
 					isSPA, http.StatusOK,
@@ -123,17 +128,17 @@ func TestRegistration(t *testing.T) {
 				isSPA, http.StatusOK, expectReturnTo)
 		}
 
-		var expectSuccessfulLogin = func(t *testing.T, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
+		var expectSuccessfulRegistration = func(t *testing.T, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
 			useReturnToFromTS(redirTS)
-			return expectLoginBody(t, redirTS, isAPI, isSPA, hc, values)
+			return expectRegistrationBody(t, redirTS, isAPI, isSPA, hc, values)
 		}
 
-		var expectNoLogin = func(t *testing.T, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
+		var expectNoRegistration = func(t *testing.T, isAPI, isSPA bool, hc *http.Client, values func(url.Values)) string {
 			useReturnToFromTS(redirNoSessionTS)
 			t.Cleanup(func() {
 				useReturnToFromTS(redirTS)
 			})
-			return expectLoginBody(t, redirNoSessionTS, isAPI, isSPA, hc, values)
+			return expectRegistrationBody(t, redirNoSessionTS, isAPI, isSPA, hc, values)
 		}
 
 		t.Run("case=should reject invalid transient payload", func(t *testing.T) {
@@ -175,7 +180,7 @@ func TestRegistration(t *testing.T) {
 
 			t.Run("type=api", func(t *testing.T) {
 				username := x.NewUUID().String()
-				body := expectSuccessfulLogin(t, true, false, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, true, false, nil, func(v url.Values) {
 					setValues(username, v)
 				})
 				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
@@ -185,7 +190,7 @@ func TestRegistration(t *testing.T) {
 
 			t.Run("type=spa", func(t *testing.T) {
 				username := x.NewUUID().String()
-				body := expectSuccessfulLogin(t, false, true, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, false, true, nil, func(v url.Values) {
 					setValues(username, v)
 				})
 				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
@@ -195,7 +200,7 @@ func TestRegistration(t *testing.T) {
 
 			t.Run("type=browser", func(t *testing.T) {
 				username := x.NewUUID().String()
-				body := expectSuccessfulLogin(t, false, false, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, false, false, nil, func(v url.Values) {
 					setValues(username, v)
 				})
 				assert.Equal(t, username, gjson.Get(body, "identity.traits.username").String(), "%s", body)
@@ -210,7 +215,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=api", func(t *testing.T) {
-				body := expectSuccessfulLogin(t, true, false, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, true, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-api")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -218,10 +223,11 @@ func TestRegistration(t *testing.T) {
 				assert.Equal(t, `registration-identifier-8-api`, gjson.Get(body, "identity.traits.username").String(), "%s", body)
 				assert.NotEmpty(t, gjson.Get(body, "session_token").String(), "%s", body)
 				assert.NotEmpty(t, gjson.Get(body, "session.id").String(), "%s", body)
+				assert.NotContains(t, gjson.Get(body, "continue_with").Raw, string(flow.ContinueWithActionRedirectBrowserToString), "%s", body)
 			})
 
 			t.Run("type=spa", func(t *testing.T) {
-				body := expectSuccessfulLogin(t, false, true, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, false, true, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-spa")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -229,15 +235,17 @@ func TestRegistration(t *testing.T) {
 				assert.Equal(t, `registration-identifier-8-spa`, gjson.Get(body, "identity.traits.username").String(), "%s", body)
 				assert.Empty(t, gjson.Get(body, "session_token").String(), "%s", body)
 				assert.NotEmpty(t, gjson.Get(body, "session.id").String(), "%s", body)
+				assert.EqualValues(t, flow.ContinueWithActionRedirectBrowserToString, gjson.Get(body, "continue_with.0.action").String(), "%s", body)
 			})
 
 			t.Run("type=browser", func(t *testing.T) {
-				body := expectSuccessfulLogin(t, false, false, nil, func(v url.Values) {
+				body := expectSuccessfulRegistration(t, false, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-browser")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
 				})
 				assert.Equal(t, `registration-identifier-8-browser`, gjson.Get(body, "identity.traits.username").String(), "%s", body)
+				assert.Empty(t, gjson.Get(body, "continue_with").Array(), "%s", body)
 			})
 		})
 
@@ -246,7 +254,7 @@ func TestRegistration(t *testing.T) {
 			conf.MustSet(ctx, config.HookStrategyKey(config.ViperKeySelfServiceRegistrationAfter, identity.CredentialsTypePassword.String()), nil)
 
 			t.Run("type=api", func(t *testing.T) {
-				body := expectNoLogin(t, true, false, nil, func(v url.Values) {
+				body := expectNoRegistration(t, true, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-api-nosession")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -257,7 +265,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=spa", func(t *testing.T) {
-				expectNoLogin(t, false, true, nil, func(v url.Values) {
+				expectNoRegistration(t, false, true, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-spa-nosession")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -265,7 +273,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=browser", func(t *testing.T) {
-				expectNoLogin(t, false, false, nil, func(v url.Values) {
+				expectNoRegistration(t, false, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-8-browser-nosession")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -297,7 +305,7 @@ func TestRegistration(t *testing.T) {
 						v.Set("traits.foobar", "bar")
 					}
 
-					_ = expectSuccessfulLogin(t, true, false, apiClient, values)
+					_ = expectSuccessfulRegistration(t, true, false, apiClient, values)
 					body := testhelpers.SubmitRegistrationForm(t, true, apiClient, publicTS,
 						applyTransform(values, transform), false, http.StatusBadRequest,
 						publicTS.URL+registration.RouteSubmitFlow)
@@ -311,7 +319,7 @@ func TestRegistration(t *testing.T) {
 						v.Set("traits.foobar", "bar")
 					}
 
-					_ = expectSuccessfulLogin(t, false, true, nil, values)
+					_ = expectSuccessfulRegistration(t, false, true, nil, values)
 					body := registrationhelpers.ExpectValidationError(t, publicTS, conf, "spa", applyTransform(values, transform))
 					assert.Contains(t, gjson.Get(body, "ui.messages.0.text").String(), "You tried signing in with registration-identifier-8-spa-duplicate-"+suffix+" which is already in use by another account. You can sign in using your password.", "%s", body)
 				})
@@ -323,7 +331,7 @@ func TestRegistration(t *testing.T) {
 						v.Set("traits.foobar", "bar")
 					}
 
-					_ = expectSuccessfulLogin(t, false, false, nil, values)
+					_ = expectSuccessfulRegistration(t, false, false, nil, values)
 					body := registrationhelpers.ExpectValidationError(t, publicTS, conf, "browser", applyTransform(values, transform))
 					assert.Contains(t, gjson.Get(body, "ui.messages.0.text").String(), "You tried signing in with registration-identifier-8-browser-duplicate-"+suffix+" which is already in use by another account. You can sign in using your password.", "%s", body)
 				})
@@ -538,7 +546,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=api", func(t *testing.T) {
-				actual := expectSuccessfulLogin(t, true, false, nil, func(v url.Values) {
+				actual := expectSuccessfulRegistration(t, true, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-10-api")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -547,7 +555,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=spa", func(t *testing.T) {
-				actual := expectSuccessfulLogin(t, false, false, nil, func(v url.Values) {
+				actual := expectSuccessfulRegistration(t, false, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-10-spa")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -556,7 +564,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=browser", func(t *testing.T) {
-				actual := expectSuccessfulLogin(t, false, false, nil, func(v url.Values) {
+				actual := expectSuccessfulRegistration(t, false, false, nil, func(v url.Values) {
 					v.Set("traits.username", "registration-identifier-10-browser")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.foobar", "bar")
@@ -617,7 +625,7 @@ func TestRegistration(t *testing.T) {
 
 			username := "registration-custom-schema"
 			t.Run("type=api", func(t *testing.T) {
-				body := expectNoLogin(t, true, false, nil, func(v url.Values) {
+				body := expectNoRegistration(t, true, false, nil, func(v url.Values) {
 					v.Set("traits.username", username+"-api")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.baz", "bar")
@@ -628,7 +636,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=spa", func(t *testing.T) {
-				expectNoLogin(t, false, true, nil, func(v url.Values) {
+				expectNoRegistration(t, false, true, nil, func(v url.Values) {
 					v.Set("traits.username", username+"-spa")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.baz", "bar")
@@ -636,7 +644,7 @@ func TestRegistration(t *testing.T) {
 			})
 
 			t.Run("type=browser", func(t *testing.T) {
-				expectNoLogin(t, false, false, nil, func(v url.Values) {
+				expectNoRegistration(t, false, false, nil, func(v url.Values) {
 					v.Set("traits.username", username+"-browser")
 					v.Set("password", x.NewUUID().String())
 					v.Set("traits.baz", "bar")
@@ -649,6 +657,7 @@ func TestRegistration(t *testing.T) {
 		conf, reg := internal.NewFastRegistryWithMocks(t)
 
 		conf.MustSet(ctx, config.ViperKeyPublicBaseURL, "https://foo/")
+		conf.MustSet(ctx, "selfservice.flows.registration.enable_legacy_one_step", true)
 		testhelpers.SetDefaultIdentitySchema(conf, "file://stub/sort.schema.json")
 		conf.MustSet(ctx, config.ViperKeySelfServiceStrategyConfig+"."+string(identity.CredentialsTypePassword)+".enabled", true)
 
@@ -667,8 +676,8 @@ func TestRegistration(t *testing.T) {
 				node.NewInputField("traits.username", nil, node.PasswordGroup, node.InputAttributeTypeText),
 				node.NewInputField("password", nil, node.PasswordGroup, node.InputAttributeTypePassword, node.WithRequiredInputAttribute, node.WithInputAttributes(func(a *node.InputAttributes) {
 					a.Autocomplete = node.InputAttributeAutocompleteNewPassword
-					a.MinLength = conf.PasswordPolicyConfig(ctx).MinPasswordLength
-					a.MaxLength = conf.PasswordPolicyConfig(ctx).MaxPasswordLength
+					a.MinLength = int(conf.PasswordPolicyConfig(ctx).MinPasswordLength)
+					a.MaxLength = int(conf.PasswordPolicyConfig(ctx).MaxPasswordLength)
 				})).WithMetaLabel(text.NewInfoNodeInputPassword()),
 				node.NewInputField("traits.bar", nil, node.PasswordGroup, node.InputAttributeTypeText),
 				node.NewInputField("method", "password", node.PasswordGroup, node.InputAttributeTypeSubmit).WithMetaLabel(text.NewInfoRegistration()),

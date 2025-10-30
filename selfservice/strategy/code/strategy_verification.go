@@ -5,6 +5,7 @@ package code
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -65,11 +66,15 @@ func (s *Strategy) decodeVerification(r *http.Request) (*updateVerificationFlowW
 }
 
 // handleVerificationError is a convenience function for handling all types of errors that may occur (e.g. validation error).
-func (s *Strategy) handleVerificationError(w http.ResponseWriter, r *http.Request, f *verification.Flow, body *updateVerificationFlowWithCodeMethod, err error) error {
+func (s *Strategy) handleVerificationError(r *http.Request, f *verification.Flow, body *updateVerificationFlowWithCodeMethod, err error) error {
 	if f != nil {
 		f.UI.SetCSRF(s.deps.GenerateCSRFToken(r))
+		email := ""
+		if body != nil {
+			email = body.Email
+		}
 		f.UI.GetNodes().Upsert(
-			node.NewInputField("email", body.Email, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
+			node.NewInputField("email", email, node.CodeGroup, node.InputAttributeTypeEmail, node.WithRequiredInputAttribute).WithMetaLabel(text.NewInfoNodeInputEmail()),
 		)
 	}
 
@@ -110,6 +115,11 @@ type updateVerificationFlowWithCodeMethod struct {
 
 	// The id of the flow
 	Flow string `json:"-" form:"-"`
+
+	// Transient data to pass along to any webhooks
+	//
+	// required: false
+	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
 }
 
 // getMethod returns the method of this submission or "" if no method could be found
@@ -125,21 +135,23 @@ func (body *updateVerificationFlowWithCodeMethod) getMethod() verification.Verif
 }
 
 func (s *Strategy) Verify(w http.ResponseWriter, r *http.Request, f *verification.Flow) (err error) {
-	ctx, span := s.deps.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.code.strategy.Verify")
+	ctx, span := s.deps.Tracer(r.Context()).Tracer().Start(r.Context(), "selfservice.strategy.code.Strategy.Verify")
 	span.SetAttributes(attribute.String("selfservice_flows_verification_use", s.deps.Config().SelfServiceFlowVerificationUse(ctx)))
 	defer otelx.End(span, &err)
 
 	body, err := s.decodeVerification(r)
 	if err != nil {
-		return s.handleVerificationError(w, r, nil, body, err)
+		return s.handleVerificationError(r, nil, body, err)
 	}
 
+	f.TransientPayload = body.TransientPayload
+
 	if err := flow.MethodEnabledAndAllowed(r.Context(), f.GetFlowName(), s.VerificationStrategyID(), string(body.getMethod()), s.deps); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	if err := f.Valid(); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	switch f.State {
@@ -189,20 +201,20 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 		return s.verificationUseCode(w, r, body.Code, f)
 	} else if len(body.Email) == 0 {
 		// If no code and no email was provided, fail with a validation error
-		return s.handleVerificationError(w, r, f, body, schema.NewRequiredError("#/email", "email"))
+		return s.handleVerificationError(r, f, body, schema.NewRequiredError("#/email", "email"))
 	}
 
 	if err := flow.EnsureCSRF(s.deps, r, f.Type, s.deps.Config().DisableAPIFlowEnforcement(r.Context()), s.deps.GenerateCSRFToken, body.CSRFToken); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	if err := s.deps.VerificationCodePersister().DeleteVerificationCodesOfFlow(r.Context(), f.ID); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	if err := s.deps.CodeSender().SendVerificationCode(r.Context(), f, identity.VerifiableAddressTypeEmail, body.Email); err != nil {
 		if !errors.Is(err, ErrUnknownAddress) {
-			return s.handleVerificationError(w, r, f, body, err)
+			return s.handleVerificationError(r, f, body, err)
 		}
 		// Continue execution
 	}
@@ -210,7 +222,7 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 	f.State = flow.StateEmailSent
 
 	if err := s.PopulateVerificationMethod(r, f); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	if body.Email != "" {
@@ -221,7 +233,7 @@ func (s *Strategy) verificationHandleFormSubmission(w http.ResponseWriter, r *ht
 	}
 
 	if err := s.deps.VerificationFlowPersister().UpdateVerificationFlow(r.Context(), f); err != nil {
-		return s.handleVerificationError(w, r, f, body, err)
+		return s.handleVerificationError(r, f, body, err)
 	}
 
 	return nil
@@ -246,21 +258,17 @@ func (s *Strategy) verificationUseCode(w http.ResponseWriter, r *http.Request, c
 		return s.retryVerificationFlowWithError(w, r, f.Type, err)
 	}
 
-	i, err := s.deps.IdentityPool().GetIdentity(r.Context(), code.VerifiableAddress.IdentityID, identity.ExpandDefault)
-	if err != nil {
-		return s.retryVerificationFlowWithError(w, r, f.Type, err)
-	}
-
-	if err := s.deps.VerificationExecutor().PostVerificationHook(w, r, f, i); err != nil {
-		return s.retryVerificationFlowWithError(w, r, f.Type, err)
-	}
-
 	address := code.VerifiableAddress
 	address.Verified = true
 	verifiedAt := sqlxx.NullTime(time.Now().UTC())
 	address.VerifiedAt = &verifiedAt
 	address.Status = identity.VerifiableAddressStatusCompleted
 	if err := s.deps.PrivilegedIdentityPool().UpdateVerifiableAddress(r.Context(), address); err != nil {
+		return s.retryVerificationFlowWithError(w, r, f.Type, err)
+	}
+
+	i, err := s.deps.IdentityPool().GetIdentity(r.Context(), code.VerifiableAddress.IdentityID, identity.ExpandDefault)
+	if err != nil {
 		return s.retryVerificationFlowWithError(w, r, f.Type, err)
 	}
 
@@ -284,6 +292,10 @@ func (s *Strategy) verificationUseCode(w http.ResponseWriter, r *http.Request, c
 		return s.retryVerificationFlowWithError(w, r, flow.TypeBrowser, err)
 	}
 
+	if err := s.deps.VerificationExecutor().PostVerificationHook(w, r, f, i); err != nil {
+		return s.retryVerificationFlowWithError(w, r, f.Type, err)
+	}
+
 	return nil
 }
 
@@ -297,13 +309,13 @@ func (s *Strategy) retryVerificationFlowWithMessage(w http.ResponseWriter, r *ht
 	f, err := verification.NewFlow(s.deps.Config(),
 		s.deps.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), s.deps.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
-		return s.handleVerificationError(w, r, f, nil, err)
+		return s.handleVerificationError(r, f, nil, err)
 	}
 
 	f.UI.Messages.Add(message)
 
 	if err := s.deps.VerificationFlowPersister().CreateVerificationFlow(r.Context(), f); err != nil {
-		return s.handleVerificationError(w, r, f, nil, err)
+		return s.handleVerificationError(r, f, nil, err)
 	}
 
 	if x.IsJSONRequest(r) {
@@ -325,7 +337,7 @@ func (s *Strategy) retryVerificationFlowWithError(w http.ResponseWriter, r *http
 	f, err := verification.NewFlow(s.deps.Config(),
 		s.deps.Config().SelfServiceFlowVerificationRequestLifespan(r.Context()), s.deps.CSRFHandler().RegenerateToken(w, r), r, s, ft)
 	if err != nil {
-		return s.handleVerificationError(w, r, f, nil, err)
+		return s.handleVerificationError(r, f, nil, err)
 	}
 
 	var toReturn error
@@ -338,7 +350,7 @@ func (s *Strategy) retryVerificationFlowWithError(w http.ResponseWriter, r *http
 	}
 
 	if err := s.deps.VerificationFlowPersister().CreateVerificationFlow(r.Context(), f); err != nil {
-		return s.handleVerificationError(w, r, f, nil, err)
+		return s.handleVerificationError(r, f, nil, err)
 	}
 
 	if x.IsJSONRequest(r) {

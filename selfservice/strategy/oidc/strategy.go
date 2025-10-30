@@ -6,14 +6,17 @@ package oidc
 import (
 	"bytes"
 	"context"
-	"crypto/sha512"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
+
+	"github.com/ory/x/sqlxx"
+
+	"golang.org/x/exp/maps"
 
 	"github.com/ory/x/urlx"
 
@@ -21,7 +24,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ory/kratos/cipher"
-	"github.com/ory/kratos/selfservice/flowhelpers"
+	oidcv1 "github.com/ory/kratos/gen/oidc/v1"
 	"github.com/ory/kratos/selfservice/sessiontokenexchange"
 	"github.com/ory/x/jsonnetsecure"
 	"github.com/ory/x/otelx"
@@ -62,6 +65,7 @@ const (
 
 	RouteAuth                 = RouteBase + "/auth/:flow"
 	RouteCallback             = RouteBase + "/callback/:provider"
+	RouteCallbackGeneric      = RouteBase + "/callback"
 	RouteOrganizationCallback = RouteBase + "/organization/:organization/callback/:provider"
 )
 
@@ -116,9 +120,9 @@ type Dependencies interface {
 
 func isForced(req interface{}) bool {
 	f, ok := req.(interface {
-		IsForced() bool
+		IsRefresh() bool
 	})
-	return ok && f.IsForced()
+	return ok && f.IsRefresh()
 }
 
 // Strategy implements selfservice.LoginStrategy, selfservice.RegistrationStrategy and selfservice.SettingsStrategy.
@@ -139,43 +143,7 @@ type AuthCodeContainer struct {
 	// fandom-end
 }
 
-type State struct {
-	FlowID string
-	Data   []byte
-}
-
-func (s *State) String() string {
-	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", s.FlowID, s.Data)))
-}
-
-func generateState(flowID string) *State {
-	return &State{
-		FlowID: flowID,
-		Data:   x.NewUUID().Bytes(),
-	}
-}
-
-func (s *State) setCode(code string) {
-	s.Data = sha512.New().Sum([]byte(code))
-}
-
-func (s *State) codeMatches(code string) bool {
-	return bytes.Equal(s.Data, sha512.New().Sum([]byte(code)))
-}
-
-func parseState(s string) (*State, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return nil, err
-	}
-	if id, data, ok := bytes.Cut(raw, []byte(":")); !ok {
-		return nil, errors.New("state has invalid format")
-	} else {
-		return &State{FlowID: string(id), Data: data}, nil
-	}
-}
-
-func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+func (s *Strategy) CountActiveFirstFactorCredentials(_ context.Context, cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
 	for _, c := range cc {
 		if c.Type == s.ID() && gjson.ValidBytes(c.Config) {
 			var conf identity.CredentialsOIDC
@@ -200,7 +168,7 @@ func (s *Strategy) CountActiveFirstFactorCredentials(cc map[identity.Credentials
 	return
 }
 
-func (s *Strategy) CountActiveMultiFactorCredentials(cc map[identity.CredentialsType]identity.Credentials) (count int, err error) {
+func (s *Strategy) CountActiveMultiFactorCredentials(_ context.Context, _ map[identity.CredentialsType]identity.Credentials) (count int, err error) {
 	return 0, nil
 }
 
@@ -208,6 +176,9 @@ func (s *Strategy) setRoutes(r *x.RouterPublic) {
 	wrappedHandleCallback := strategy.IsDisabled(s.d, s.ID().String(), s.HandleCallback)
 	if handle, _, _ := r.Lookup("GET", RouteCallback); handle == nil {
 		r.GET(RouteCallback, wrappedHandleCallback)
+	}
+	if handle, _, _ := r.Lookup("GET", RouteCallbackGeneric); handle == nil {
+		r.GET(RouteCallbackGeneric, wrappedHandleCallback)
 	}
 
 	// Apple can use the POST request method when calling the callback
@@ -290,7 +261,7 @@ func (s *Strategy) validateFlow(ctx context.Context, r *http.Request, rid uuid.U
 	return ar, err // this must return the error
 }
 
-func (s *Strategy) ValidateCallback(w http.ResponseWriter, r *http.Request) (flow.Flow, *AuthCodeContainer, error) {
+func (s *Strategy) ValidateCallback(w http.ResponseWriter, r *http.Request, ps httprouter.Params) (flow.Flow, *oidcv1.State, *AuthCodeContainer, error) {
 	var (
 		codeParam  = stringsx.Coalesce(r.URL.Query().Get("code"), r.URL.Query().Get("authCode"))
 		stateParam = r.URL.Query().Get("state")
@@ -298,48 +269,67 @@ func (s *Strategy) ValidateCallback(w http.ResponseWriter, r *http.Request) (flo
 	)
 
 	if stateParam == "" {
-		return nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the state query parameter.`))
+		return nil, nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the state query parameter.`))
 	}
-	state, err := parseState(stateParam)
+	state, err := DecryptState(r.Context(), s.d.Cipher(r.Context()), stateParam)
 	if err != nil {
-		return nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the state parameter was invalid.`))
+		return nil, nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the state parameter is invalid.`))
 	}
 
-	f, err := s.validateFlow(r.Context(), r, x.ParseUUID(state.FlowID))
+	if providerFromURL := ps.ByName("provider"); providerFromURL != "" {
+		// We're serving an OIDC callback URL with provider in the URL.
+		if state.ProviderId == "" {
+			// provider in URL, but not in state: compatiblity mode, remove this fallback later
+			state.ProviderId = providerFromURL
+		} else if state.ProviderId != providerFromURL {
+			// provider in state, but URL with different provider -> something's fishy
+			return nil, nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow: provider mismatch between internal state and URL.`))
+		}
+	}
+	if state.ProviderId == "" {
+		// weird: provider neither in the state nor in the URL
+		return nil, nil, nil, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow: provider could not be retrieved from state nor URL.`))
+	}
+
+	f, err := s.validateFlow(r.Context(), r, uuid.FromBytesOrNil(state.FlowId))
 	if err != nil {
-		return nil, nil, err
+		return nil, state, nil, err
 	}
 
 	tokenCode, hasSessionTokenCode, err := s.d.SessionTokenExchangePersister().CodeForFlow(r.Context(), f.GetID())
 	if err != nil {
-		return nil, nil, err
+		return nil, state, nil, err
 	}
 
 	cntnr := AuthCodeContainer{}
 	if f.GetType() == flow.TypeBrowser || !hasSessionTokenCode {
-		if _, err := s.d.ContinuityManager().Continue(r.Context(), w, r, sessionName, continuity.WithPayload(&cntnr)); err != nil {
-			return nil, nil, err
+		if _, err := s.d.ContinuityManager().Continue(r.Context(), w, r, sessionName,
+			continuity.WithPayload(&cntnr),
+			continuity.WithExpireInsteadOfDelete(time.Minute),
+		); err != nil {
+			return nil, state, nil, err
 		}
 		if stateParam != cntnr.State {
-			return nil, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the query state parameter does not match the state parameter from the session cookie.`))
+			return nil, state, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the query state parameter does not match the state parameter from the session cookie.`))
 		}
 	} else {
 		// We need to validate the tokenCode here
-		if !state.codeMatches(tokenCode.InitCode) {
-			return nil, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the query state parameter does not match the state parameter from the code.`))
+		if !codeMatches(state, tokenCode.InitCode) {
+			return nil, state, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the query state parameter does not match the state parameter from the code.`))
 		}
 		cntnr.State = stateParam
-		cntnr.FlowID = state.FlowID
+		cntnr.FlowID = uuid.FromBytesOrNil(state.FlowId).String()
 	}
 
 	if errorParam != "" {
-		return f, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider returned error "%s": %s`, r.URL.Query().Get("error"), r.URL.Query().Get("error_description")))
-	}
-	if codeParam == "" {
-		return f, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the code query parameter.`))
+		return f, state, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider returned error "%s": %s`, r.URL.Query().Get("error"), r.URL.Query().Get("error_description")))
 	}
 
-	return f, &cntnr, nil
+	if codeParam == "" {
+		return f, state, &cntnr, errors.WithStack(herodot.ErrBadRequest.WithReasonf(`Unable to complete OpenID Connect flow because the OpenID Provider did not return the code query parameter.`))
+	}
+
+	return f, state, &cntnr, nil
 }
 
 func registrationOrLoginFlowID(flow any) (uuid.UUID, bool) {
@@ -353,9 +343,7 @@ func registrationOrLoginFlowID(flow any) (uuid.UUID, bool) {
 	}
 }
 
-func (s *Strategy) alreadyAuthenticated(w http.ResponseWriter, r *http.Request, f interface{}) (bool, error) {
-	ctx := r.Context()
-
+func (s *Strategy) alreadyAuthenticated(ctx context.Context, w http.ResponseWriter, r *http.Request, f interface{}) (bool, error) {
 	if sess, _ := s.d.SessionManager().FetchFromRequest(ctx, r); sess != nil {
 		if _, ok := f.(*settings.Flow); ok {
 			// ignore this if it's a settings flow
@@ -371,7 +359,7 @@ func (s *Strategy) alreadyAuthenticated(w http.ResponseWriter, r *http.Request, 
 			returnTo := s.d.Config().SelfServiceBrowserDefaultReturnTo(ctx)
 			if redirecter, ok := f.(flow.FlowWithRedirect); ok {
 				r, err := x.SecureRedirectTo(r, returnTo, redirecter.SecureRedirectToOpts(ctx, s.d)...)
-				if err != nil {
+				if err == nil {
 					returnTo = r
 				}
 			}
@@ -386,148 +374,157 @@ func (s *Strategy) alreadyAuthenticated(w http.ResponseWriter, r *http.Request, 
 func (s *Strategy) HandleCallback(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	var (
 		code = stringsx.Coalesce(r.URL.Query().Get("code"), r.URL.Query().Get("authCode"))
-		pid  = ps.ByName("provider")
+		err  error
 	)
 
-	ctx := r.Context()
-	ctx = context.WithValue(ctx, httprouter.ParamsKey, ps)
+	ctx := context.WithValue(r.Context(), httprouter.ParamsKey, ps)
+	ctx, span := s.d.Tracer(ctx).Tracer().Start(ctx, "strategy.oidc.ExchangeCode")
+	defer otelx.End(span, &err)
 	r = r.WithContext(ctx)
 
-	req, cntnr, err := s.ValidateCallback(w, r)
+	req, state, cntnr, err := s.ValidateCallback(w, r, ps)
 	if err != nil {
 		if req != nil {
-			s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
 		} else {
-			s.d.SelfServiceErrorManager().Forward(r.Context(), w, r, s.handleError(w, r, nil, pid, nil, err))
+			s.d.SelfServiceErrorManager().Forward(ctx, w, r, s.handleError(ctx, w, r, nil, "", nil, err))
 		}
 		return
 	}
 
-	if authenticated, err := s.alreadyAuthenticated(w, r, req); err != nil {
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
+	if authenticated, err := s.alreadyAuthenticated(ctx, w, r, req); err != nil {
+		s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
 	} else if authenticated {
 		return
 	}
 
-	provider, err := s.provider(r.Context(), r, pid)
+	provider, err := s.provider(ctx, state.ProviderId)
 	if err != nil {
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
+		s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
 		return
 	}
 
-	token, err := s.ExchangeCode(r.Context(), provider, code)
-	if err != nil {
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
+	var claims *Claims
+	var et *identity.CredentialsOIDCEncryptedTokens
+	switch p := provider.(type) {
+	case OAuth2Provider:
+		token, err := s.ExchangeCode(ctx, provider, code, PKCEVerifier(state))
+		if err != nil {
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
+			return
+		}
+
+		et, err = s.encryptOAuth2Tokens(ctx, token)
+		if err != nil {
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
+			return
+		}
+
+		claims, err = p.Claims(ctx, token, r.URL.Query())
+		if err != nil {
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
+			return
+		}
+	case OAuth1Provider:
+		token, err := p.ExchangeToken(ctx, r)
+		if err != nil {
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
+			return
+		}
+
+		claims, err = p.Claims(ctx, token)
+		if err != nil {
+			s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
+			return
+		}
+	}
+
+	if err = claims.Validate(); err != nil {
+		s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, err))
 		return
 	}
 
-	claims, err := provider.Claims(r.Context(), token, r.URL.Query())
-	if err != nil {
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
-		return
-	}
-
-	if err := claims.Validate(); err != nil {
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, err))
-		return
-	}
+	span.SetAttributes(attribute.StringSlice("claims", maps.Keys(claims.RawClaims)))
 
 	switch a := req.(type) {
 	case *login.Flow:
-		if ff, err := s.processLogin(w, r, a, token, claims, provider, cntnr); err != nil {
-			if ff != nil {
-				s.forwardError(w, r, ff, err)
+		a.Active = s.ID()
+		a.TransientPayload = cntnr.TransientPayload
+		if ff, err := s.processLogin(ctx, w, r, a, et, claims, provider, cntnr); err != nil {
+			if errors.Is(err, flow.ErrCompletedByStrategy) {
 				return
 			}
-			s.forwardError(w, r, a, err)
+			if ff != nil {
+				s.forwardError(ctx, w, r, ff, err)
+				return
+			}
+			s.forwardError(ctx, w, r, a, err)
 		}
 		return
 	case *registration.Flow:
+		a.Active = s.ID()
 		a.TransientPayload = cntnr.TransientPayload
-		if ff, err := s.processRegistration(w, r, a, token, claims, provider, cntnr, ""); err != nil {
+		if ff, err := s.processRegistration(ctx, w, r, a, et, claims, provider, cntnr); err != nil {
 			if ff != nil {
-				s.forwardError(w, r, ff, err)
+				s.forwardError(ctx, w, r, ff, err)
 				return
 			}
-			s.forwardError(w, r, a, err)
+			s.forwardError(ctx, w, r, a, err)
 		}
 		return
 	case *settings.Flow:
-		sess, err := s.d.SessionManager().FetchFromRequest(r.Context(), r)
+		a.Active = sqlxx.NullString(s.ID())
+		a.TransientPayload = cntnr.TransientPayload
+		sess, err := s.d.SessionManager().FetchFromRequest(ctx, r)
 		if err != nil {
-			s.forwardError(w, r, a, s.handleError(w, r, a, pid, nil, err))
+			s.forwardError(ctx, w, r, a, s.handleError(ctx, w, r, a, state.ProviderId, nil, err))
 			return
 		}
-		if err := s.linkProvider(w, r, &settings.UpdateContext{Session: sess, Flow: a}, token, claims, provider); err != nil {
-			s.forwardError(w, r, a, s.handleError(w, r, a, pid, nil, err))
+		if err := s.linkProvider(w, r, &settings.UpdateContext{Session: sess, Flow: a}, et, claims, provider); err != nil {
+			s.forwardError(ctx, w, r, a, s.handleError(ctx, w, r, a, state.ProviderId, nil, err))
 			return
 		}
 		return
 	default:
-		s.forwardError(w, r, req, s.handleError(w, r, req, pid, nil, errors.WithStack(x.PseudoPanic.
+		s.forwardError(ctx, w, r, req, s.handleError(ctx, w, r, req, state.ProviderId, nil, errors.WithStack(x.PseudoPanic.
 			WithDetailf("cause", "Unexpected type in OpenID Connect flow: %T", a))))
 		return
 	}
 }
 
-func (s *Strategy) ExchangeCode(ctx context.Context, provider Provider, code string) (token *oauth2.Token, err error) {
+func (s *Strategy) ExchangeCode(ctx context.Context, provider Provider, code string, opts []oauth2.AuthCodeOption) (token *oauth2.Token, err error) {
 	ctx, span := s.d.Tracer(ctx).Tracer().Start(ctx, "strategy.oidc.ExchangeCode")
 	defer otelx.End(span, &err)
 	span.SetAttributes(attribute.String("provider_id", provider.Config().ID))
 	span.SetAttributes(attribute.String("provider_label", provider.Config().Label))
 
-	te, ok := provider.(TokenExchanger)
-	if !ok {
-		te, err = provider.OAuth2(ctx)
-		if err != nil {
-			return nil, err
+	switch p := provider.(type) {
+	case OAuth2Provider:
+		te, ok := provider.(OAuth2TokenExchanger)
+		if !ok {
+			te, err = p.OAuth2(ctx)
+			if err != nil {
+				return nil, err
+			}
 		}
-	}
 
-	client := s.d.HTTPClient(ctx)
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, client.HTTPClient)
-	token, err = te.Exchange(ctx, code)
-	return token, err
+		client := s.d.HTTPClient(ctx)
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, client.HTTPClient)
+		token, err = te.Exchange(ctx, code, opts...)
+		return token, err
+	default:
+		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The chosen provider is not capable of exchanging an OAuth 2.0 code for an access token."))
+	}
 }
 
-func (s *Strategy) populateMethod(r *http.Request, f flow.Flow, message func(provider string) *text.Message) error {
+func (s *Strategy) populateMethod(r *http.Request, f flow.Flow, message func(provider string, providerId string) *text.Message) error {
 	conf, err := s.Config(r.Context())
 	if err != nil {
 		return err
 	}
 
-	providers := conf.Providers
-
-	if lf, ok := f.(*login.Flow); ok && lf.IsForced() {
-		if _, id, c := flowhelpers.GuessForcedLoginIdentifier(r, s.d, lf, s.ID()); id != nil {
-			if c == nil {
-				// no OIDC credentials, don't add any providers
-				providers = nil
-			} else {
-				var credentials identity.CredentialsOIDC
-				if err := json.Unmarshal(c.Config, &credentials); err != nil {
-					// failed to read OIDC credentials, don't add any providers
-					providers = nil
-				} else {
-					// add only providers that can actually be used to log in as this identity
-					providers = make([]Configuration, 0, len(conf.Providers))
-					for i := range conf.Providers {
-						for j := range credentials.Providers {
-							if conf.Providers[i].ID == credentials.Providers[j].Provider {
-								providers = append(providers, conf.Providers[i])
-								break
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// does not need sorting because there is only one field
-	c := f.GetUI()
-	c.SetCSRF(s.d.GenerateCSRFToken(r))
-	AddProviders(c, providers, message)
+	f.GetUI().SetCSRF(s.d.GenerateCSRFToken(r))
+	AddProviders(f.GetUI(), conf.Providers, message)
 
 	return nil
 }
@@ -546,7 +543,7 @@ func (s *Strategy) Config(ctx context.Context) (*ConfigurationCollection, error)
 	return &c, nil
 }
 
-func (s *Strategy) provider(ctx context.Context, r *http.Request, id string) (Provider, error) {
+func (s *Strategy) provider(ctx context.Context, id string) (Provider, error) {
 	if c, err := s.Config(ctx); err != nil {
 		return nil, err
 	} else if provider, err := c.Provider(id, s.d); err != nil {
@@ -556,7 +553,7 @@ func (s *Strategy) provider(ctx context.Context, r *http.Request, id string) (Pr
 	}
 }
 
-func (s *Strategy) forwardError(w http.ResponseWriter, r *http.Request, f flow.Flow, err error) {
+func (s *Strategy) forwardError(ctx context.Context, w http.ResponseWriter, r *http.Request, f flow.Flow, err error) {
 	switch ff := f.(type) {
 	case *login.Flow:
 		s.d.LoginFlowErrorHandler().WriteFlowError(w, r, ff, s.NodeGroup(), err)
@@ -564,7 +561,7 @@ func (s *Strategy) forwardError(w http.ResponseWriter, r *http.Request, f flow.F
 		s.d.RegistrationFlowErrorHandler().WriteFlowError(w, r, ff, s.NodeGroup(), err)
 	case *settings.Flow:
 		var i *identity.Identity
-		if sess, err := s.d.SessionManager().FetchFromRequest(r.Context(), r); err == nil {
+		if sess, err := s.d.SessionManager().FetchFromRequest(ctx, r); err == nil {
 			i = sess.Identity
 		}
 		s.d.SettingsFlowErrorHandler().WriteFlowError(w, r, s.NodeGroup(), ff, i, err)
@@ -573,7 +570,7 @@ func (s *Strategy) forwardError(w http.ResponseWriter, r *http.Request, f flow.F
 	}
 }
 
-func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Flow, providerID string, traits []byte, err error) error {
+func (s *Strategy) handleError(ctx context.Context, w http.ResponseWriter, r *http.Request, f flow.Flow, usedProviderID string, traits []byte, err error) error {
 	switch rf := f.(type) {
 	case *login.Flow:
 		return err
@@ -593,38 +590,28 @@ func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Fl
 				rf.UI.Messages.Add(text.NewErrorValidationDuplicateCredentialsOnOIDCLink())
 			}
 
-			lf, err := s.registrationToLogin(w, r, rf, providerID)
+			lf, err := s.registrationToLogin(ctx, w, r, rf)
 			if err != nil {
 				return err
 			}
 			// return a new login flow with the error message embedded in the login flow.
-			redirectURL := lf.AppendTo(s.d.Config().SelfServiceFlowLoginUI(r.Context()))
+			var redirectURL *url.URL
+			if lf.Type == flow.TypeAPI {
+				returnTo := s.d.Config().SelfServiceBrowserDefaultReturnTo(ctx)
+				if redirecter, ok := f.(flow.FlowWithRedirect); ok {
+					secureReturnTo, err := x.SecureRedirectTo(r, returnTo, redirecter.SecureRedirectToOpts(ctx, s.d)...)
+					if err == nil {
+						returnTo = secureReturnTo
+					}
+				}
+				redirectURL = lf.AppendTo(returnTo)
+			} else {
+				redirectURL = lf.AppendTo(s.d.Config().SelfServiceFlowLoginUI(ctx))
+			}
 			if dc, err := flow.DuplicateCredentials(lf); err == nil && dc != nil {
 				redirectURL = urlx.CopyWithQuery(redirectURL, url.Values{"no_org_ui": {"true"}})
-
-				for i, n := range lf.UI.Nodes {
-					if n.Meta == nil || n.Meta.Label == nil {
-						continue
-					}
-					switch n.Meta.Label.ID {
-					case text.InfoSelfServiceLogin:
-						lf.UI.Nodes[i].Meta.Label = text.NewInfoLoginAndLink()
-					case text.InfoSelfServiceLoginWith:
-						p := gjson.GetBytes(n.Meta.Label.Context, "provider").String()
-						lf.UI.Nodes[i].Meta.Label = text.NewInfoLoginWithAndLink(p)
-					}
-				}
-
-				newLoginURL := s.d.Config().SelfServiceFlowLoginUI(r.Context()).String()
-				providerLabel := providerID
-				provider, _ := s.provider(r.Context(), r, providerID)
-				if provider != nil && provider.Config() != nil {
-					providerLabel = provider.Config().Label
-				}
-				lf.UI.Messages.Add(text.NewInfoLoginLinkMessage(dc.DuplicateIdentifier, providerLabel, newLoginURL))
-
-				err := s.d.LoginFlowPersister().UpdateLoginFlow(r.Context(), lf)
-				if err != nil {
+				s.populateAccountLinkingUI(ctx, lf, usedProviderID, dc.DuplicateIdentifier, dup.AvailableCredentials(), dup.AvailableOIDCProviders())
+				if err := s.d.LoginFlowPersister().UpdateLoginFlow(ctx, lf); err != nil {
 					return err
 				}
 			}
@@ -637,15 +624,15 @@ func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Fl
 
 		// Adds the "Continue" button
 		rf.UI.SetCSRF(s.d.GenerateCSRFToken(r))
-		AddProvider(rf.UI, providerID, text.NewInfoRegistrationContinue())
+		AddProvider(rf.UI, usedProviderID, text.NewInfoRegistrationContinue())
 
 		if traits != nil {
-			ds, err := s.d.Config().DefaultIdentityTraitsSchemaURL(r.Context())
+			ds, err := s.d.Config().DefaultIdentityTraitsSchemaURL(ctx)
 			if err != nil {
 				return err
 			}
 
-			traitNodes, err := container.NodesFromJSONSchema(r.Context(), node.OpenIDConnectGroup, ds.String(), "", nil)
+			traitNodes, err := container.NodesFromJSONSchema(ctx, node.OpenIDConnectGroup, ds.String(), "", nil)
 			if err != nil {
 				return err
 			}
@@ -662,18 +649,88 @@ func (s *Strategy) handleError(w http.ResponseWriter, r *http.Request, f flow.Fl
 	return err
 }
 
+func (s *Strategy) populateAccountLinkingUI(ctx context.Context, lf *login.Flow, usedProviderID string, duplicateIdentifier string, availableCredentials []string, availableProviders []string) {
+	newLoginURL := s.d.Config().SelfServiceFlowLoginUI(ctx).String()
+	usedProviderLabel := usedProviderID
+	provider, _ := s.provider(ctx, usedProviderID)
+	if provider != nil && provider.Config() != nil {
+		usedProviderLabel = provider.Config().Label
+		if usedProviderLabel == "" {
+			usedProviderLabel = provider.Config().Provider
+		}
+	}
+	loginHintsEnabled := s.d.Config().SelfServiceFlowRegistrationLoginHints(ctx)
+	nodes := []*node.Node{}
+	for _, n := range lf.UI.Nodes {
+		// We don't want to touch nodes unecessary nodes
+		if n.Meta == nil || n.Meta.Label == nil || n.Group == node.DefaultGroup {
+			nodes = append(nodes, n)
+			continue
+		}
+
+		// Skip the provider that was used to get here (in case they used an OIDC provider)
+		pID := gjson.GetBytes(n.Meta.Label.Context, "provider_id").String()
+		if n.Group == node.OpenIDConnectGroup {
+			if pID == usedProviderID {
+				continue
+			}
+			// Hide any provider that is not available for the user
+			if loginHintsEnabled && !slices.Contains(availableProviders, pID) {
+				continue
+			}
+		}
+
+		// Replace some labels to make it easier for the user to understand what's going on.
+		switch n.Meta.Label.ID {
+		case text.InfoSelfServiceLogin:
+			n.Meta.Label = text.NewInfoLoginAndLink()
+		case text.InfoSelfServiceLoginWith:
+			p := gjson.GetBytes(n.Meta.Label.Context, "provider").String()
+			n.Meta.Label = text.NewInfoLoginWithAndLink(p)
+		}
+
+		// This can happen, if login hints are disabled. In that case, we need to make sure to show all credential options.
+		// It could in theory also happen due to a mis-configuration, and in that case, we should make sure to not delete the entire flow.
+		if !loginHintsEnabled {
+			nodes = append(nodes, n)
+		} else {
+			// Hide nodes from credentials that are not relevant for the user
+			for _, ct := range availableCredentials {
+				if ct == string(n.Group) {
+					nodes = append(nodes, n)
+					break
+				}
+			}
+		}
+	}
+
+	// Hide the "primary" identifier field present for Password, webauthn or passwordless, as we already know the identifier
+	identifierNode := lf.UI.Nodes.Find("identifier")
+	if identifierNode != nil {
+		if attributes, ok := identifierNode.Attributes.(*node.InputAttributes); ok {
+			attributes.Type = node.InputAttributeTypeHidden
+			attributes.SetValue(duplicateIdentifier)
+			identifierNode.Attributes = attributes
+		}
+	}
+
+	lf.UI.Nodes = nodes
+	lf.UI.Messages.Clear()
+	lf.UI.Messages.Add(text.NewInfoLoginLinkMessage(duplicateIdentifier, usedProviderLabel, newLoginURL, availableCredentials, availableProviders))
+}
+
 func (s *Strategy) NodeGroup() node.UiNodeGroup {
 	return node.OpenIDConnectGroup
 }
 
-func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context, _ session.AuthenticationMethods) session.AuthenticationMethod {
+func (s *Strategy) CompletedAuthenticationMethod(ctx context.Context) session.AuthenticationMethod {
 	return session.AuthenticationMethod{
 		Method: s.ID(),
 		AAL:    identity.AuthenticatorAssuranceLevel1,
 	}
 }
 
-func (s *Strategy) processIDToken(w http.ResponseWriter, r *http.Request, provider Provider, idToken, idTokenNonce string) (*Claims, error) {
+func (s *Strategy) processIDToken(r *http.Request, provider Provider, idToken, idTokenNonce string) (*Claims, error) {
 	verifier, ok := provider.(IDTokenVerifier)
 	if !ok {
 		return nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The provider %s does not support id_token verification", provider.Config().Provider))
@@ -709,7 +766,7 @@ func (s *Strategy) processIDToken(w http.ResponseWriter, r *http.Request, provid
 	return claims, nil
 }
 
-func (s *Strategy) linkCredentials(ctx context.Context, i *identity.Identity, idToken, accessToken, refreshToken, provider, subject, organization string) error {
+func (s *Strategy) linkCredentials(ctx context.Context, i *identity.Identity, tokens *identity.CredentialsOIDCEncryptedTokens, provider, subject, organization string) error {
 	if err := s.d.PrivilegedIdentityPool().HydrateIdentityAssociations(ctx, i, identity.ExpandCredentials); err != nil {
 		return err
 	}
@@ -717,7 +774,7 @@ func (s *Strategy) linkCredentials(ctx context.Context, i *identity.Identity, id
 	creds, err := i.ParseCredentials(s.ID(), &conf)
 	if errors.Is(err, herodot.ErrNotFound) {
 		var err error
-		if creds, err = identity.NewCredentialsOIDC(idToken, accessToken, refreshToken, provider, subject, organization); err != nil {
+		if creds, err = identity.NewCredentialsOIDC(tokens, provider, subject, organization); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -726,9 +783,9 @@ func (s *Strategy) linkCredentials(ctx context.Context, i *identity.Identity, id
 		creds.Identifiers = append(creds.Identifiers, identity.OIDCUniqueID(provider, subject))
 		conf.Providers = append(conf.Providers, identity.CredentialsOIDCProvider{
 			Subject: subject, Provider: provider,
-			InitialAccessToken:  accessToken,
-			InitialRefreshToken: refreshToken,
-			InitialIDToken:      idToken,
+			InitialAccessToken:  tokens.GetAccessToken(),
+			InitialRefreshToken: tokens.GetRefreshToken(),
+			InitialIDToken:      tokens.GetIDToken(),
 			Organization:        organization,
 		})
 
@@ -744,4 +801,48 @@ func (s *Strategy) linkCredentials(ctx context.Context, i *identity.Identity, id
 	}
 
 	return nil
+}
+
+func getAuthRedirectURL(ctx context.Context, provider Provider, req ider, state string, upstreamParameters map[string]string, opts []oauth2.AuthCodeOption) (codeURL string, err error) {
+	switch p := provider.(type) {
+	case OAuth2Provider:
+		c, err := p.OAuth2(ctx)
+		if err != nil {
+			return "", err
+		}
+		opts = append(opts, UpstreamParameters(upstreamParameters)...)
+		opts = append(opts, p.AuthCodeURLOptions(req)...)
+
+		return c.AuthCodeURL(state, opts...), nil
+	case OAuth1Provider:
+		return p.AuthURL(ctx, state)
+	default:
+		return "", errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The provider %s does not support the OAuth 2.0 or OAuth 1.0 protocol", provider.Config().Provider))
+	}
+}
+
+func (s *Strategy) encryptOAuth2Tokens(ctx context.Context, token *oauth2.Token) (et *identity.CredentialsOIDCEncryptedTokens, err error) {
+	et = new(identity.CredentialsOIDCEncryptedTokens)
+	if token == nil {
+		return et, nil
+	}
+
+	if idToken, ok := token.Extra("id_token").(string); ok {
+		et.IDToken, err = s.d.Cipher(ctx).Encrypt(ctx, []byte(idToken))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	et.AccessToken, err = s.d.Cipher(ctx).Encrypt(ctx, []byte(token.AccessToken))
+	if err != nil {
+		return nil, err
+	}
+
+	et.RefreshToken, err = s.d.Cipher(ctx).Encrypt(ctx, []byte(token.RefreshToken))
+	if err != nil {
+		return nil, err
+	}
+
+	return et, nil
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,6 +29,32 @@ import (
 	"github.com/ory/kratos/selfservice/flow/recovery"
 	"github.com/ory/kratos/x"
 )
+
+func NewVerifyAfterHookWebHookTarget(ctx context.Context, t *testing.T, conf *config.Config, assert func(t *testing.T, body []byte)) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		msg, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		assert(t, msg)
+	}))
+
+	// A hook to ensure that the verification hook is called with the correct data
+	conf.MustSet(ctx, config.ViperKeySelfServiceVerificationAfter+".hooks", []map[string]interface{}{
+		{
+			"hook": "web_hook",
+			"config": map[string]interface{}{
+				"url":    ts.URL,
+				"method": "POST",
+				"body":   "base64://ZnVuY3Rpb24oY3R4KSB7CiAgICBpZGVudGl0eTogY3R4LmlkZW50aXR5Cn0=",
+			},
+		},
+	})
+
+	t.Cleanup(ts.Close)
+	t.Cleanup(func() {
+		conf.MustSet(ctx, config.ViperKeySelfServiceVerificationAfter+".hooks", []map[string]interface{}{})
+	})
+}
 
 func NewRecoveryUIFlowEchoServer(t *testing.T, reg driver.Registry) *httptest.Server {
 	ctx := context.Background()
@@ -57,6 +84,7 @@ func GetRecoveryFlowForType(t *testing.T, client *http.Client, ts *httptest.Serv
 
 	res, err := client.Get(url)
 	require.NoError(t, err)
+	defer res.Body.Close()
 
 	var flowID string
 	switch ft {
@@ -70,7 +98,7 @@ func GetRecoveryFlowForType(t *testing.T, client *http.Client, ts *httptest.Serv
 	}
 	require.NotEmpty(t, flowID, "expected to receive a flow id, got none. %s", ioutilx.MustReadAll(res.Body))
 
-	rs, _, err := publicClient.FrontendApi.GetRecoveryFlow(context.Background()).
+	rs, _, err := publicClient.FrontendAPI.GetRecoveryFlow(context.Background()).
 		Id(flowID).
 		Execute()
 	require.NoError(t, err, "expected no error when fetching recovery flow: %s", err)
@@ -108,7 +136,7 @@ func InitializeRecoveryFlowViaBrowser(t *testing.T, client *http.Client, isSPA b
 	}
 
 	require.NoError(t, res.Body.Close())
-	rs, _, err := publicClient.FrontendApi.GetRecoveryFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
+	rs, _, err := publicClient.FrontendAPI.GetRecoveryFlow(context.Background()).Id(res.Request.URL.Query().Get("flow")).Execute()
 	require.NoError(t, err)
 	assert.NotEmpty(t, rs.Active)
 
@@ -118,7 +146,7 @@ func InitializeRecoveryFlowViaBrowser(t *testing.T, client *http.Client, isSPA b
 func InitializeRecoveryFlowViaAPI(t *testing.T, client *http.Client, ts *httptest.Server) *kratos.RecoveryFlow {
 	publicClient := NewSDKCustomClient(ts, client)
 
-	rs, _, err := publicClient.FrontendApi.CreateNativeRecoveryFlow(context.Background()).Execute()
+	rs, _, err := publicClient.FrontendAPI.CreateNativeRecoveryFlow(context.Background()).Execute()
 	require.NoError(t, err)
 	assert.NotEmpty(t, rs.Active)
 

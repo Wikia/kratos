@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,18 +32,18 @@ func NewTestProvider(c *Configuration, reg Dependencies) Provider {
 	}
 }
 
-func RegisterTestProvider(id string) func() {
+func RegisterTestProvider(t *testing.T, id string) {
 	supportedProviders[id] = func(c *Configuration, reg Dependencies) Provider {
 		return NewTestProvider(c, reg)
 	}
-	return func() {
+	t.Cleanup(func() {
 		delete(supportedProviders, id)
-	}
+	})
 }
 
 var _ IDTokenVerifier = new(TestProvider)
 
-func (t *TestProvider) Verify(ctx context.Context, token string) (*Claims, error) {
+func (t *TestProvider) Verify(_ context.Context, token string) (*Claims, error) {
 	if token == "error" {
 		return nil, fmt.Errorf("stub error")
 	}
@@ -51,4 +52,57 @@ func (t *TestProvider) Verify(ctx context.Context, token string) (*Claims, error
 		return nil, err
 	}
 	return &c, nil
+}
+
+func TestLocale(t *testing.T) {
+	// test json unmarshal
+	for _, tc := range []struct {
+		name      string
+		json      string
+		expected  string
+		assertErr assert.ErrorAssertionFunc
+	}{{
+		name:     "empty",
+		json:     `{}`,
+		expected: "",
+	}, {
+		name:     "empty string locale",
+		json:     `{"locale":""}`,
+		expected: "",
+	}, {
+		name:      "invalid string locale",
+		json:      `{"locale":"""}`,
+		assertErr: assert.Error,
+	}, {
+		name:     "string locale",
+		json:     `{"locale":"en-US"}`,
+		expected: "en-US",
+	}, {
+		name:     "linkedin locale",
+		json:     `{"locale":{"country":"US","language":"en","ignore":"me"}}`,
+		expected: "en-US",
+	}, {
+		name:     "missing country linkedin locale",
+		json:     `{"locale":{"language":"en"}}`,
+		expected: "en",
+	}, {
+		name:     "missing language linkedin locale",
+		json:     `{"locale":{"country":"US"}}`,
+		expected: "US",
+	}, {
+		name:     "invalid linkedin locale",
+		json:     `{"locale":{"invalid":"me"}}`,
+		expected: "",
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var c Claims
+			err := json.Unmarshal([]byte(tc.json), &c)
+			if tc.assertErr != nil {
+				tc.assertErr(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.EqualValues(t, tc.expected, c.Locale)
+		})
+	}
 }

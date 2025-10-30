@@ -38,6 +38,12 @@ func WithRequiredInputAttribute(a *InputAttributes) {
 	a.Required = true
 }
 
+func WithMaxLengthInputAttribute(maxLength int) func(a *InputAttributes) {
+	return func(a *InputAttributes) {
+		a.MaxLength = maxLength
+	}
+}
+
 func WithInputAttributes(f func(a *InputAttributes)) func(a *InputAttributes) {
 	return func(a *InputAttributes) {
 		f(a)
@@ -69,12 +75,6 @@ func applyImageAttributes(opts ImageAttributesModifiers, attributes *ImageAttrib
 
 type ScriptAttributesModifier func(attributes *ScriptAttributes)
 type ScriptAttributesModifiers []ScriptAttributesModifier
-
-func WithScriptAttributes(f func(a *ScriptAttributes)) func(a *ScriptAttributes) {
-	return func(a *ScriptAttributes) {
-		f(a)
-	}
-}
 
 func applyScriptAttributes(opts ScriptAttributesModifiers, attributes *ScriptAttributes) *ScriptAttributes {
 	for _, f := range opts {

@@ -56,19 +56,23 @@ func NewInfoLogin() *Message {
 	}
 }
 
-func NewInfoLoginLinkMessage(dupIdentifier, provider, newLoginURL string) *Message {
+func NewInfoLoginLinkMessage(dupIdentifier, provider, newLoginURL string, availableCredentials, availableProviders []string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginLink,
 		Type: Info,
 		Text: fmt.Sprintf(
-			"Signing in will link your account to %q at provider %q. If you do not wish to link that account, please start a new login flow.",
+			"You tried to sign in with %q, but that email is already used by another account. Sign in to your account with one of the options below to add your account %[1]q at %q as another way to sign in.",
 			dupIdentifier,
 			provider,
 		),
 		Context: context(map[string]any{
-			"duplicateIdentifier": dupIdentifier,
-			"provider":            provider,
-			"newLoginUrl":         newLoginURL,
+			"duplicateIdentifier":        dupIdentifier,
+			"provider":                   provider,
+			"newLoginUrl":                newLoginURL,
+			"duplicate_identifier":       dupIdentifier,
+			"new_login_url":              newLoginURL,
+			"available_credential_types": availableCredentials,
+			"available_providers":        availableProviders,
 		}),
 	}
 }
@@ -89,6 +93,14 @@ func NewInfoLoginTOTP() *Message {
 	}
 }
 
+func NewInfoLoginPassword() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginPassword,
+		Text: "Sign in with password",
+		Type: Info,
+	}
+}
+
 func NewInfoLoginLookup() *Message {
 	return &Message{
 		ID:   InfoLoginLookup,
@@ -105,13 +117,14 @@ func NewInfoLoginVerify() *Message {
 	}
 }
 
-func NewInfoLoginWith(provider string) *Message {
+func NewInfoLoginWith(provider string, providerId string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginWith,
 		Text: fmt.Sprintf("Sign in with %s", provider),
 		Type: Info,
 		Context: context(map[string]any{
-			"provider": provider,
+			"provider":    provider,
+			"provider_id": providerId,
 		}),
 	}
 }
@@ -119,7 +132,7 @@ func NewInfoLoginWith(provider string) *Message {
 func NewInfoLoginWithAndLink(provider string) *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginWithAndLink,
-		Text: fmt.Sprintf("Sign in with %s and link credential", provider),
+		Text: fmt.Sprintf("Confirm with %s", provider),
 		Type: Info,
 		Context: context(map[string]any{
 			"provider": provider,
@@ -182,7 +195,15 @@ func NewErrorValidationVerificationNoStrategyFound() *Message {
 func NewInfoSelfServiceLoginWebAuthn() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginWebAuthn,
-		Text: "Use security key",
+		Text: "Sign in with hardware key",
+		Type: Info,
+	}
+}
+
+func NewInfoSelfServiceLoginPasskey() *Message {
+	return &Message{
+		ID:   InfoSelfServiceLoginPasskey,
+		Text: "Sign in with passkey",
 		Type: Info,
 	}
 }
@@ -190,7 +211,7 @@ func NewInfoSelfServiceLoginWebAuthn() *Message {
 func NewInfoSelfServiceContinueLoginWebAuthn() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginContinueWebAuthn,
-		Text: "Continue with security key",
+		Text: "Sign in with hardware key",
 		Type: Info,
 	}
 }
@@ -231,7 +252,7 @@ func NewInfoSelfServiceLoginCode() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginCode,
 		Type: Info,
-		Text: "Sign in with code",
+		Text: "Send sign in code",
 	}
 }
 
@@ -255,17 +276,18 @@ func NewInfoSelfServiceLoginCodeMFA() *Message {
 	return &Message{
 		ID:   InfoSelfServiceLoginCodeMFA,
 		Type: Info,
-		Text: "Continue with code",
+		Text: "Request code to continue",
 	}
 }
 
-func NewInfoSelfServiceLoginCodeMFAHint(maskedTo string) *Message {
+func NewInfoSelfServiceLoginAAL2CodeAddress(channel string, to string) *Message {
 	return &Message{
-		ID:   InfoSelfServiceLoginCodeMFAHint,
+		ID:   InfoSelfServiceLoginAAL2CodeAddress,
 		Type: Info,
-		Text: fmt.Sprintf("We will send a code to %s. To verify that this is your address please enter it here.", maskedTo),
+		Text: fmt.Sprintf("Send code to %s", to),
 		Context: context(map[string]any{
-			"masked_to": maskedTo,
+			"address": to,
+			"channel": channel,
 		}),
 	}
 }

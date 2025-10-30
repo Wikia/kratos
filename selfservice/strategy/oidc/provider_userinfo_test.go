@@ -90,6 +90,16 @@ func TestProviderClaimsRespectsErrorCodes(t *testing.T) {
 			}, reg),
 		},
 		{
+			name:             "salesforce",
+			userInfoHandler:  defaultUserinfoHandler,
+			userInfoEndpoint: "https://www.salesforce.com/services/oauth2/userinfo",
+			provider: oidc.NewProviderSalesforce(&oidc.Configuration{
+				IssuerURL: "https://www.salesforce.com",
+				ID:        "salesforce",
+				Provider:  "salesforce",
+			}, reg),
+		},
+		{
 			name:             "netid",
 			userInfoHandler:  defaultUserinfoHandler,
 			userInfoEndpoint: "https://broker.netid.de/userinfo",
@@ -343,7 +353,7 @@ func TestProviderClaimsRespectsErrorCodes(t *testing.T) {
 					return resp, err
 				})
 
-				_, err := tc.provider.Claims(ctx, token, url.Values{})
+				_, err := tc.provider.(oidc.OAuth2Provider).Claims(ctx, token, url.Values{})
 				var he *herodot.DefaultError
 				require.ErrorAs(t, err, &he)
 				assert.Equal(t, "OpenID Connect provider returned a 455 status code but 200 is expected.", he.Reason())
@@ -359,7 +369,7 @@ func TestProviderClaimsRespectsErrorCodes(t *testing.T) {
 
 				httpmock.RegisterResponder("GET", tc.userInfoEndpoint, tc.userInfoHandler)
 
-				claims, err := tc.provider.Claims(ctx, token, url.Values{})
+				claims, err := tc.provider.(oidc.OAuth2Provider).Claims(ctx, token, url.Values{})
 				require.NoError(t, err)
 				if tc.expectedClaims == nil {
 					assert.Equal(t, expectedClaims, claims)

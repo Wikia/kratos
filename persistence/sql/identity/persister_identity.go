@@ -6,11 +6,14 @@ package identity
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ory/kratos/x/events"
 
 	"github.com/ory/x/crdbx"
 
@@ -46,7 +49,7 @@ var (
 )
 
 type dependencies interface {
-	schema.IdentityTraitsProvider
+	schema.IdentitySchemaProvider
 	identity.ValidationProvider
 	x.LoggingProvider
 	config.Provider
@@ -244,7 +247,45 @@ func (p *IdentityPersister) FindByCredentialsIdentifier(ctx context.Context, ct 
 		return nil, nil, errors.WithStack(herodot.ErrInternalServerError.WithReasonf("The SQL adapter failed to return the appropriate credentials_type \"%s\". This is a bug in the code.", ct))
 	}
 
-	return i.CopyWithoutCredentials(), creds, nil
+	return i, creds, nil
+}
+
+func (p *IdentityPersister) FindIdentityByWebauthnUserHandle(ctx context.Context, userHandle []byte) (_ *identity.Identity, err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.FindIdentityByWebauthnUserHandle")
+	defer otelx.End(span, &err)
+
+	var id identity.Identity
+
+	var jsonPath string
+	switch p.GetConnection(ctx).Dialect.Name() {
+	case "sqlite", "mysql":
+		jsonPath = "$.user_handle"
+	default:
+		jsonPath = "user_handle"
+	}
+
+	if err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(`
+SELECT identities.*
+FROM identities
+INNER JOIN identity_credentials
+    ON  identities.id = identity_credentials.identity_id
+    AND identities.nid = identity_credentials.nid
+    AND identity_credentials.identity_credential_type_id = (
+        SELECT id
+        FROM identity_credential_types
+        WHERE name = ?
+     )
+WHERE identity_credentials.config ->> '%s' = ? AND identity_credentials.config ->> '%s' IS NOT NULL
+  AND identities.nid = ?
+LIMIT 1`, jsonPath, jsonPath),
+		identity.CredentialsTypeWebAuthn,
+		base64.StdEncoding.EncodeToString(userHandle),
+		p.NetworkID(ctx),
+	).First(&id); err != nil {
+		return nil, sqlcon.HandleError(err)
+	}
+
+	return &id, nil
 }
 
 var credentialsTypes = struct {
@@ -291,6 +332,11 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, conn 
 		identifiers []*identity.CredentialIdentifier
 	)
 
+	var opts []batch.CreateOpts
+	if len(identities) > 1 {
+		opts = append(opts, batch.WithPartialInserts)
+	}
+
 	for _, ident := range identities {
 		for k := range ident.Credentials {
 			cred := ident.Credentials[k]
@@ -316,16 +362,16 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, conn 
 			ident.Credentials[k] = cred
 		}
 	}
-	if err = batch.Create(ctx, traceConn, credentials); err != nil {
+	if err = batch.Create(ctx, traceConn, credentials, opts...); err != nil {
 		return err
 	}
 
 	for _, cred := range credentials {
-		for _, ids := range cred.Identifiers {
+		for _, identifier := range cred.Identifiers {
 			// Force case-insensitivity and trimming for identifiers
-			ids = p.normalizeIdentifier(cred.Type, ids)
+			identifier = p.normalizeIdentifier(cred.Type, identifier)
 
-			if ids == "" {
+			if identifier == "" {
 				return errors.WithStack(herodot.ErrInternalServerError.WithReasonf(
 					"Unable to create identity credentials with missing or empty identifier."))
 			}
@@ -336,7 +382,7 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, conn 
 			}
 
 			identifiers = append(identifiers, &identity.CredentialIdentifier{
-				Identifier:                ids,
+				Identifier:                identifier,
 				IdentityCredentialsID:     cred.ID,
 				IdentityCredentialsTypeID: ct.ID,
 				NID:                       p.NetworkID(ctx),
@@ -344,7 +390,7 @@ func (p *IdentityPersister) createIdentityCredentials(ctx context.Context, conn 
 		}
 	}
 
-	if err = batch.Create(ctx, traceConn, identifiers); err != nil {
+	if err = batch.Create(ctx, traceConn, identifiers, opts...); err != nil {
 		return err
 	}
 
@@ -364,8 +410,12 @@ func (p *IdentityPersister) createVerifiableAddresses(ctx context.Context, conn 
 			work = append(work, &id.VerifiableAddresses[i])
 		}
 	}
+	var opts []batch.CreateOpts
+	if len(identities) > 1 {
+		opts = append(opts, batch.WithPartialInserts)
+	}
 
-	return batch.Create(ctx, &batch.TracerConnection{Tracer: p.r.Tracer(ctx), Connection: conn}, work)
+	return batch.Create(ctx, &batch.TracerConnection{Tracer: p.r.Tracer(ctx), Connection: conn}, work, opts...)
 }
 
 func updateAssociation[T interface {
@@ -444,6 +494,9 @@ func (p *IdentityPersister) normalizeVerifiableAddresses(ctx context.Context, id
 		if v.Verified && (v.VerifiedAt == nil || time.Time(*v.VerifiedAt).IsZero()) {
 			v.VerifiedAt = pointerx.Ptr(sqlxx.NullTime(time.Now()))
 		}
+		if !v.Verified {
+			v.VerifiedAt = nil
+		}
 
 		id.VerifiableAddresses[k] = v
 	}
@@ -473,7 +526,12 @@ func (p *IdentityPersister) createRecoveryAddresses(ctx context.Context, conn *p
 		}
 	}
 
-	return batch.Create(ctx, &batch.TracerConnection{Tracer: p.r.Tracer(ctx), Connection: conn}, work)
+	var opts []batch.CreateOpts
+	if len(identities) > 1 {
+		opts = append(opts, batch.WithPartialInserts)
+	}
+
+	return batch.Create(ctx, &batch.TracerConnection{Tracer: p.r.Tracer(ctx), Connection: conn}, work, opts...)
 }
 
 func (p *IdentityPersister) CountIdentities(ctx context.Context) (n int64, err error) {
@@ -502,7 +560,7 @@ func (p *IdentityPersister) CreateIdentity(ctx context.Context, ident *identity.
 func (p *IdentityPersister) CreateIdentities(ctx context.Context, identities ...*identity.Identity) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.CreateIdentities",
 		trace.WithAttributes(
-			attribute.Int("num_identities", len(identities)),
+			attribute.Int("identities.count", len(identities)),
 			attribute.Stringer("network.id", p.NetworkID(ctx))))
 	defer otelx.End(span, &err)
 
@@ -532,12 +590,26 @@ func (p *IdentityPersister) CreateIdentities(ctx context.Context, identities ...
 		}
 	}
 
+	var succeededIDs []uuid.UUID
+
+	defer func() {
+		// Report succeeded identities as created.
+		for _, identID := range succeededIDs {
+			span.AddEvent(events.NewIdentityCreated(ctx, identID))
+		}
+	}()
+
 	return p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {
 		conn := &batch.TracerConnection{
 			Tracer:     p.r.Tracer(ctx),
 			Connection: tx,
 		}
 
+		succeededIDs = make([]uuid.UUID, 0, len(identities))
+		failedIdentityIDs := make(map[uuid.UUID]struct{})
+
+		// Don't use batch.WithPartialInserts, because identities have no other
+		// constraints other than the primary key that could cause conflicts.
 		if err := batch.Create(ctx, conn, identities); err != nil {
 			return sqlcon.HandleError(err)
 		}
@@ -545,14 +617,73 @@ func (p *IdentityPersister) CreateIdentities(ctx context.Context, identities ...
 		p.normalizeAllAddressess(ctx, identities...)
 
 		if err = p.createVerifiableAddresses(ctx, tx, identities...); err != nil {
-			return sqlcon.HandleError(err)
+			if paritalErr := new(batch.PartialConflictError[identity.VerifiableAddress]); errors.As(err, &paritalErr) {
+				for _, k := range paritalErr.Failed {
+					failedIdentityIDs[k.IdentityID] = struct{}{}
+				}
+			} else {
+				return sqlcon.HandleError(err)
+			}
 		}
 		if err = p.createRecoveryAddresses(ctx, tx, identities...); err != nil {
-			return sqlcon.HandleError(err)
+			if paritalErr := new(batch.PartialConflictError[identity.RecoveryAddress]); errors.As(err, &paritalErr) {
+				for _, k := range paritalErr.Failed {
+					failedIdentityIDs[k.IdentityID] = struct{}{}
+				}
+			} else {
+				return sqlcon.HandleError(err)
+			}
 		}
 		if err = p.createIdentityCredentials(ctx, tx, identities...); err != nil {
-			return sqlcon.HandleError(err)
+			if paritalErr := new(batch.PartialConflictError[identity.Credentials]); errors.As(err, &paritalErr) {
+				for _, k := range paritalErr.Failed {
+					failedIdentityIDs[k.IdentityID] = struct{}{}
+				}
+
+			} else if paritalErr := new(batch.PartialConflictError[identity.CredentialIdentifier]); errors.As(err, &paritalErr) {
+				for _, k := range paritalErr.Failed {
+					credID := k.IdentityCredentialsID
+					for _, ident := range identities {
+						for _, cred := range ident.Credentials {
+							if cred.ID == credID {
+								failedIdentityIDs[ident.ID] = struct{}{}
+							}
+						}
+					}
+				}
+			} else {
+				return sqlcon.HandleError(err)
+			}
 		}
+
+		// If any of the batch inserts failed on conflict, let's delete the corresponding
+		// identities and return a list of failed identities in the error.
+		if len(failedIdentityIDs) > 0 {
+			partialErr := &identity.CreateIdentitiesError{}
+			failedIDs := make([]uuid.UUID, 0, len(failedIdentityIDs))
+
+			for _, ident := range identities {
+				if _, ok := failedIdentityIDs[ident.ID]; ok {
+					partialErr.AddFailedIdentity(ident, sqlcon.ErrUniqueViolation)
+					failedIDs = append(failedIDs, ident.ID)
+				} else {
+					succeededIDs = append(succeededIDs, ident.ID)
+				}
+			}
+			// Manually roll back by deleting the identities that were inserted before the
+			// error occurred.
+			if err := p.DeleteIdentities(ctx, failedIDs); err != nil {
+				return sqlcon.HandleError(err)
+			}
+
+			return partialErr
+		} else {
+			// No failures: report all identities as created.
+			for _, ident := range identities {
+				succeededIDs = append(succeededIDs, ident.ID)
+			}
+		}
+
 		return nil
 	})
 }
@@ -763,6 +894,10 @@ func (p *IdentityPersister) ListIdentities(ctx context.Context, params identity.
 		attribute.Stringer("network.id", p.NetworkID(ctx)))...))
 	defer otelx.End(span, &err)
 
+	if _, err := uuid.FromString(paginator.Token().Parse("id")["id"]); err != nil {
+		return nil, nil, errors.WithStack(x.PageTokenInvalid)
+	}
+
 	nid := p.NetworkID(ctx)
 	var is []identity.Identity
 
@@ -791,14 +926,8 @@ func (p *IdentityPersister) ListIdentities(ctx context.Context, params identity.
 		identifier := params.CredentialsIdentifier
 		identifierOperator := "="
 		if identifier == "" && params.CredentialsIdentifierSimilar != "" {
-			identifier = params.CredentialsIdentifierSimilar
-			identifierOperator = "%"
-			switch con.Dialect.Name() {
-			case "postgres", "cockroach":
-			default:
-				identifier = "%" + identifier + "%"
-				identifierOperator = "LIKE"
-			}
+			identifier = x.EscapeLikePattern(params.CredentialsIdentifierSimilar) + "%"
+			identifierOperator = "LIKE"
 		}
 
 		if len(identifier) > 0 {
@@ -820,7 +949,7 @@ func (p *IdentityPersister) ListIdentities(ctx context.Context, params identity.
 				identity.CredentialsTypeOIDC, identifier)
 		}
 
-		if params.IdsFilter != nil && len(params.IdsFilter) != 0 {
+		if len(params.IdsFilter) != 0 {
 			wheres += `
 				AND identities.id in (?)
 			`
@@ -919,6 +1048,24 @@ func (p *IdentityPersister) ListIdentities(ctx context.Context, params identity.
 	return is, nextPage, nil
 }
 
+func (p *IdentityPersister) UpdateIdentityColumns(ctx context.Context, i *identity.Identity, columns ...string) (err error) {
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.UpdateIdentity",
+		trace.WithAttributes(
+			attribute.Stringer("identity.id", i.ID),
+			attribute.Stringer("network.id", p.NetworkID(ctx))))
+	defer otelx.End(span, &err)
+
+	if err := p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {
+		_, err := tx.Where("id = ? AND nid = ?", i.ID, p.NetworkID(ctx)).UpdateQuery(i, columns...)
+		return sqlcon.HandleError(err)
+	}); err != nil {
+		return err
+	}
+
+	span.AddEvent(events.NewIdentityUpdated(ctx, i.ID))
+	return nil
+}
+
 func (p *IdentityPersister) UpdateIdentity(ctx context.Context, i *identity.Identity) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.UpdateIdentity",
 		trace.WithAttributes(
@@ -931,7 +1078,7 @@ func (p *IdentityPersister) UpdateIdentity(ctx context.Context, i *identity.Iden
 	}
 
 	i.NID = p.NetworkID(ctx)
-	return sqlcon.HandleError(p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {
+	if err := sqlcon.HandleError(p.Transaction(ctx, func(ctx context.Context, tx *pop.Connection) error {
 		// This returns "ErrNoRows" if the identity does not exist
 		if err := update.Generic(WithTransaction(ctx, tx), tx, p.r.Tracer(ctx).Tracer(), i); err != nil {
 			return err
@@ -956,7 +1103,12 @@ func (p *IdentityPersister) UpdateIdentity(ctx context.Context, i *identity.Iden
 		}
 
 		return sqlcon.HandleError(p.createIdentityCredentials(ctx, tx, i))
-	}))
+	})); err != nil {
+		return err
+	}
+
+	span.AddEvent(events.NewIdentityUpdated(ctx, i.ID))
+	return nil
 }
 
 func (p *IdentityPersister) DeleteIdentity(ctx context.Context, id uuid.UUID) (err error) {
@@ -966,8 +1118,12 @@ func (p *IdentityPersister) DeleteIdentity(ctx context.Context, id uuid.UUID) (e
 			attribute.Stringer("network.id", p.NetworkID(ctx))))
 	defer otelx.End(span, &err)
 
+	tableName := new(identity.Identity).TableName(ctx)
+	if p.c.Dialect.Name() == "cockroach" {
+		tableName += "@primary"
+	}
 	nid := p.NetworkID(ctx)
-	count, err := p.GetConnection(ctx).RawQuery(fmt.Sprintf("DELETE FROM %s WHERE id = ? AND nid = ?", new(identity.Identity).TableName(ctx)),
+	count, err := p.GetConnection(ctx).RawQuery(fmt.Sprintf("DELETE FROM %s WHERE id = ? AND nid = ?", tableName),
 		id,
 		nid,
 	).ExecWithCount()
@@ -975,6 +1131,45 @@ func (p *IdentityPersister) DeleteIdentity(ctx context.Context, id uuid.UUID) (e
 		return sqlcon.HandleError(err)
 	}
 	if count == 0 {
+		return errors.WithStack(sqlcon.ErrNoRows)
+	}
+	span.AddEvent(events.NewIdentityDeleted(ctx, id))
+	return nil
+}
+
+func (p *IdentityPersister) DeleteIdentities(ctx context.Context, ids []uuid.UUID) (err error) {
+	stringIDs := make([]string, len(ids))
+	for k, id := range ids {
+		stringIDs[k] = id.String()
+	}
+	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteIdentites",
+		trace.WithAttributes(
+			attribute.StringSlice("identity.ids", stringIDs),
+			attribute.Stringer("network.id", p.NetworkID(ctx))))
+	defer otelx.End(span, &err)
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?, ", len(ids)), ", ")
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	args = append(args, p.NetworkID(ctx))
+
+	tableName := new(identity.Identity).TableName(ctx)
+	if p.c.Dialect.Name() == "cockroach" {
+		tableName += "@primary"
+	}
+	count, err := p.GetConnection(ctx).RawQuery(fmt.Sprintf(
+		"DELETE FROM %s WHERE id IN (%s) AND nid = ?",
+		tableName,
+		placeholders,
+	),
+		args...,
+	).ExecWithCount()
+	if err != nil {
+		return sqlcon.HandleError(err)
+	}
+	if count != len(ids) {
 		return errors.WithStack(sqlcon.ErrNoRows)
 	}
 	return nil

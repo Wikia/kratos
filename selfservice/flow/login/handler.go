@@ -852,7 +852,9 @@ func (h *Handler) updateLoginFlow(w http.ResponseWriter, r *http.Request, _ http
 	}
 
 continueLogin:
-	if err := h.d.LoginHookExecutor().AfterSubmitLoginHook(w, r, f); err != nil {
+	// Fandom-start [SPLAT-638]: propagate session to webhook
+	if err := h.d.LoginHookExecutor().AfterSubmitLoginHook(w, r, f, sess); err != nil {
+		// Fandom-end [SPLAT-638]
 		h.d.LoginFlowErrorHandler().WriteFlowError(w, r, f, node.DefaultGroup, err)
 		return
 	}

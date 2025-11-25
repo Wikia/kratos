@@ -72,7 +72,7 @@ func (e Error) ExecuteLoginPreHook(w http.ResponseWriter, r *http.Request, a *lo
 	return e.err("ExecuteLoginPreHook", login.ErrHookAbortFlow)
 }
 
-func (e Error) ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *login.Flow) error {
+func (e Error) ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *login.Flow, sess *session.Session) error {
 	return e.err("ExecuteAfterSubmitLoginHook", login.ErrHookAbortFlow)
 }
 

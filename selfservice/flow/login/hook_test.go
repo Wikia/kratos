@@ -59,7 +59,7 @@ func TestLoginExecutor(t *testing.T) {
 				router.GET("/login/submit", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 					loginFlow, err := login.NewFlow(conf, time.Minute, "", r, ft)
 					require.NoError(t, err)
-					if testhelpers.SelfServiceHookLoginErrorHandler(t, w, r, reg.LoginHookExecutor().AfterSubmitLoginHook(w, r, loginFlow)) {
+					if testhelpers.SelfServiceHookLoginErrorHandler(t, w, r, reg.LoginHookExecutor().AfterSubmitLoginHook(w, r, loginFlow, session.NewInactiveSession())) {
 						_, _ = w.Write([]byte("ok"))
 					}
 				})

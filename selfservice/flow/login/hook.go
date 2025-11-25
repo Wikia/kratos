@@ -34,7 +34,7 @@ type (
 	}
 
 	AfterSubmitHookExecutor interface {
-		ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow) error
+		ExecuteAfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow, sess *session.Session) error
 	}
 
 	PostHookExecutor interface {
@@ -342,15 +342,18 @@ func (e *HookExecutor) PostLoginHook(
 	return nil
 }
 
-func (e *HookExecutor) AfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow) error {
+// Fandom-start [SPLAT-638]: propagate session to webhook
+func (e *HookExecutor) AfterSubmitLoginHook(w http.ResponseWriter, r *http.Request, a *Flow, sess *session.Session) error {
 	for _, executor := range e.d.AfterSubmitLoginHooks(r.Context()) {
-		if err := executor.ExecuteAfterSubmitLoginHook(w, r, a); err != nil {
+		if err := executor.ExecuteAfterSubmitLoginHook(w, r, a, sess); err != nil {
 			return err
 		}
 	}
 
 	return nil
 }
+
+// Fandom-end [SPLAT-638]
 
 func (e *HookExecutor) PreLoginHook(w http.ResponseWriter, r *http.Request, a *Flow) error {
 	for _, executor := range e.d.PreLoginHooks(r.Context()) {

@@ -153,7 +153,8 @@ func (e *WebHook) ExecuteLoginPreHook(_ http.ResponseWriter, req *http.Request, 
 	})
 }
 
-func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow) error {
+// Fandom-start [SPLAT-638]: propagate session to webhook
+func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.Request, flow *login.Flow, sess *session.Session) error {
 	if req.Body != nil {
 		if err := req.ParseForm(); err != nil {
 			return errors.WithStack(err)
@@ -162,6 +163,7 @@ func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.R
 
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteAfterSubmitLoginHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
+			Identity:       &identity.Identity{ID: sess.IdentityID},
 			Flow:           flow,
 			RequestHeaders: req.Header,
 			RequestMethod:  req.Method,
@@ -171,6 +173,8 @@ func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.R
 		})
 	})
 }
+
+// Fandom-end [SPLAT-638]
 
 func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request, _ node.UiNodeGroup, flow *login.Flow, session *session.Session) error {
 	// fandom-start

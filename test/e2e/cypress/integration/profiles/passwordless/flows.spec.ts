@@ -18,14 +18,14 @@ const signup = (registration: string, app: string, email = gen.email()) => {
 
   cy.get('[name="webauthn_register_displayname"]').type("key1")
   cy.get(emailTrait).type(email)
-  cy.get(websiteTrait).type("https://www.ory.sh")
+  cy.get(websiteTrait).type("http://www.ory.com")
   cy.clickWebAuthButton("register")
   cy.getSession({
     expectAal: "aal1",
     expectMethods: ["webauthn"],
   }).then((session) => {
     expect(session.identity.traits.email).to.equal(email)
-    expect(session.identity.traits.website).to.equal("https://www.ory.sh")
+    expect(session.identity.traits.website).to.equal("http://www.ory.com")
   })
 }
 
@@ -116,14 +116,14 @@ context("Passwordless registration", () => {
         cy.get(websiteTrait).should("have.value", "b")
         cy.get(emailTrait).should("have.value", email)
         cy.get(websiteTrait).clear()
-        cy.get(websiteTrait).type("https://www.ory.sh")
+        cy.get(websiteTrait).type("http://www.ory.com")
         cy.clickWebAuthButton("register")
         cy.getSession({
           expectAal: "aal1",
           expectMethods: ["webauthn"],
         }).then((session) => {
           expect(session.identity.traits.email).to.equal(email)
-          expect(session.identity.traits.website).to.equal("https://www.ory.sh")
+          expect(session.identity.traits.website).to.equal("http://www.ory.com")
         })
       })
 

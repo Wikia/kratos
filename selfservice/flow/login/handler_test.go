@@ -372,7 +372,7 @@ func TestFlowLifecycle(t *testing.T) {
 
 			t.Run("type=browser", func(t *testing.T) {
 				_, res := run(t, flow.TypeBrowser, url.Values{"method": {"password"}})
-				assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+				assert.Contains(t, res.Request.URL.String(), "https://www.ory.com")
 			})
 		})
 

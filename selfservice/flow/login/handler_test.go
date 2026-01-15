@@ -667,7 +667,7 @@ func TestFlowLifecycle(t *testing.T) {
 
 			t.Run("case=redirects if aal2 is requested and set up already without refresh", func(t *testing.T) {
 				res, _ := initAuthenticatedFlow(t, url.Values{"aal": {"aal2"}, "set_aal": {"aal2"}}, false)
-				assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+				assert.Contains(t, res.Request.URL.String(), "https://www.ory.com")
 			})
 
 			t.Run("case=can not request aal2 on unauthenticated request", func(t *testing.T) {
@@ -678,7 +678,7 @@ func TestFlowLifecycle(t *testing.T) {
 
 			t.Run("case=ignores aal1 if session has aal1 already", func(t *testing.T) {
 				res, _ := initAuthenticatedFlow(t, url.Values{"aal": {"aal1"}}, false)
-				assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+				assert.Contains(t, res.Request.URL.String(), "https://www.ory.com")
 			})
 
 			t.Run("case=aal0 is not a valid value", func(t *testing.T) {
@@ -707,12 +707,12 @@ func TestFlowLifecycle(t *testing.T) {
 
 			t.Run("case=does not set forced flag on authenticated request without refresh=true", func(t *testing.T) {
 				res, _ := initAuthenticatedFlow(t, url.Values{}, false)
-				assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+				assert.Contains(t, res.Request.URL.String(), "https://www.ory.com")
 			})
 
 			t.Run("case=does not set forced flag on authenticated request with refresh=false", func(t *testing.T) {
 				res, _ := initAuthenticatedFlow(t, url.Values{"refresh": {"false"}}, false)
-				assert.Contains(t, res.Request.URL.String(), "https://www.ory.sh")
+				assert.Contains(t, res.Request.URL.String(), "https://www.ory.com")
 			})
 
 			t.Run("case=does set forced flag on authenticated request with refresh=true", func(t *testing.T) {
@@ -748,7 +748,7 @@ func TestFlowLifecycle(t *testing.T) {
 			conf.MustSet(ctx, config.ViperKeyOAuth2ProviderURL, "https://fake-hydra")
 
 			t.Run("case=oauth2 flow init should override return_to to the oauth2 request_url", func(t *testing.T) {
-				conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.sh", "https://example.com"})
+				conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.com", "https://example.com"})
 				conf.MustSet(ctx, config.ViperKeyOAuth2ProviderOverrideReturnTo, true)
 
 				t.Cleanup(func() {
@@ -774,7 +774,7 @@ func TestFlowLifecycle(t *testing.T) {
 
 				require.NoError(t, res.Body.Close())
 
-				assert.Equal(t, "https://www.ory.sh", gjson.GetBytes(body, "return_to").Value())
+				assert.Equal(t, "https://www.ory.com", gjson.GetBytes(body, "return_to").Value())
 			})
 
 			t.Run("case=invalid oauth2 login challenge returns 400 Bad Request", func(t *testing.T) {
@@ -824,7 +824,7 @@ func TestGetFlow(t *testing.T) {
 			require.NoError(t, err)
 		}))
 		conf.MustSet(ctx, config.ViperKeySelfServiceLoginUI, ts.URL)
-		conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh")
+		conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.com")
 		t.Cleanup(ts.Close)
 		return ts
 	}
@@ -872,7 +872,7 @@ func TestGetFlow(t *testing.T) {
 	})
 
 	t.Run("case=expired with return_to", func(t *testing.T) {
-		returnTo := "https://www.ory.sh"
+		returnTo := "https://www.ory.com"
 		conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo})
 
 		client := testhelpers.NewClientWithCookies(t)

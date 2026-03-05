@@ -981,7 +981,7 @@ type adminSessionRefresh struct {
 	ID string `json:"id"`
 }
 
-// swagger:route GET /admin/token/extend identity adminCurrentSessionExtend
+// swagger:route PATCH /admin/token/extend identity adminCurrentSessionExtend
 //
 // Calling this endpoint refreshes a current user session.
 // If `session.refresh_min_time_left` is set it will only refresh the session after this time has passed.
@@ -991,9 +991,6 @@ type adminSessionRefresh struct {
 // - Session refresh
 //
 //	Schemes: http, https
-//
-//	Security:
-//	  oryAccessToken:
 //
 //	Responses:
 //	  200: session
@@ -1013,7 +1010,10 @@ func (h *Handler) adminCurrentSessionExtend(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-
+	if err := h.r.SessionManager().IssueCookie(r.Context(), w, r, s); err != nil {
+		h.r.Writer().WriteError(w, r, err)
+		return
+	}
 	h.r.Writer().Write(w, r, s)
 }
 

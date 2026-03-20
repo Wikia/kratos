@@ -524,8 +524,9 @@ func parseWebhookResponse(resp *http.Response, id *identity.Identity) (err error
 		}
 
 		if len(validationErrs) == 0 {
-			return errors.New("error while parsing webhook response: got no validation errors")
-		}
+            respJSON, _ := json.Marshal(hookResponse)
+            return errors.Errorf("error while parsing webhook response: got no validation errors, response was: %s", respJSON)
+        }
 
 		return schema.NewValidationListError(validationErrs)
 	}

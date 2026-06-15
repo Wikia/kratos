@@ -53,6 +53,9 @@ type Persister interface {
 	// DeleteExpiredSessions deletes sessions that expired before the given time.
 	DeleteExpiredSessions(context.Context, time.Time, int) error
 
+	// DeleteInactiveSessions deletes sessions that have been marked inactive.
+	DeleteInactiveSessions(context.Context, time.Time, int) error
+
 	// DeleteSessionByToken deletes a session associated with the given token.
 	//
 	// Functionality is similar to DeleteSession but accepts a session token

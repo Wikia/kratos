@@ -196,12 +196,6 @@ func (p *Persister) CleanupDatabase(ctx context.Context, wait time.Duration, old
 	}
 	time.Sleep(wait)
 
-	p.r.Logger().Println("Cleaning up inactive sessions")
-	if err := p.DeleteInactiveSessions(ctx, currentTime, batchSize); err != nil {
-		return err
-	}
-	time.Sleep(wait)
-
 	p.r.Logger().Println("Cleaning up expired continuity containers")
 	if err := p.DeleteExpiredContinuitySessions(ctx, currentTime, batchSize); err != nil {
 		return err

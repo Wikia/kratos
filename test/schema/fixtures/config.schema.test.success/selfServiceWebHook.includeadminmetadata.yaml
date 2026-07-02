@@ -1,0 +1,8 @@
+hook: web_hook
+config:
+  url: https://foo/bar
+  method: POST
+  body: base64://asdf
+  include_admin_metadata: true
+  response:
+    ignore: false

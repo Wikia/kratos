@@ -344,6 +344,11 @@
               "default": true,
               "description": "Emit tracing events for this webhook on delivery or error"
             },
+            "include_admin_metadata": {
+              "type": "boolean",
+              "default": false,
+              "description": "If enabled, the webhook's ctx.identity carries metadata_admin (which is stripped by default). Use this to pass admin metadata such as the OIDC verified-email carrier to the hook."
+            },
             "auth": {
               "type": "object",
               "title": "Auth mechanisms",
@@ -1740,6 +1745,11 @@
                               "type": "boolean",
                               "default": true,
                               "description": "Emit tracing events for this hook on delivery or error"
+                            },
+                            "include_admin_metadata": {
+                              "type": "boolean",
+                              "default": false,
+                              "description": "If enabled, the webhook's ctx.identity carries metadata_admin (which is stripped by default). Use this to pass admin metadata such as the OIDC verified-email carrier to the hook."
                             },
                             "auth": {
                               "type": "object",

@@ -92,6 +92,10 @@ type (
 		Credentials *identity.Credentials `json:"credentials,omitempty"`
 		Fields      url.Values            `json:"fields,omitempty"`
 		HookType    string                `json:"hook_type,omitempty"`
+		// includeAdminMetadata opts this webhook's ctx.identity into carrying metadata_admin,
+		// which Identity.MarshalJSON strips by default. Set per-webhook from the
+		// "include_admin_metadata" config flag; off unless explicitly enabled.
+		includeAdminMetadata bool `json:"-"`
 		// fandom-end
 	}
 
@@ -125,6 +129,28 @@ type (
 		timeout time.Duration
 	}
 )
+
+// fandom-start
+// MarshalJSON renders the webhook context. By default ctx.identity is marshaled via
+// Identity.MarshalJSON, which strips credentials and metadata_admin. When the webhook opts
+// in via include_admin_metadata, ctx.identity is rendered with WithAdminMetadataInJSON so
+// metadata_admin (e.g. the OIDC verified-email carrier) reaches the hook. Credentials stay
+// stripped from ctx.identity either way (the fandom ctx.credentials field carries them).
+func (t templateContext) MarshalJSON() ([]byte, error) {
+	type alias templateContext
+	if t.includeAdminMetadata && t.Identity != nil {
+		return json.Marshal(struct {
+			alias
+			Identity *identity.WithAdminMetadataInJSON `json:"identity,omitempty"`
+		}{
+			alias:    alias(t),
+			Identity: (*identity.WithAdminMetadataInJSON)(t.Identity),
+		})
+	}
+	return json.Marshal(alias(t))
+}
+
+// fandom-end
 
 func cookies(req *http.Request) map[string]string {
 	cookies := make(map[string]string)
@@ -468,6 +494,13 @@ func (e *WebHook) execute(ctx context.Context, data *templateContext) error {
 	if ignoreResponse && (parseResponse || canInterrupt) {
 		return errors.WithStack(herodot.ErrInternalServerError.WithReasonf("A webhook is configured to ignore the response but also to parse the response. This is not possible."))
 	}
+
+	// fandom-start
+	// Opt this webhook's ctx.identity into carrying metadata_admin (see templateContext.MarshalJSON).
+	if data != nil {
+		data.includeAdminMetadata = gjson.GetBytes(e.conf, "include_admin_metadata").Bool()
+	}
+	// fandom-end
 
 	makeRequest := func() (finalErr error) {
 		if ignoreResponse {

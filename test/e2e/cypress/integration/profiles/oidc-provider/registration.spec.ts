@@ -74,7 +74,7 @@ context("OpenID Provider", () => {
       email,
       password,
       fields: {
-        "traits.website": "https://www.ory.sh",
+        "traits.website": "http://www.ory.com",
         "traits.tos": "1",
         "traits.age": 22,
       },

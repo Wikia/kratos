@@ -53,7 +53,7 @@ context("Mobile Profile", () => {
       })
 
       it("should show an error when the email is empty", () => {
-        cy.get('input[data-testid="traits.website"]').type("https://www.ory.sh")
+        cy.get('input[data-testid="traits.website"]').type("http://www.ory.com")
         cy.get('input[data-testid="password"]').type(password)
 
         cy.get('div[data-testid="submit-form"]').click()
@@ -64,7 +64,7 @@ context("Mobile Profile", () => {
       })
 
       it("should show an error when the email is not an email", () => {
-        cy.get('input[data-testid="traits.website"]').type("https://www.ory.sh")
+        cy.get('input[data-testid="traits.website"]').type("http://www.ory.com")
         cy.get('input[data-testid="traits.email"]').type("not-an-email")
         cy.get('input[data-testid="password"]').type(password)
 

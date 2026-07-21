@@ -242,7 +242,7 @@ declare global {
       longLoginLifespan(): Chainable<void>
 
       /**
-       * Change the config so that `https://www.ory.sh/` is a allowed return to URL.
+       * Change the config so that `http://www.ory.com/` is a allowed return to URL.
        */
       browserReturnUrlOry(): Chainable<void>
 

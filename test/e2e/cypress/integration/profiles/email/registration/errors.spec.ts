@@ -37,7 +37,7 @@ describe("Registration failures with email profile", () => {
 
       it("fails when CSRF cookies are missing", () => {
         cy.get(`${appPrefix(app)} input[name="traits.website"]`).type(
-          "https://www.ory.sh",
+          "http://www.ory.com",
         )
         cy.get('input[name="traits.email"]')
           .type(identity)
@@ -58,7 +58,7 @@ describe("Registration failures with email profile", () => {
 
       describe("show errors when invalid signup data is used", () => {
         it("should show an error when the password has leaked before", () => {
-          cy.get('input[name="traits.website"]').type("https://www.ory.sh")
+          cy.get('input[name="traits.website"]').type("http://www.ory.com")
           cy.get('input[name="traits.email"]')
             .type(identity)
             .should("have.value", identity)
@@ -74,7 +74,7 @@ describe("Registration failures with email profile", () => {
         })
 
         it("should show an error when the password is too similar", () => {
-          cy.get('input[name="traits.website"]').type("https://www.ory.sh")
+          cy.get('input[name="traits.website"]').type("http://www.ory.com")
           cy.get('input[name="traits.email"]').type(identity)
           cy.get('input[name="password"]').type(identity)
 
@@ -86,7 +86,7 @@ describe("Registration failures with email profile", () => {
         })
 
         it("should show an error when the password is empty", () => {
-          cy.get('input[name="traits.website"]').type("https://www.ory.sh")
+          cy.get('input[name="traits.website"]').type("http://www.ory.com")
           cy.get('input[name="traits.email"]').type(identity)
 
           // the browser will prevent the form from being submitted if the input field is required
@@ -105,7 +105,7 @@ describe("Registration failures with email profile", () => {
         })
 
         it("should show an error when the email is empty", () => {
-          cy.get('input[name="traits.website"]').type("https://www.ory.sh")
+          cy.get('input[name="traits.website"]').type("http://www.ory.com")
           cy.get('input[name="password"]').type(password)
 
           // the browser will prevent the form from being submitted if the input field is required
@@ -125,7 +125,7 @@ describe("Registration failures with email profile", () => {
         })
 
         it("should show an error when the email is not an email", () => {
-          cy.get('input[name="traits.website"]').type("https://www.ory.sh")
+          cy.get('input[name="traits.website"]').type("http://www.ory.com")
           cy.get('input[name="password"]').type(password)
 
           // the browser will prevent the form from being submitted if the input data doesn't conform to the input field type

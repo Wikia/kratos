@@ -25,7 +25,7 @@ context("Settings errors with email profile", () => {
         cy.useConfigProfile(profile)
         cy.registerApi({
           ...identity,
-          fields: { "traits.website": "https://www.ory.sh/" },
+          fields: { "traits.website": "http://www.ory.com/" },
         })
         cy.proxy(app)
       })

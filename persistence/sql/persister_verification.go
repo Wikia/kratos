@@ -124,13 +124,12 @@ func (p *Persister) DeleteExpiredVerificationFlows(ctx context.Context, expiresA
 	defer otelx.End(span, &err)
 	//#nosec G201 -- TableName is static
 	err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? and nid = ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
+		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
 		new(verification.Flow).TableName(ctx),
 		new(verification.Flow).TableName(ctx),
 		limit,
 	),
 		expiresAt,
-		p.NetworkID(ctx),
 	).Exec()
 	if err != nil {
 		return sqlcon.HandleError(err)

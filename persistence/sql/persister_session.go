@@ -509,10 +509,10 @@ func (p *Persister) DeleteExpiredSessions(ctx context.Context, expiresAt time.Ti
 
 	//#nosec G201 -- TableName is static
 	if err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"SELECT id FROM %s WHERE (expires_at <= ? OR active = false) AND nid = ? ORDER BY expires_at ASC LIMIT %d",
+		"SELECT id FROM %s WHERE expires_at <= ? OR active = false ORDER BY expires_at ASC LIMIT %d",
 		new(session.Session).TableName(ctx),
 		limit,
-	), expiresAt, p.NetworkID(ctx)).All(&rows); err != nil {
+	), expiresAt).All(&rows); err != nil {
 		return sqlcon.HandleError(err)
 	}
 

@@ -64,13 +64,12 @@ func (p *Persister) DeleteExpiredSettingsFlows(ctx context.Context, expiresAt ti
 	defer otelx.End(span, &err)
 	//#nosec G201 -- TableName is static
 	err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? and nid = ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
+		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
 		new(settings.Flow).TableName(ctx),
 		new(settings.Flow).TableName(ctx),
 		limit,
 	),
 		expiresAt,
-		p.NetworkID(ctx),
 	).Exec()
 	if err != nil {
 		return sqlcon.HandleError(err)

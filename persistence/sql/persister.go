@@ -190,11 +190,7 @@ func (p *Persister) CleanupDatabase(ctx context.Context, wait time.Duration, old
 	currentTime := time.Now().Add(-older)
 	p.r.Logger().Printf("Cleaning up records older than %s\n", currentTime)
 
-	p.r.Logger().Println("Cleaning up expired sessions")
-	if err := p.DeleteExpiredSessions(ctx, currentTime, batchSize); err != nil {
-		return err
-	}
-	time.Sleep(wait)
+	p.r.Logger().Println("Skipping cleanup of expired sessions (temporarily disabled)")
 
 	p.r.Logger().Println("Cleaning up expired continuity containers")
 	if err := p.DeleteExpiredContinuitySessions(ctx, currentTime, batchSize); err != nil {

@@ -5,7 +5,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -52,17 +51,5 @@ func (p *Persister) GetRegistrationFlow(ctx context.Context, id uuid.UUID) (_ *r
 func (p *Persister) DeleteExpiredRegistrationFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredRegistrationFlows")
 	defer otelx.End(span, &err)
-	//#nosec G201 -- TableName is static
-	err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
-		new(registration.Flow).TableName(ctx),
-		new(registration.Flow).TableName(ctx),
-		limit,
-	),
-		expiresAt,
-	).Exec()
-	if err != nil {
-		return sqlcon.HandleError(err)
-	}
-	return nil
+	return p.deleteExpired(ctx, new(registration.Flow).TableName(ctx), "expires_at", expiresAt, limit)
 }

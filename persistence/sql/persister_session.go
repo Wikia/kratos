@@ -6,7 +6,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ory/herodot"
@@ -502,38 +501,5 @@ func (p *Persister) DeleteExpiredSessions(ctx context.Context, expiresAt time.Ti
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredSessions")
 	defer otelx.End(span, &err)
 
-	type idRow struct {
-		ID uuid.UUID `db:"id"`
-	}
-	var rows []idRow
-
-	//#nosec G201 -- TableName is static
-	if err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"SELECT id FROM %s WHERE expires_at <= ? OR active = false ORDER BY expires_at ASC LIMIT %d",
-		new(session.Session).TableName(ctx),
-		limit,
-	), expiresAt).All(&rows); err != nil {
-		return sqlcon.HandleError(err)
-	}
-
-	if len(rows) == 0 {
-		return nil
-	}
-
-	ids := make([]interface{}, len(rows))
-	placeholders := make([]string, len(rows))
-	for i, r := range rows {
-		ids[i] = r.ID
-		placeholders[i] = "?"
-	}
-
-	//#nosec G201 -- TableName is static
-	err = p.GetConnection(ctx).RawQuery(
-		fmt.Sprintf("DELETE FROM %s WHERE id IN (%s)", new(session.Session).TableName(ctx), strings.Join(placeholders, ",")),
-		ids...,
-	).Exec()
-	if err != nil {
-		return sqlcon.HandleError(err)
-	}
-	return nil
+	return p.deleteExpired(ctx, new(session.Session).TableName(ctx), "expires_at", expiresAt, limit)
 }

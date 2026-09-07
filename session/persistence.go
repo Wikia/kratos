@@ -50,7 +50,7 @@ type Persister interface {
 	// instead of a session ID.
 	GetSessionByToken(ctx context.Context, token string, expandables Expandables, identityExpandables identity.Expandables) (*Session, error)
 
-	// DeleteExpiredSessions deletes sessions that expired before the given time or have been marked inactive.
+	// DeleteExpiredSessions deletes sessions that expired before the given time.
 	DeleteExpiredSessions(context.Context, time.Time, int) error
 
 	// DeleteSessionByToken deletes a session associated with the given token.

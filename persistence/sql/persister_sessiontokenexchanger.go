@@ -110,17 +110,7 @@ func (p *Persister) MoveToNewFlow(ctx context.Context, oldFlow, newFlow uuid.UUI
 
 func (p *Persister) DeleteExpiredExchangers(ctx context.Context, at time.Time, limit int) error {
 	expiredAfter := at.Add(1 * time.Hour)
-	conn := p.GetConnection(ctx)
+	table := p.GetConnection(ctx).Dialect.Quote(new(sessiontokenexchange.Exchanger).TableName())
 
-	//#nosec G201 -- TableName is static
-	err := conn.RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE created_at <= ? ORDER BY created_at ASC LIMIT %d ) AS s )",
-		conn.Dialect.Quote(new(sessiontokenexchange.Exchanger).TableName()),
-		conn.Dialect.Quote(new(sessiontokenexchange.Exchanger).TableName()),
-		limit,
-	),
-		expiredAfter,
-	).Exec()
-
-	return sqlcon.HandleError(err)
+	return p.deleteExpired(ctx, table, "created_at", expiredAfter, limit)
 }

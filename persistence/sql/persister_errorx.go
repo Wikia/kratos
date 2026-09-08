@@ -81,7 +81,7 @@ func (p *Persister) ClearErrorContainers(ctx context.Context, expiresAt time.Tim
 		return err
 	}
 
-	return p.deleteExpired(ctx, "selfservice_errors", "updated_at", time.Now().Add(-(90 * 24 * time.Hour)), limit)
+	return p.deleteExpired(ctx, "selfservice_errors", "updated_at", time.Now().Add(-(24 * time.Hour)), limit)
 }
 
 // fandom-end

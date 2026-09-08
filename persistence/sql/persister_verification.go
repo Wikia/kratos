@@ -122,5 +122,7 @@ func (p *Persister) DeleteVerificationToken(ctx context.Context, token string) (
 func (p *Persister) DeleteExpiredVerificationFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredVerificationFlows")
 	defer otelx.End(span, &err)
+	// fandom-start
 	return p.deleteExpired(ctx, new(verification.Flow).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

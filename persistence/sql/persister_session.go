@@ -501,5 +501,7 @@ func (p *Persister) DeleteExpiredSessions(ctx context.Context, expiresAt time.Ti
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredSessions")
 	defer otelx.End(span, &err)
 
+	// fandom-start
 	return p.deleteExpired(ctx, new(session.Session).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

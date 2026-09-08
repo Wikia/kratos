@@ -74,5 +74,7 @@ func (p *Persister) DeleteContinuitySession(ctx context.Context, id uuid.UUID) (
 func (p *Persister) DeleteExpiredContinuitySessions(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredContinuitySessions")
 	defer otelx.End(span, &err)
+	// fandom-start
 	return p.deleteExpired(ctx, new(continuity.Container).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

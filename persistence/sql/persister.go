@@ -190,6 +190,8 @@ func (p *Persister) Ping() error {
 	return errors.WithStack(p.c.Store.(pinger).Ping())
 }
 
+// fandom-start
+
 func sleep(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
@@ -227,12 +229,15 @@ func (p *Persister) deleteExpired(ctx context.Context, table string, column stri
 			return err
 		}
 
-		if n < batchSize || n == 0 {
-			return nil
+		drained := n < batchSize || n == 0
+		if n > 0 {
+			if err = sleep(ctx, pause); err != nil {
+				return err
+			}
 		}
 
-		if err = sleep(ctx, pause); err != nil {
-			return err
+		if drained {
+			return nil
 		}
 	}
 }
@@ -247,8 +252,8 @@ func (p *Persister) deleteExpiredBatch(ctx context.Context, table string, column
 
 	//#nosec G201 -- table and column are static
 	if err := conn.RawQuery(fmt.Sprintf(
-		"SELECT id FROM %s WHERE %s <= ? ORDER BY %s ASC LIMIT %d",
-		table, column, column, limit,
+		"SELECT id FROM %s WHERE %s <= ? LIMIT %d",
+		table, column, limit,
 	), cutoff).All(&rows); err != nil {
 		return 0, sqlcon.HandleError(err)
 	}
@@ -258,15 +263,14 @@ func (p *Persister) deleteExpiredBatch(ctx context.Context, table string, column
 	}
 
 	ids := make([]interface{}, len(rows))
-	placeholders := make([]string, len(rows))
 	for i, r := range rows {
 		ids[i] = r.ID
-		placeholders[i] = "?"
 	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(rows)), ",")
 
 	//#nosec G201 -- table is static
 	if err := conn.RawQuery(
-		fmt.Sprintf("DELETE FROM %s WHERE id IN (%s)", table, strings.Join(placeholders, ",")),
+		fmt.Sprintf("DELETE FROM %s WHERE id IN (%s)", table, placeholders),
 		ids...,
 	).Exec(); err != nil {
 		return 0, sqlcon.HandleError(err)
@@ -280,40 +284,34 @@ func (p *Persister) CleanupDatabase(ctx context.Context, wait time.Duration, old
 	p.r.Logger().Printf("Cleaning up records older than %s\n", currentTime)
 
 	steps := []struct {
-		what string
-		run  func() error
+		description string
+		run         func(context.Context, time.Time, int) error
 	}{
-		{"expired sessions", func() error { return p.DeleteExpiredSessions(ctx, currentTime, batchSize) }},
-		{"expired continuity containers", func() error { return p.DeleteExpiredContinuitySessions(ctx, currentTime, batchSize) }},
-		{"expired login flows", func() error { return p.DeleteExpiredLoginFlows(ctx, currentTime, batchSize) }},
-		{"expired recovery flows", func() error { return p.DeleteExpiredRecoveryFlows(ctx, currentTime, batchSize) }},
-		{"expired registration flows", func() error { return p.DeleteExpiredRegistrationFlows(ctx, currentTime, batchSize) }},
-		{"expired settings flows", func() error { return p.DeleteExpiredSettingsFlows(ctx, currentTime, batchSize) }},
-		{"expired verification flows", func() error { return p.DeleteExpiredVerificationFlows(ctx, currentTime, batchSize) }},
-		{"expired session token exchangers", func() error { return p.DeleteExpiredExchangers(ctx, currentTime, batchSize) }},
-		{"seen selfservice errors", func() error { return p.ClearErrorContainers(ctx, older, false) }},
+		{"expired sessions", p.DeleteExpiredSessions},
+		{"expired continuity containers", p.DeleteExpiredContinuitySessions},
+		{"expired login flows", p.DeleteExpiredLoginFlows},
+		{"expired recovery flows", p.DeleteExpiredRecoveryFlows},
+		{"expired registration flows", p.DeleteExpiredRegistrationFlows},
+		{"expired settings flows", p.DeleteExpiredSettingsFlows},
+		{"expired verification flows", p.DeleteExpiredVerificationFlows},
+		{"expired session token exchangers", p.DeleteExpiredExchangers},
+		{"selfservice errors", p.ClearErrorContainers},
 	}
 
 	var failures []error
-	for i, step := range steps {
-		p.r.Logger().Println("Cleaning up " + step.what)
+	for _, step := range steps {
+		p.r.Logger().Println("Cleaning up " + step.description)
 
-		if err := step.run(); err != nil {
+		if err := step.run(ctx, currentTime, batchSize); err != nil {
 			// A cancelled context means we ran out of time, so there is no point
 			// in trying the remaining steps.
 			if ctx.Err() != nil {
 				break
 			}
 
-			p.r.Logger().WithError(err).Error("Unable to clean up " + step.what + ", continuing with the remaining tables")
-			failures = append(failures, errors.Wrap(err, step.what))
-			continue
-		}
-
-		if i < len(steps)-1 {
-			if err := sleep(ctx, wait); err != nil {
-				break
-			}
+			p.r.Logger().WithError(err).WithField("step", step.description).
+				Error("Unable to clean up, continuing with the remaining steps")
+			failures = append(failures, errors.Wrap(err, step.description))
 		}
 	}
 
@@ -329,3 +327,5 @@ func (p *Persister) CleanupDatabase(ctx context.Context, wait time.Duration, old
 		"This should be re-run periodically, to be sure that all expired data is purged.")
 	return nil
 }
+
+// fandom-end

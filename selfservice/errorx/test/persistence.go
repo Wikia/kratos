@@ -58,7 +58,9 @@ func TestPersister(ctx context.Context, p persistence.Persister) func(t *testing
 			// We need to wait for at least one second or MySQL will randomly fail as it does not support
 			// millisecond resolution on timestamp columns.
 			time.Sleep(time.Second + time.Millisecond*500)
-			require.NoError(t, p.ClearErrorContainers(ctx, time.Second, false))
+			// fandom-start
+			require.NoError(t, p.ClearErrorContainers(ctx, time.Now().Add(-time.Second), 100))
+			// fandom-end
 			got, err := p.ReadErrorContainer(ctx, actualID)
 			require.Error(t, err, "%+v", got)
 		})
@@ -74,14 +76,15 @@ func TestPersister(ctx context.Context, p persistence.Persister) func(t *testing
 				_, err = other.ReadErrorContainer(ctx, created)
 				require.ErrorIs(t, err, sqlcon.ErrNoRows)
 
-				t.Run("can not clear another network", func(t *testing.T) {
+				// fandom-start
+				t.Run("clears containers of every network", func(t *testing.T) {
 					_, other := testhelpers.NewNetwork(t, ctx, p)
-					require.NoError(t, other.ClearErrorContainers(ctx, time.Second, true))
+					require.NoError(t, other.ClearErrorContainers(ctx, time.Now().Add(-time.Second), 100))
 
-					c, err := p.ReadErrorContainer(ctx, created)
-					require.NoError(t, err)
-					assert.Contains(t, string(c.Errors), "foobar")
+					_, err := p.ReadErrorContainer(ctx, created)
+					require.ErrorIs(t, err, sqlcon.ErrNoRows)
 				})
+				// fandom-end
 			})
 		})
 	}

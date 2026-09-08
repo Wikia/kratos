@@ -70,5 +70,7 @@ func (p *Persister) ForceLoginFlow(ctx context.Context, id uuid.UUID) (err error
 func (p *Persister) DeleteExpiredLoginFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredLoginFlows")
 	defer otelx.End(span, &err)
+	// fandom-start
 	return p.deleteExpired(ctx, new(login.Flow).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

@@ -109,8 +109,10 @@ func (p *Persister) MoveToNewFlow(ctx context.Context, oldFlow, newFlow uuid.UUI
 }
 
 func (p *Persister) DeleteExpiredExchangers(ctx context.Context, at time.Time, limit int) error {
+	// fandom-start
 	expiredAfter := at.Add(1 * time.Hour)
 	table := p.GetConnection(ctx).Dialect.Quote(new(sessiontokenexchange.Exchanger).TableName())
 
 	return p.deleteExpired(ctx, table, "created_at", expiredAfter, limit)
+	// fandom-end
 }

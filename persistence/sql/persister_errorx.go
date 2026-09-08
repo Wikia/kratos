@@ -72,22 +72,19 @@ func (p *Persister) ReadErrorContainer(ctx context.Context, id uuid.UUID) (_ *er
 	return &ec, nil
 }
 
-func (p *Persister) ClearErrorContainers(ctx context.Context, olderThan time.Duration, force bool) (err error) {
+// fandom-start
+func (p *Persister) ClearErrorContainers(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.ClearErrorContainers")
 	defer otelx.End(span, &err)
 
-	if force {
-		err = p.GetConnection(ctx).RawQuery(
-			"DELETE FROM selfservice_errors WHERE nid = ? AND seen_at < ? AND seen_at IS NOT NULL",
-			p.NetworkID(ctx), time.Now().UTC().Add(-olderThan)).Exec()
-	} else {
-		err = p.GetConnection(ctx).RawQuery(
-			"DELETE FROM selfservice_errors WHERE nid = ? AND was_seen=true AND seen_at < ? AND seen_at IS NOT NULL",
-			p.NetworkID(ctx), time.Now().UTC().Add(-olderThan)).Exec()
+	if err := p.deleteExpired(ctx, "selfservice_errors", "seen_at", expiresAt, limit); err != nil {
+		return err
 	}
 
-	return sqlcon.HandleError(err)
+	return p.deleteExpired(ctx, "selfservice_errors", "updated_at", time.Now().Add(-(90 * 24 * time.Hour)), limit)
 }
+
+// fandom-end
 
 func encodeSelfServiceErrors(e error) ([]byte, error) {
 	if e == nil {

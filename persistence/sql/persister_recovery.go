@@ -122,5 +122,7 @@ func (p *Persister) DeleteRecoveryToken(ctx context.Context, token string) (err 
 func (p *Persister) DeleteExpiredRecoveryFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredRecoveryFlows")
 	defer otelx.End(span, &err)
+	// fandom-start
 	return p.deleteExpired(ctx, new(recovery.Flow).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

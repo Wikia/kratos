@@ -4,6 +4,9 @@
 package cliclient
 
 import (
+	"context"
+	"time"
+
 	"github.com/pkg/errors"
 
 	"github.com/ory/x/servicelocatorx"
@@ -18,6 +21,11 @@ import (
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/x/flagx"
 )
+
+// fandom-start
+const cleanupMaxDuration = 50 * time.Minute
+
+// fandom-end
 
 type CleanupHandler struct{}
 
@@ -58,11 +66,16 @@ func (h *CleanupHandler) CleanupSQL(cmd *cobra.Command, args []string) error {
 
 	keepLast := flagx.MustGetDuration(cmd, "keep-last")
 
+	// fandom-start
+	ctx, cancel := context.WithTimeout(cmd.Context(), cleanupMaxDuration)
+	defer cancel()
+
 	err = d.Persister().CleanupDatabase(
-		cmd.Context(),
-		d.Config().DatabaseCleanupSleepTables(cmd.Context()),
+		ctx,
+		d.Config().DatabaseCleanupSleepTables(ctx),
 		keepLast,
-		d.Config().DatabaseCleanupBatchSize(cmd.Context()))
+		d.Config().DatabaseCleanupBatchSize(ctx))
+	// fandom-end
 	if err != nil {
 		return errors.Wrap(err, "An error occurred while cleaning up expired data")
 	}

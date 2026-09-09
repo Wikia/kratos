@@ -122,17 +122,7 @@ func (p *Persister) DeleteVerificationToken(ctx context.Context, token string) (
 func (p *Persister) DeleteExpiredVerificationFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredVerificationFlows")
 	defer otelx.End(span, &err)
-	//#nosec G201 -- TableName is static
-	err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
-		new(verification.Flow).TableName(ctx),
-		new(verification.Flow).TableName(ctx),
-		limit,
-	),
-		expiresAt,
-	).Exec()
-	if err != nil {
-		return sqlcon.HandleError(err)
-	}
-	return nil
+	// fandom-start
+	return p.deleteExpired(ctx, new(verification.Flow).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

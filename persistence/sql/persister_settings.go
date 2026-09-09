@@ -5,7 +5,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/ory/kratos/identity"
@@ -62,17 +61,7 @@ func (p *Persister) UpdateSettingsFlow(ctx context.Context, r *settings.Flow) (e
 func (p *Persister) DeleteExpiredSettingsFlows(ctx context.Context, expiresAt time.Time, limit int) (err error) {
 	ctx, span := p.r.Tracer(ctx).Tracer().Start(ctx, "persistence.sql.DeleteExpiredSettingsFlows")
 	defer otelx.End(span, &err)
-	//#nosec G201 -- TableName is static
-	err = p.GetConnection(ctx).RawQuery(fmt.Sprintf(
-		"DELETE FROM %s WHERE id in (SELECT id FROM (SELECT id FROM %s c WHERE expires_at <= ? ORDER BY expires_at ASC LIMIT %d ) AS s )",
-		new(settings.Flow).TableName(ctx),
-		new(settings.Flow).TableName(ctx),
-		limit,
-	),
-		expiresAt,
-	).Exec()
-	if err != nil {
-		return sqlcon.HandleError(err)
-	}
-	return nil
+	// fandom-start
+	return p.deleteExpired(ctx, new(settings.Flow).TableName(ctx), "expires_at", expiresAt, limit)
+	// fandom-end
 }

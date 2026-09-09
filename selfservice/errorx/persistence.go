@@ -21,10 +21,9 @@ type (
 		// second return parameter is an error.
 		ReadErrorContainer(ctx context.Context, id uuid.UUID) (*ErrorContainer, error)
 
-		// ClearErrorContainers clears read containers that are older than a
-		// certain amount of time. If force is set to true, unread errors will
-		// be cleared as well.
-		ClearErrorContainers(ctx context.Context, olderThan time.Duration, force bool) error
+		// fandom-start
+		ClearErrorContainers(ctx context.Context, expiresAt time.Time, limit int) error
+		// fandom-end
 	}
 
 	PersistenceProvider interface {

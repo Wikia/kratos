@@ -290,6 +290,13 @@ func (s *Strategy) registrationToLogin(ctx context.Context, w http.ResponseWrite
 	if err != nil {
 		return nil, err
 	}
+
+	// Add copied_from parameter to track flow conversion
+	lf.RequestURL, err = x.AddURLParameter(lf.RequestURL, "copied_from", "registration")
+	if err != nil {
+		return nil, err
+	}
+
 	lf.TransientPayload = rf.TransientPayload
 	lf.Active = s.ID()
 

@@ -145,9 +145,9 @@ func TestFromOldFlow(t *testing.T) {
 }
 
 func TestContinueURL(t *testing.T) {
-	const globalReturnTo = "https://ory.sh/global-return-to"
-	const localReturnTo = "https://ory.sh/local-return-to"
-	const flowReturnTo = "https://ory.sh/flow-return-to"
+	const globalReturnTo = "https://ory.com/global-return-to"
+	const localReturnTo = "https://ory.com/local-return-to"
+	const flowReturnTo = "https://ory.com/flow-return-to"
 
 	for _, tc := range []struct {
 		desc       string

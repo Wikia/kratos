@@ -57,7 +57,7 @@ func TestNewFlow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, r.IssuedAt, r.ExpiresAt)
 		assert.Equal(t, flow.TypeBrowser, r.Type)
-		assert.Equal(t, "https://ory.sh/", r.RequestURL)
+		assert.Equal(t, "https://ory.com/", r.RequestURL)
 	})
 
 	t.Run("type=return_to", func(t *testing.T) {
@@ -80,10 +80,10 @@ func TestNewFlow(t *testing.T) {
 
 	t.Run("case=2", func(t *testing.T) {
 		r, err := settings.NewFlow(conf, 0, &http.Request{
-			URL:  urlx.ParseOrPanic("https://ory.sh/"),
+			URL:  urlx.ParseOrPanic("https://ory.com/"),
 			Host: "ory.sh"}, id, flow.TypeBrowser)
 		require.NoError(t, err)
-		assert.Equal(t, "https://ory.sh/", r.RequestURL)
+		assert.Equal(t, "https://ory.com/", r.RequestURL)
 	})
 }
 

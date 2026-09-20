@@ -101,16 +101,16 @@ func TestNewFlow(t *testing.T) {
 			assert.EqualValues(t, r.IssuedAt, r.ExpiresAt)
 			assert.Equal(t, flow.TypeBrowser, r.Type)
 			assert.False(t, r.Refresh)
-			assert.Equal(t, "https://ory.sh/", r.RequestURL)
+			assert.Equal(t, "https://ory.com/", r.RequestURL)
 		})
 
 		t.Run("case=regular flow creation", func(t *testing.T) {
 			r, err := login.NewFlow(conf, 0, "csrf", &http.Request{
-				URL:  urlx.ParseOrPanic("https://ory.sh/"),
+				URL:  urlx.ParseOrPanic("https://ory.com/"),
 				Host: "ory.sh",
 			}, flow.TypeBrowser)
 			require.NoError(t, err)
-			assert.Equal(t, "https://ory.sh/", r.RequestURL)
+			assert.Equal(t, "https://ory.com/", r.RequestURL)
 		})
 	})
 
@@ -141,12 +141,12 @@ func TestNewFlow(t *testing.T) {
 	})
 
 	t.Run("should parse login_challenge when Hydra is configured", func(t *testing.T) {
-		_, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.sh/?login_challenge=badee1"), Host: "ory.sh"}, flow.TypeBrowser)
+		_, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.com/?login_challenge=badee1"), Host: "ory.sh"}, flow.TypeBrowser)
 		require.Error(t, err)
 
 		conf.MustSet(ctx, config.ViperKeyOAuth2ProviderURL, "https://hydra")
 
-		r, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.sh/?login_challenge=8aadcb8fc1334186a84c4da9813356d9"), Host: "ory.sh"}, flow.TypeBrowser)
+		r, err := login.NewFlow(conf, 0, "csrf", &http.Request{URL: urlx.ParseOrPanic("https://ory.com/?login_challenge=8aadcb8fc1334186a84c4da9813356d9"), Host: "ory.sh"}, flow.TypeBrowser)
 		require.NoError(t, err)
 		assert.Equal(t, "8aadcb8fc1334186a84c4da9813356d9", string(r.OAuth2LoginChallenge))
 	})

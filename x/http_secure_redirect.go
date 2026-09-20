@@ -98,6 +98,18 @@ func TakeOverReturnToParameter(from string, to string, fallback ...string) (stri
 	return toURL.String(), nil
 }
 
+// AddURLParameter adds a query parameter to a URL string
+func AddURLParameter(urlStr string, key string, value string) (string, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set(key, value)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // SecureRedirectTo implements a HTTP redirector who mitigates open redirect vulnerabilities by
 // working with allow lists.
 func SecureRedirectTo(r *http.Request, defaultReturnTo *url.URL, opts ...SecureRedirectOption) (returnTo *url.URL, err error) {

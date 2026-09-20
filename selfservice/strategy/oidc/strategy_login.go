@@ -145,12 +145,18 @@ func (s *Strategy) processLogin(ctx context.Context, w http.ResponseWriter, r *h
 			registrationFlow.IDToken = loginFlow.IDToken
 			registrationFlow.RawIDTokenNonce = loginFlow.RawIDTokenNonce
 			registrationFlow.RequestURL, err = x.TakeOverReturnToParameter(loginFlow.RequestURL, registrationFlow.RequestURL)
-			registrationFlow.TransientPayload = loginFlow.TransientPayload
-			registrationFlow.Active = s.ID()
-
 			if err != nil {
 				return nil, s.handleError(ctx, w, r, loginFlow, provider.Config().ID, nil, err)
 			}
+
+			// Add copied_from parameter to track flow conversion
+			registrationFlow.RequestURL, err = x.AddURLParameter(registrationFlow.RequestURL, "copied_from", "login")
+			if err != nil {
+				return nil, s.handleError(ctx, w, r, loginFlow, provider.Config().ID, nil, err)
+			}
+
+			registrationFlow.TransientPayload = loginFlow.TransientPayload
+			registrationFlow.Active = s.ID()
 
 			if _, err := s.processRegistration(ctx, w, r, registrationFlow, token, claims, provider, container); err != nil {
 				return registrationFlow, err

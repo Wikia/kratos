@@ -4,7 +4,7 @@ courier:
   channels:
     - id: phone
       request_config:
-        url: https://ory.sh
+        url: https://ory.com
         method: GET
         body: base64://ZnVuY3Rpb24oY3R4KSB7CkJvZHk6IGN0eC5ib2R5LApUbzogY3R4LnRvLEZyb206IGN0eC5mcm9tCn0=
         headers:

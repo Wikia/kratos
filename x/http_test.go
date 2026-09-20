@@ -43,18 +43,18 @@ func TestAcceptToRedirectOrJSON(t *testing.T) {
 
 		t.Run("regular payload", func(t *testing.T) {
 			w := httptest.NewRecorder()
-			AcceptToRedirectOrJSON(w, r, wr, json.RawMessage(`{"foo":"bar"}`), "https://www.ory.sh/redir")
+			AcceptToRedirectOrJSON(w, r, wr, json.RawMessage(`{"foo":"bar"}`), "http://www.ory.com/redir")
 			loc, err := w.Result().Location()
 			require.NoError(t, err)
-			assert.Equal(t, "https://www.ory.sh/redir", loc.String())
+			assert.Equal(t, "http://www.ory.com/redir", loc.String())
 		})
 
 		t.Run("error payload", func(t *testing.T) {
 			w := httptest.NewRecorder()
-			AcceptToRedirectOrJSON(w, r, wr, errors.New("foo"), "https://www.ory.sh/redir")
+			AcceptToRedirectOrJSON(w, r, wr, errors.New("foo"), "http://www.ory.com/redir")
 			loc, err := w.Result().Location()
 			require.NoError(t, err)
-			assert.Equal(t, "https://www.ory.sh/redir", loc.String())
+			assert.Equal(t, "http://www.ory.com/redir", loc.String())
 		})
 	})
 
@@ -65,7 +65,7 @@ func TestAcceptToRedirectOrJSON(t *testing.T) {
 		t.Run("regular payload", func(t *testing.T) {
 			msg := json.RawMessage(`{"foo":"bar"}`)
 			w := httptest.NewRecorder()
-			AcceptToRedirectOrJSON(w, r, wr, msg, "https://www.ory.sh/redir")
+			AcceptToRedirectOrJSON(w, r, wr, msg, "http://www.ory.com/redir")
 			_, err := w.Result().Location()
 			require.ErrorIs(t, err, http.ErrNoLocation)
 
@@ -76,7 +76,7 @@ func TestAcceptToRedirectOrJSON(t *testing.T) {
 		t.Run("error payload", func(t *testing.T) {
 			ee := errors.WithStack(herodot.ErrBadRequest)
 			w := httptest.NewRecorder()
-			AcceptToRedirectOrJSON(w, r, wr, ee, "https://www.ory.sh/redir")
+			AcceptToRedirectOrJSON(w, r, wr, ee, "http://www.ory.com/redir")
 			_, err := w.Result().Location()
 			require.ErrorIs(t, err, http.ErrNoLocation)
 

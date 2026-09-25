@@ -23,7 +23,8 @@ import (
 )
 
 // fandom-start
-const cleanupMaxDuration = 50 * time.Minute
+// Keep cleanupMaxDuration in sync with kratos-cleanup cronjob. We want to kill running job before next one starts
+const cleanupMaxDuration = 23*time.Hour + 45*time.Minute
 
 // fandom-end
 

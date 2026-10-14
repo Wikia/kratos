@@ -84,7 +84,9 @@ func TestSessionIssuer(t *testing.T) {
 			assert.Equal(t, s.ID.String(), got.ID.String())
 			assert.True(t, got.AuthenticatedAt.After(time.Now().Add(-time.Minute)))
 
-			assert.Empty(t, w.Header().Get("Set-Cookie"))
+			// fandom change: API registration issues the session cookie too, like API login does
+			assert.Contains(t, w.Header().Get("Set-Cookie"), config.DefaultSessionCookieName)
+			// fandom change - end
 			body := w.Body.Bytes()
 			assert.Equal(t, i.ID.String(), gjson.GetBytes(body, "identity.id").String())
 			assert.Equal(t, s.ID.String(), gjson.GetBytes(body, "session.id").String())

@@ -4,14 +4,17 @@
 package hook
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5" //nolint:gosec
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/dgraph-io/ristretto"
@@ -160,6 +163,11 @@ func (e *WebHook) ExecuteAfterSubmitLoginHook(_ http.ResponseWriter, req *http.R
 			return errors.WithStack(err)
 		}
 	}
+	// Fandom-start [SPLAT-1086]: API (JSON) flows carry no form, merge the JSON body into req.Form
+	if err := mergeJSONBodyIntoForm(req); err != nil {
+		return errors.WithStack(err)
+	}
+	// Fandom-end [SPLAT-1086]
 
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteAfterSubmitLoginHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
@@ -183,6 +191,11 @@ func (e *WebHook) ExecuteLoginPostHook(_ http.ResponseWriter, req *http.Request,
 			return errors.WithStack(err)
 		}
 	}
+	// Fandom-start [SPLAT-1086]: API (JSON) flows carry no form, merge the JSON body into req.Form
+	if err := mergeJSONBodyIntoForm(req); err != nil {
+		return errors.WithStack(err)
+	}
+	// Fandom-end [SPLAT-1086]
 	// fandom-end
 
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecuteLoginPostHook", func(ctx context.Context) error {
@@ -279,6 +292,11 @@ func (e *WebHook) ExecutePostRegistrationPrePersistHook(_ http.ResponseWriter, r
 			return errors.WithStack(err)
 		}
 	}
+	// Fandom-start [SPLAT-1086]: API (JSON) flows carry no form, merge the JSON body into req.Form
+	if err := mergeJSONBodyIntoForm(req); err != nil {
+		return errors.WithStack(err)
+	}
+	// Fandom-end [SPLAT-1086]
 	// fandom-end
 	return otelx.WithSpan(req.Context(), "selfservice.hook.WebHook.ExecutePostRegistrationPrePersistHook", func(ctx context.Context) error {
 		return e.execute(ctx, &templateContext{
@@ -309,6 +327,11 @@ func (e *WebHook) ExecutePostRegistrationPostPersistHook(_ http.ResponseWriter, 
 			return errors.WithStack(err)
 		}
 	}
+	// Fandom-start [SPLAT-1086]: API (JSON) flows carry no form, merge the JSON body into req.Form
+	if err := mergeJSONBodyIntoForm(req); err != nil {
+		return errors.WithStack(err)
+	}
+	// Fandom-end [SPLAT-1086]
 	// fandom-end
 
 	// We want to decouple the request from the hook execution, so that the hooks still execute even
@@ -764,3 +787,76 @@ func instrumentHTTPClientForEvents(ctx context.Context, httpClient *retryablehtt
 		trace.SpanFromContext(ctx).AddEvent(events.NewWebhookDelivered(ctx, res.Request.URL, reqBody, res.StatusCode, resBody, attempt, requestID))
 	}
 }
+
+// Fandom-start [SPLAT-1086]: webhook fields for API (JSON) flows
+//
+// The webhooks forward the submitted fields to the jsonnet templates as ctx.fields (req.Form). Browser
+// flows post form-encoded bodies, which ParseForm turns into req.Form. API/native flows (the mobile app)
+// post JSON, which ParseForm ignores, so the rate-limit and registration webhooks received no method,
+// identifier, age or consent fields for them. mergeJSONBodyIntoForm adds the JSON body to req.Form in the
+// shape the form path produces: top-level keys as-is, nested objects as dotted keys (traits.username,
+// transient_payload.age), arrays as repeated values, null omitted. Existing form and query values are
+// kept, and the body is restored so later readers still see it. Non-JSON requests are left untouched.
+func mergeJSONBodyIntoForm(req *http.Request) error {
+	if req.Body == nil || !hasJSONContentType(req) {
+		return nil
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+	_ = req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil
+	}
+
+	var decoded map[string]interface{}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&decoded); err != nil {
+		// Not a JSON object (or not JSON at all): the strategy decoder has already
+		// rejected or handled it; the webhooks keep the query parameters only.
+		return nil
+	}
+	if req.Form == nil {
+		req.Form = url.Values{}
+	}
+	flattenJSONFields("", decoded, req.Form)
+	return nil
+}
+
+func hasJSONContentType(req *http.Request) bool {
+	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	return err == nil && mediaType == "application/json"
+}
+
+func flattenJSONFields(prefix string, value interface{}, out url.Values) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		for k, child := range v {
+			key := k
+			if prefix != "" {
+				key = prefix + "." + k
+			}
+			flattenJSONFields(key, child, out)
+		}
+	case []interface{}:
+		for _, child := range v {
+			flattenJSONFields(prefix, child, out)
+		}
+	case nil:
+		return
+	case string:
+		out.Add(prefix, v)
+	case bool:
+		out.Add(prefix, strconv.FormatBool(v))
+	case json.Number:
+		out.Add(prefix, v.String())
+	default:
+		out.Add(prefix, fmt.Sprint(v))
+	}
+}
+
+// Fandom-end [SPLAT-1086]

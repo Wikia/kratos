@@ -5,6 +5,7 @@ package registration_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -41,7 +42,11 @@ func TestRegistrationExecutor(t *testing.T) {
 			conf, reg := internal.NewFastRegistryWithMocks(t)
 			reg.WithHydra(hydra.NewFake())
 			testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
-			conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, "https://www.ory.sh/")
+			// fandom change: redirect targets point at a local server instead of https://www.ory.sh,
+			// which now redirects to ory.com and made every browser-flow assertion below fail.
+			returnTo := testhelpers.NewRedirTS(t, "ok", conf).URL
+			conf.MustSet(ctx, config.ViperKeySelfServiceBrowserDefaultReturnTo, returnTo+"/")
+			// fandom change - end
 
 			newServer := func(t *testing.T, i *identity.Identity, ft flow.Type, flowCallbacks ...func(*registration.Flow)) *httptest.Server {
 				router := httprouter.New()
@@ -84,7 +89,7 @@ func TestRegistrationExecutor(t *testing.T) {
 					ts := newServer(t, i, flow.TypeBrowser)
 					res, _ := makeRequestPost(t, ts, false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
-					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
+					assert.EqualValues(t, returnTo+"/", res.Request.URL.String())
 
 					actual, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID, identity.ExpandNothing)
 					require.NoError(t, err)
@@ -99,7 +104,7 @@ func TestRegistrationExecutor(t *testing.T) {
 					res, body := makeRequestPost(t, ts, true, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
 					assert.Contains(t, res.Request.URL.String(), ts.URL)
-					assert.EqualValues(t, gjson.Get(body, "continue_with").Raw, `[{"action":"redirect_browser_to","redirect_browser_to":"https://www.ory.sh/"}]`)
+					assert.EqualValues(t, gjson.Get(body, "continue_with").Raw, fmt.Sprintf(`[{"action":"redirect_browser_to","redirect_browser_to":"%s/"}]`, returnTo))
 
 					actual, err := reg.IdentityPool().GetIdentity(context.Background(), i.ID, identity.ExpandNothing)
 					require.NoError(t, err)
@@ -112,7 +117,7 @@ func TestRegistrationExecutor(t *testing.T) {
 
 					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
-					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
+					assert.EqualValues(t, returnTo+"/", res.Request.URL.String())
 				})
 
 				t.Run("case=fail if hooks fail", func(t *testing.T) {
@@ -130,36 +135,36 @@ func TestRegistrationExecutor(t *testing.T) {
 
 				t.Run("case=use return_to value", func(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
-					conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.sh/"})
+					conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo + "/"})
 
-					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{"return_to": {"https://www.ory.sh/kratos/"}})
+					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{"return_to": {returnTo + "/kratos/"}})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
-					// fandom change - not sure why removing / is needed
-					assert.EqualValues(t, "https://www.ory.sh/kratos", res.Request.URL.String())
+					// fandom change: the old www.ory.sh target stripped the trailing slash itself; the local server does not
+					assert.EqualValues(t, returnTo+"/kratos/", res.Request.URL.String())
 					// fandom change - end
 				})
 
 				t.Run("case=use nested config value", func(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
-					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectToStrategy(t, conf, strategy, "https://www.ory.sh/kratos")
+					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectToStrategy(t, conf, strategy, returnTo+"/kratos")
 
 					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
 					// fandom change - not sure why removing / is needed
-					assert.EqualValues(t, "https://www.ory.sh/kratos", res.Request.URL.String())
+					assert.EqualValues(t, returnTo+"/kratos", res.Request.URL.String())
 					// fandom change - end
 				})
 
 				t.Run("case=use nested config value", func(t *testing.T) {
 					t.Cleanup(testhelpers.SelfServiceHookConfigReset(t, conf))
-					conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{"https://www.ory.sh/kratos"})
-					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectTo(t, conf, "https://www.ory.sh/not-kratos")
-					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectToStrategy(t, conf, strategy, "https://www.ory.sh/kratos")
+					conf.MustSet(ctx, config.ViperKeyURLsAllowedReturnToDomains, []string{returnTo + "/kratos"})
+					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectTo(t, conf, returnTo+"/not-kratos")
+					testhelpers.SelfServiceHookRegistrationSetDefaultRedirectToStrategy(t, conf, strategy, returnTo+"/kratos")
 
 					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
 					// fandom change - not sure why removing / is needed
-					assert.EqualValues(t, "https://www.ory.sh/kratos", res.Request.URL.String())
+					assert.EqualValues(t, returnTo+"/kratos", res.Request.URL.String())
 					// fandom change - end
 				})
 
@@ -169,7 +174,7 @@ func TestRegistrationExecutor(t *testing.T) {
 
 					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
-					assert.EqualValues(t, "https://www.ory.sh/", res.Request.URL.String())
+					assert.EqualValues(t, returnTo+"/", res.Request.URL.String())
 				})
 
 				t.Run("case=send a json response for API clients", func(t *testing.T) {

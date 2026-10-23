@@ -64,6 +64,15 @@ func (e *SessionIssuer) executePostRegistrationPostPersistHook(w http.ResponseWr
 			}
 		}
 
+		// Fandom-start: issue the session cookie for API registration as well.
+		// API login already does this (PLATFORM-6395) so native clients can hand the
+		// fandom_session cookie to their webviews; registration returned only the token.
+		// The session was persisted by the hook executor before post-persist hooks run.
+		if err := e.r.SessionManager().IssueCookie(r.Context(), w, r, s); err != nil {
+			return errors.WithStack(err)
+		}
+		// Fandom-end
+
 		a.AddContinueWith(flow.NewContinueWithSetToken(s.Token))
 		e.r.Writer().Write(w, r, &registration.APIFlowResponse{
 			Session:      s,

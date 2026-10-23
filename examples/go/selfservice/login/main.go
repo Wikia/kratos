@@ -19,9 +19,10 @@ var client = pkg.NewSDK("playground")
 func performLogin() *ory.SuccessfulNativeLogin {
 	ctx := context.Background()
 
-	// Create a temporary user
+	// Create a temporary user. API registration also sets the session cookie in this fork, so register with a
+	// separate client: on the same cookie jar the login below would be rejected with session_already_available.
 	email, password := pkg.RandomCredentials()
-	_, _ = pkg.CreateIdentityWithSession(client, email, password)
+	_, _ = pkg.CreateIdentityWithSession(pkg.NewSDKForSelfHosted(client.GetConfig().Servers[0].URL), email, password)
 
 	// Initialize the flow
 	flow, res, err := client.FrontendAPI.CreateNativeLoginFlow(ctx).Execute()

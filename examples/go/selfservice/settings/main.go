@@ -19,8 +19,9 @@ var client = pkg.NewSDK("playground")
 var ctx = context.Background()
 
 func initFlow(email, password string) (string, *ory.SettingsFlow) {
-	// Create a temporary user
-	_, sessionToken := pkg.CreateIdentityWithSession(client, email, password)
+	// Create a temporary user. API registration also sets the session cookie in this fork, so register with a
+	// separate client: Kratos rejects API flow submits that carry a Cookie header (4000001).
+	_, sessionToken := pkg.CreateIdentityWithSession(pkg.NewSDKForSelfHosted(client.GetConfig().Servers[0].URL), email, password)
 
 	flow, res, err := client.FrontendAPI.CreateNativeSettingsFlow(context.Background()).XSessionToken(sessionToken).Execute()
 	pkg.SDKExitOnError(err, res)

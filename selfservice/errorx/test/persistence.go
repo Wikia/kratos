@@ -78,10 +78,14 @@ func TestPersister(ctx context.Context, p persistence.Persister) func(t *testing
 
 				// fandom-start
 				t.Run("clears containers of every network", func(t *testing.T) {
-					_, other := testhelpers.NewNetwork(t, ctx, p)
-					require.NoError(t, other.ClearErrorContainers(ctx, time.Now().Add(-time.Second), 100))
-
+					// mark the container as seen in its own network, so the seen_at cleanup applies to it
 					_, err := p.ReadErrorContainer(ctx, created)
+					require.NoError(t, err)
+
+					_, other := testhelpers.NewNetwork(t, ctx, p)
+					require.NoError(t, other.ClearErrorContainers(ctx, time.Now().Add(time.Second), 100))
+
+					_, err = p.ReadErrorContainer(ctx, created)
 					require.ErrorIs(t, err, sqlcon.ErrNoRows)
 				})
 				// fandom-end

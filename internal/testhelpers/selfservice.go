@@ -268,7 +268,11 @@ func SelfServiceMakeHookRequest(t *testing.T, ts *httptest.Server, suffix string
 	if asAPI {
 		req.Header.Set("Accept", "application/json")
 	}
-	res, err := ts.Client().Do(req)
+	// fandom change [SPLAT-1118]: ts.Client() has its own transport, wrap it so www.ory.sh is answered locally
+	c := ts.Client()
+	c.Transport = &stubbedRedirectTransport{next: c.Transport}
+	res, err := c.Do(req)
+	// fandom change - end
 	require.NoError(t, err)
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)

@@ -135,9 +135,7 @@ func TestSettingsExecutor(t *testing.T) {
 
 					res, _ := makeRequestPost(t, newServer(t, nil, flow.TypeBrowser), false, url.Values{"return_to": {"https://www.ory.sh/kratos/"}})
 					assert.EqualValues(t, http.StatusOK, res.StatusCode)
-					// fandom change - not sure why removing / is needed
-					assert.EqualValues(t, "https://www.ory.sh/kratos", res.Request.URL.String())
-					// fandom change - end
+					assert.EqualValues(t, "https://www.ory.sh/kratos/", res.Request.URL.String())
 				})
 
 				t.Run("case=use nested config value", func(t *testing.T) {

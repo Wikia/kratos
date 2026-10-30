@@ -248,6 +248,19 @@ type updateSettingsFlowWithOidcMethod struct {
 	//
 	// required: false
 	TransientPayload json.RawMessage `json:"transient_payload,omitempty" form:"transient_payload"`
+
+	// fandom change [SPLAT-1118]: native (API flow) linking with the provider SDK's id_token
+	// IDToken is an id_token issued by the provider to a native client (Sign in with Google / Apple SDKs).
+	// Only honoured on API flows, where it replaces the browser redirect to the provider.
+	//
+	// required: false
+	IDToken string `json:"id_token,omitempty"`
+
+	// IDTokenNonce is the raw nonce the id_token was requested with, when the token carries one.
+	//
+	// required: false
+	IDTokenNonce string `json:"id_token_nonce,omitempty"`
+	// fandom change - end
 }
 
 func (p *updateSettingsFlowWithOidcMethod) GetFlowID() uuid.UUID {
@@ -355,9 +368,12 @@ func (s *Strategy) isLinkable(ctx context.Context, ctxUpdate *settings.UpdateCon
 
 func (s *Strategy) initLinkProvider(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, p *updateSettingsFlowWithOidcMethod) error {
 	ctx := r.Context()
-	if _, err := s.isLinkable(ctx, ctxUpdate, p.Link); err != nil {
+	// fandom change [SPLAT-1118]: keep the identity for linkProviderWithIDToken (was `if _, err := s.isLinkable(...)`)
+	i, err := s.isLinkable(ctx, ctxUpdate, p.Link)
+	if err != nil {
 		return s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
+	// fandom change - end
 
 	if ctxUpdate.Session.AuthenticatedAt.Add(s.d.Config().SelfServiceFlowSettingsPrivilegedSessionMaxAge(ctx)).Before(time.Now()) {
 		return s.handleSettingsError(w, r, ctxUpdate, p, errors.WithStack(settings.NewFlowNeedsReAuth()))
@@ -367,6 +383,15 @@ func (s *Strategy) initLinkProvider(w http.ResponseWriter, r *http.Request, ctxU
 	if err != nil {
 		return s.handleSettingsError(w, r, ctxUpdate, p, err)
 	}
+
+	// fandom change [SPLAT-1118]: native clients cannot follow the provider redirect, they submit the SDK's id_token
+	if p.IDToken != "" && ctxUpdate.Flow.Type == flow.TypeAPI {
+		if err := s.linkProviderWithIDToken(r, ctxUpdate, i, p, provider); err != nil {
+			return s.handleSettingsError(w, r, ctxUpdate, p, err)
+		}
+		return nil
+	}
+	// fandom change - end
 
 	req, err := s.validateFlow(ctx, r, ctxUpdate.Flow.ID)
 	if err != nil {
@@ -405,6 +430,28 @@ func (s *Strategy) initLinkProvider(w http.ResponseWriter, r *http.Request, ctxU
 
 	return errors.WithStack(flow.ErrCompletedByStrategy)
 }
+
+// fandom change [SPLAT-1118]: id_token linking for native clients (API settings flows)
+// linkProviderWithIDToken links the provider subject of a verified id_token to the session's identity. The identity is
+// only staged on the update context: the settings handler then persists it and runs the post-settings hooks, exactly as
+// for a password or profile update. The privileged-session and "not linked yet" checks already ran in initLinkProvider;
+// a subject already linked to another identity fails on the credential identifier's unique constraint.
+func (s *Strategy) linkProviderWithIDToken(r *http.Request, ctxUpdate *settings.UpdateContext, i *identity.Identity, p *updateSettingsFlowWithOidcMethod, provider Provider) error {
+	ctx := r.Context()
+	claims, err := s.processIDToken(r, provider, p.IDToken, p.IDTokenNonce)
+	if err != nil {
+		return err
+	}
+
+	if err := s.linkCredentials(ctx, i, nil, provider.Config().ID, claims.Subject, provider.Config().OrganizationID); err != nil {
+		return err
+	}
+
+	ctxUpdate.UpdateIdentity(i)
+	return nil
+}
+
+// fandom change - end
 
 func (s *Strategy) linkProvider(w http.ResponseWriter, r *http.Request, ctxUpdate *settings.UpdateContext, token *identity.CredentialsOIDCEncryptedTokens, claims *Claims, provider Provider) error {
 	ctx := r.Context()

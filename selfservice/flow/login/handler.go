@@ -852,6 +852,12 @@ func (h *Handler) updateLoginFlow(w http.ResponseWriter, r *http.Request, _ http
 	}
 
 continueLogin:
+	// fandom change [SPLAT-1118]: expose the submitted transient_payload to the after-submit hooks
+	if len(f.TransientPayload) == 0 {
+		f.TransientPayload = transientPayloadFromRequest(r)
+	}
+	// fandom change - end
+
 	// Fandom-start [SPLAT-638]: propagate session to webhook
 	if err := h.d.LoginHookExecutor().AfterSubmitLoginHook(w, r, f, sess); err != nil {
 		// Fandom-end [SPLAT-638]

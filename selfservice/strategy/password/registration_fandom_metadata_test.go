@@ -22,6 +22,7 @@ import (
 	"github.com/ory/kratos/driver/config"
 	"github.com/ory/kratos/identity"
 	"github.com/ory/kratos/internal/testhelpers"
+	"github.com/ory/kratos/selfservice/flow/login"
 	"github.com/ory/kratos/selfservice/flow/registration"
 	"github.com/ory/kratos/x"
 )
@@ -37,6 +38,7 @@ func TestRegistrationWebhookSetsMetadataPublic(t *testing.T) {
 	publicTS, _ := testhelpers.NewKratosServerWithRouters(t, reg, x.NewRouterPublic(), x.NewRouterAdmin())
 	_ = testhelpers.NewErrorTestServer(t, reg)
 	_ = testhelpers.NewRegistrationUIFlowEchoServer(t, reg)
+	_ = testhelpers.NewLoginUIFlowEchoServer(t, reg)
 	testhelpers.SetDefaultIdentitySchema(conf, "file://./stub/registration.schema.json")
 
 	var hookIdentityID string
@@ -56,9 +58,10 @@ func TestRegistrationWebhookSetsMetadataPublic(t *testing.T) {
 		{Name: "web_hook", PersistencePhase: config.PrePersist, Config: webhookConfig},
 	})
 
+	password := x.NewUUID().String()
 	body := testhelpers.SubmitRegistrationForm(t, true, nil, publicTS, func(v url.Values) {
 		v.Set("traits.username", "registration-metadata-public-api")
-		v.Set("password", x.NewUUID().String())
+		v.Set("password", password)
 		v.Set("traits.foobar", "bar")
 	}, false, http.StatusOK, publicTS.URL+registration.RouteSubmitFlow)
 
@@ -71,6 +74,15 @@ func TestRegistrationWebhookSetsMetadataPublic(t *testing.T) {
 	persisted, err := reg.PrivilegedIdentityPool().GetIdentityConfidential(ctx, uuid.FromStringOrNil(identityID))
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"email_verified":false,"user_id":"12345"}`, string(persisted.MetadataPublic))
+
+	// The user id is persisted, so every later API login returns it as well
+	loginBody := testhelpers.SubmitLoginForm(t, true, nil, publicTS, func(v url.Values) {
+		v.Set("method", "password")
+		v.Set("identifier", "registration-metadata-public-api")
+		v.Set("password", password)
+	}, false, false, http.StatusOK, publicTS.URL+login.RouteSubmitFlow)
+	assert.NotEmpty(t, gjson.Get(loginBody, "session_token").String(), "%s", loginBody)
+	assert.JSONEq(t, `{"email_verified":false,"user_id":"12345"}`, gjson.Get(loginBody, "session.identity.metadata_public").Raw, "%s", loginBody)
 }
 
 // fandom change - end

@@ -12,6 +12,14 @@
     "unlink": {
       "type": "string"
     },
+    "id_token": {
+      "$comment": "fandom change [SPLAT-1118]: id_token from the native Google / Apple SDK, used to link a provider on API settings flows",
+      "type": "string"
+    },
+    "id_token_nonce": {
+      "$comment": "fandom change [SPLAT-1118]: raw nonce the id_token was requested with",
+      "type": "string"
+    },
     "traits": {
       "description": "This field will be overwritten in registration.go's decoder() method. Do not add anything to this field as it has no effect."
     },

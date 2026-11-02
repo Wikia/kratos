@@ -21,7 +21,10 @@ func performLogin() *ory.SuccessfulNativeLogin {
 
 	// Create a temporary user
 	email, password := pkg.RandomCredentials()
-	_, _ = pkg.CreateIdentityWithSession(client, email, password)
+	// fandom change [SPLAT-1118]: API registration also sets the session cookie, so register with a separate client;
+	// on the same cookie jar the login below would be rejected with session_already_available
+	_, _ = pkg.CreateIdentityWithSession(pkg.NewSDKForSelfHosted(client.GetConfig().Servers[0].URL), email, password)
+	// fandom change - end
 
 	// Initialize the flow
 	flow, res, err := client.FrontendAPI.CreateNativeLoginFlow(ctx).Execute()

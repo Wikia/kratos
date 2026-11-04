@@ -45,6 +45,11 @@ type (
 		Recovery struct {
 			Via string `json:"via"`
 		} `json:"recovery"`
+		// fandom-start
+		// Protected marks a trait which can only be changed with a privileged session.
+		// Unlike credential identifiers or verifiable addresses it does not have to be unique.
+		Protected bool `json:"protected"`
+		// fandom-end
 		RawSchema map[string]interface{} `json:"-"`
 	}
 

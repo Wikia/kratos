@@ -1,0 +1,57 @@
+{
+  "$id": "https://example.com/protected.fandom.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "traits": {
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "ory.sh/kratos": {
+            "credentials": {
+              "password": {
+                "identifier": true
+              }
+            }
+          }
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "ory.sh/kratos": {
+            "protected": true
+          }
+        },
+        "backup_emails": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "email",
+            "ory.sh/kratos": {
+              "protected": true
+            }
+          }
+        },
+        "contact": {
+          "type": "object",
+          "properties": {
+            "phone": {
+              "type": "string",
+              "ory.sh/kratos": {
+                "protected": true
+              }
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        "unprotected": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

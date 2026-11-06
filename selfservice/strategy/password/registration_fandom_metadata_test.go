@@ -27,7 +27,7 @@ import (
 	"github.com/ory/kratos/x"
 )
 
-// fandom change [SPLAT-1118]: user-registration answers the pre-persist registration webhook with
+// fandom change [SPLAT-1155]: user-registration answers the pre-persist registration webhook with
 // {"identity":{"metadata_public":{"user_id":...}}}. Pin that Kratos persists it and returns it in the API registration
 // response, so the mobile app can read the user id without a whoami call.
 func TestRegistrationWebhookSetsMetadataPublic(t *testing.T) {

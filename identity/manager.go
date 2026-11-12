@@ -430,6 +430,16 @@ func (m *Manager) requiresPrivilegedAccess(ctx context.Context, original, update
 			*updated = *original
 			return errors.WithStack(ErrProtectedFieldModified)
 		}
+
+		// fandom-start
+		if modified, err := m.protectedTraitsModified(ctx, original, updated); err != nil {
+			return err
+		} else if modified {
+			// reset the identity
+			*updated = *original
+			return errors.WithStack(ErrProtectedFieldModified)
+		}
+		// fandom-end
 	}
 	return nil
 }

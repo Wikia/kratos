@@ -241,6 +241,9 @@ func (s *Strategy) Login(w http.ResponseWriter, r *http.Request, f *login.Flow, 
 		if err != nil {
 			return nil, s.handleError(ctx, w, r, f, pid, nil, err)
 		}
+		// fandom-start
+		f.Active = s.ID()
+		// fandom-end
 		_, err = s.processLogin(ctx, w, r, f, nil, claims, provider, &AuthCodeContainer{
 			FlowID: f.ID.String(),
 			Traits: p.Traits,

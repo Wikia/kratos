@@ -616,6 +616,18 @@ var RequestHeaderAllowList = map[string]struct{}{
 	"X-Geoip-Region":       {},
 	"X-Skip-Ratelimit":     {},
 	"X-Fandom-Request":     {},
+	// Cloudflare bot signals, SPLAT-1124
+	"X-Fandom-Bot":                 {},
+	"X-Fandom-Bot-Name":            {},
+	"X-Fandom-Bot-Score":           {},
+	"X-Fandom-Bot-Tags":            {},
+	"X-Fandom-Bot-Category":        {},
+	"X-Fandom-Bot-Corporate-Proxy": {},
+	"X-Fandom-Bot-Js-Passed":       {},
+	"X-Fandom-Ja3":                 {},
+	"X-Fandom-Ja4":                 {},
+	"X-Fandom-Name":                {},
+	"X-Fandom-Browser":             {},
 	// fandom change end
 }
 
